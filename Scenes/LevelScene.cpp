@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cmath>
 #include <chrono>
 #include <functional>
 #include <random>
@@ -9,10 +10,17 @@
 #include "Scenes/GameOverScene.h"
 #include "Scenes/LevelScene.h"
 #include "Scenes/StageScene.h"
+#include "Util/Collision.h"
 #include "Util/Pathfinding.h"
 
 namespace bomberman
 {
+    namespace
+    {
+        constexpr float kPlayerHitboxScale = 0.5f;
+        constexpr float kDamageHitboxScale = 0.2f;
+    } // namespace
+
     LevelScene::LevelScene(Game* _game, const unsigned int _stage, const unsigned int prevScore)
         : Scene(_game), score(prevScore), stage(_stage)
     {
@@ -163,7 +171,7 @@ namespace bomberman
     void LevelScene::spawnPlayer(const int positionX, const int positionY)
     {
         // spawn player
-        player = std::make_unique<Player>(game->getAssetManager()->getTexture(Texture::Player),
+        player = std::make_shared<Player>(game->getAssetManager()->getTexture(Texture::Player),
                                           game->getRenderer());
         player->setPosition(positionX, positionY);
         player->setSize(scaledTileSize, scaledTileSize);
@@ -645,13 +653,11 @@ namespace bomberman
             return;
         }
         // set width to smaller size for easer path
-        SDL_Rect playerRect = player->getRect();
-        playerRect.w = static_cast<int>(playerRect.w * 0.5);
-        playerRect.h = static_cast<int>(playerRect.h * 0.5);
+        SDL_FRect playerRect = collision::scaleCentered(player->getRectF(), kPlayerHitboxScale);
         // iterate objects for collision
         for(const auto& collisionObject : collisions)
         {
-            if(isCollisionDetected(playerRect, collisionObject.second->getRect()))
+            if(isCollisionDetected(playerRect, collisionObject.second->getRectF()))
             {
                 player->revertLastMove();
             }
@@ -659,7 +665,7 @@ namespace bomberman
         // door collision
         if(door != nullptr)
         {
-            if(isCollisionDetected(playerRect, door->getRect()))
+            if(isCollisionDetected(playerRect, door->getRectF()))
             {
                 // check win condition
                 if(!isGameOver && enemies.size() == 0)
@@ -682,7 +688,7 @@ namespace bomberman
             for(const auto& collisionObject : collisions)
             {
                 // check for block collision
-                if(isCollisionDetected(enemy->getRect(), collisionObject.second->getRect()))
+                if(isCollisionDetected(enemy->getRectF(), collisionObject.second->getRectF()))
                 {
                     // stop moving on collision detection
                     enemy->setMoving(false);
@@ -690,7 +696,7 @@ namespace bomberman
                 }
             }
             // check for bomb collision
-            if(bomb && isCollisionDetected(enemy->getRect(), bomb->getRect()))
+            if(bomb && isCollisionDetected(enemy->getRectF(), bomb->getRectF()))
             {
                 // stop moving on collision detection
                 enemy->setMoving(false);
@@ -700,10 +706,8 @@ namespace bomberman
             if(player != nullptr)
             {
                 // set width to smaller size
-                SDL_Rect playerRect = player->getRect();
-                playerRect.w = static_cast<int>(playerRect.w * 0.2);
-                playerRect.h = static_cast<int>(playerRect.h * 0.2);
-                if(isCollisionDetected(playerRect, enemy->getRect()))
+                SDL_FRect playerRect = collision::scaleCentered(player->getRectF(), kDamageHitboxScale);
+                if(isCollisionDetected(playerRect, enemy->getRectF()))
                 {
                     // player killed by enemy
                     removeObject(player);
@@ -742,7 +746,7 @@ namespace bomberman
                 if((*itCollision).first == Tile::Brick)
                 {
                     auto brick = (*itCollision).second;
-                    if(isCollisionDetected(brick->getRect(), bang->getRect()))
+                    if(isCollisionDetected(brick->getRectF(), bang->getRectF()))
                     {
                         destroyBrick(brick);
                         // remove brick from collision array
@@ -756,10 +760,9 @@ namespace bomberman
             auto itEnemies = enemies.begin();
             while(itEnemies != enemies.end())
             {
-                SDL_Rect enemyRect = (*itEnemies)->getRect();
-                enemyRect.w = static_cast<int>(enemyRect.w * 0.2);
-                enemyRect.h = static_cast<int>(enemyRect.h * 0.2);
-                if(isCollisionDetected(enemyRect, bang->getRect()))
+                SDL_FRect enemyRect =
+                    collision::scaleCentered((*itEnemies)->getRectF(), kDamageHitboxScale);
+                if(isCollisionDetected(enemyRect, bang->getRectF()))
                 {
                     removeObject(*itEnemies);
                     itEnemies = enemies.erase(itEnemies);
@@ -774,10 +777,8 @@ namespace bomberman
             // check player
             if(player != nullptr)
             {
-                SDL_Rect playerRect = player->getRect();
-                playerRect.w = static_cast<int>(playerRect.w * 0.2f);
-                playerRect.h = static_cast<int>(playerRect.h * 0.2f);
-                if(isCollisionDetected(playerRect, bang->getRect()))
+                SDL_FRect playerRect = collision::scaleCentered(player->getRectF(), kDamageHitboxScale);
+                if(isCollisionDetected(playerRect, bang->getRectF()))
                 {
                     removeObject(player);
                     player = nullptr;
@@ -787,19 +788,9 @@ namespace bomberman
         }
     }
 
-    bool LevelScene::isCollisionDetected(const SDL_Rect& rect1, const SDL_Rect& rect2) const
+    bool LevelScene::isCollisionDetected(const SDL_FRect& rect1, const SDL_FRect& rect2) const
     {
-        // check for collision
-        if(rect1.x + rect1.w / 2 <= rect2.x - rect2.w / 2)
-            return false;
-        if(rect1.x - rect1.w / 2 >= rect2.x + rect2.w / 2)
-            return false;
-        if(rect1.y + rect1.h / 2 <= rect2.y - rect2.h / 2)
-            return false;
-        if(rect1.y - rect1.h / 2 >= rect2.y + rect2.h / 2)
-            return false;
-
-        return true;
+        return collision::intersects(rect1, rect2);
     }
 
     void LevelScene::destroyBrick(std::shared_ptr<Object> brick)

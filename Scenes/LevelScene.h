@@ -89,7 +89,7 @@ namespace bomberman
         void updatePlayerCollision();
         void updateEnemiesCollision();
         void updateBangsCollision();
-        bool isCollisionDetected(const SDL_Rect& rect1, const SDL_Rect& rect2) const;
+        bool isCollisionDetected(const SDL_FRect& rect1, const SDL_FRect& rect2) const;
         // destroy brick
         void destroyBrick(std::shared_ptr<Object> brick);
         // enemy follow to player if in attack radius

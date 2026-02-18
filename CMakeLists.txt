@@ -50,6 +50,7 @@ set(SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/Entities/Player.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Entities/Music.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Entities/Sound.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/Util/Collision.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Util/Pathfinding.cpp
 )
 

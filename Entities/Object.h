@@ -103,6 +103,12 @@ namespace bomberman
          */
         const SDL_Rect& getRect() const;
         /**
+         * @brief Get Rect of object (float position)
+         *
+         * @return SDL_FRect - rect with float position
+         */
+        SDL_FRect getRectF() const;
+        /**
          * @brief Set the Flip object
          *
          * @param flip - flip of texture

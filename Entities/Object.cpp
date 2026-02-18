@@ -81,6 +81,16 @@ namespace bomberman
         return rect;
     }
 
+    SDL_FRect Object::getRectF() const
+    {
+        SDL_FRect rectF;
+        rectF.x = positionX;
+        rectF.y = positionY;
+        rectF.w = static_cast<float>(rect.w);
+        rectF.h = static_cast<float>(rect.h);
+        return rectF;
+    }
+
     void Object::setFlip(SDL_RendererFlip flip)
     {
         flipping = flip;
