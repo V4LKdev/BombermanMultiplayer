@@ -88,16 +88,16 @@ namespace bomberman
         void updateMovement(const unsigned int delta);
 
         // movement
-        int newPositionX = 0;      // position X to move
-        int newPositionY = 0;      // position Y to move
+        float newPositionX = 0.0f; // position X to move
+        float newPositionY = 0.0f; // position Y to move
         bool movingToCell = false; // is moving to cell
         std::pair<int, int> path;  // diff of cells to move
         // AI
         AIType aiType = AIType::Wandering; // AI type
         // consts
-        const float baseSpeed = 0.0018f;    // speed of enemy
-        const float attackSpeed = 0.0025f;   // speed of attack enemy
-        const int attackRadius = 4;         // attack radius (in cells)
+        const float baseSpeedTilesPerSecond = 1.8f;   // tiles per second
+        const float attackSpeedTilesPerSecond = 2.5f; // tiles per second
+        const int attackRadius = 4;                   // attack radius (in cells)
         // animations
         std::shared_ptr<Animation> movement; // movement animation
     };

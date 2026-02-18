@@ -4,7 +4,7 @@ namespace bomberman
 {
     void Creature::revertLastMove()
     {
-        setPosition(getPositionX() - prevPosDeltaX, getPositionY() - prevPosDeltaY);
+        setPositionF(getPositionXF() - prevPosDeltaX, getPositionYF() - prevPosDeltaY);
     }
 
     void Creature::setMoving(bool _moving)

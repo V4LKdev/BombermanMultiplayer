@@ -1,10 +1,15 @@
 #include "Entities/Object.h"
+#include <cmath>
 
 namespace bomberman
 {
     Object::Object(SDL_Renderer* _renderer)
     {
         this->renderer = _renderer;
+        rect = {0,0,0,0};
+        clip = {0,0,0,0};
+        positionX = 0.0f;
+        positionY = 0.0f;
     }
 
     Object::~Object() {}
@@ -17,8 +22,15 @@ namespace bomberman
 
     void Object::setPosition(const int x, const int y)
     {
-        rect.x = x; // controls the rect's x coordinate
-        rect.y = y; // controls the rect's y coordinate
+        setPositionF(static_cast<float>(x), static_cast<float>(y));
+    }
+
+    void Object::setPositionF(const float x, const float y)
+    {
+        positionX = x;
+        positionY = y;
+        rect.x = static_cast<int>(std::round(positionX));
+        rect.y = static_cast<int>(std::round(positionY));
     }
 
     void Object::setClip(const int width, const int height, const int x, const int y)
@@ -52,6 +64,16 @@ namespace bomberman
     int Object::getPositionY() const
     {
         return rect.y;
+    }
+
+    float Object::getPositionXF() const
+    {
+        return positionX;
+    }
+
+    float Object::getPositionYF() const
+    {
+        return positionY;
     }
 
     const SDL_Rect& Object::getRect() const

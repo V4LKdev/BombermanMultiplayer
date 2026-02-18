@@ -1,6 +1,7 @@
 #include <chrono>
 #include <functional>
 #include <random>
+#include <algorithm>
 
 #include "Const.h"
 #include "Entities/Enemy.h"
@@ -30,8 +31,8 @@ namespace bomberman
         movement->play();
         setMoving(true);
         // save new position
-        newPositionX = getPositionX() + x;
-        newPositionY = getPositionY() + y;
+        newPositionX = getPositionXF() + static_cast<float>(x);
+        newPositionY = getPositionYF() + static_cast<float>(y);
         // flip
         if(x < 0)
         {
@@ -49,8 +50,10 @@ namespace bomberman
         path = pathToCell;
         movingToCell = true;
         // move enemy to nearest cell
-        newPositionX = getPositionX() - ((getPositionX() - newPositionX) % getWidth());
-        newPositionY = getPositionY() - ((getPositionY() - newPositionY) % getHeight());
+        const int currentX = getPositionX();
+        const int currentY = getPositionY();
+        newPositionX = static_cast<float>(currentX - ((currentX - static_cast<int>(newPositionX)) % getWidth()));
+        newPositionY = static_cast<float>(currentY - ((currentY - static_cast<int>(newPositionY)) % getHeight()));
     }
 
     bool Enemy::isMovingToCell() const
@@ -96,27 +99,30 @@ namespace bomberman
     void Enemy::updateMovement(const unsigned int delta)
     {
         // calculate consts for movement
-        const int newPositionDiffX = getPositionX() - newPositionX;
-        const int newPositionDiffY = getPositionY() - newPositionY;
-        const char signOfX = (newPositionDiffX > 0) ? 1 : ((newPositionDiffX < 0) ? -1 : 0);
-        const char signOfY = (newPositionDiffY > 0) ? 1 : ((newPositionDiffY < 0) ? -1 : 0);
-        const int posDiff = static_cast<int>(floor((canAttack() ? attackSpeed : baseSpeed) * delta * getWidth()));
+        const float newPositionDiffX = getPositionXF() - newPositionX;
+        const float newPositionDiffY = getPositionYF() - newPositionY;
+        const float signOfX = (newPositionDiffX > 0.0f) ? 1.0f : ((newPositionDiffX < 0.0f) ? -1.0f : 0.0f);
+        const float signOfY = (newPositionDiffY > 0.0f) ? 1.0f : ((newPositionDiffY < 0.0f) ? -1.0f : 0.0f);
+
+        const float deltaSeconds = std::min(static_cast<float>(delta) / 1000.0f, 0.05f);
+        const float speedTilesPerSecond = canAttack() ? attackSpeedTilesPerSecond : baseSpeedTilesPerSecond;
+        const float posDiff = speedTilesPerSecond * deltaSeconds * static_cast<float>(getWidth());
 
         prevPosDeltaX = posDiff * -signOfX;
         prevPosDeltaY = posDiff * -signOfY;
 
         // finish movement
-        if(newPositionDiffX * signOfX <= posDiff && newPositionDiffY * signOfY <= posDiff)
+        if(std::abs(newPositionDiffX) <= posDiff && std::abs(newPositionDiffY) <= posDiff)
         {
             movement->pause();
             setMoving(false);
             movingToCell = false;
-            setPosition(newPositionX, newPositionY);
+            setPositionF(newPositionX, newPositionY);
             return;
         }
         // move sprite to next tick pos
-        setPosition(getPositionX() - static_cast<int>(floor(posDiff)) * signOfX,
-                    getPositionY() - static_cast<int>(floor(posDiff)) * signOfY);
+        setPositionF(getPositionXF() - posDiff * signOfX,
+                     getPositionYF() - posDiff * signOfY);
     }
 
     void Enemy::generateNewPath()

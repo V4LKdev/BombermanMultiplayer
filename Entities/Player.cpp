@@ -1,5 +1,6 @@
 #include "Player.h"
 #include "Const.h"
+#include <algorithm>
 
 namespace bomberman
 {
@@ -46,14 +47,16 @@ namespace bomberman
         // movement
         if(isMoving())
         {
-            const int posDiff = static_cast<int>(floor(speed * delta * getWidth()));
+            const float deltaSeconds = std::min(static_cast<float>(delta) / 1000.0f, 0.05f);
+            const float posDiff = speedTilesPerSecond * deltaSeconds * static_cast<float>(getWidth());
             prevPosDeltaX =
                 posDiff *
-                (isMovingHorizontally() ? (movementDirection == MovementDirection::Left ? -1 : 1) : 0);
+                (isMovingHorizontally() ? (movementDirection == MovementDirection::Left ? -1.0f : 1.0f) : 0.0f);
             prevPosDeltaY =
-                posDiff * (isMovingVertically() ? (movementDirection == MovementDirection::Up ? -1 : 1) : 0);
+                posDiff *
+                (isMovingVertically() ? (movementDirection == MovementDirection::Up ? -1.0f : 1.0f) : 0.0f);
             // move sprite to next tick pos
-            setPosition(getPositionX() + prevPosDeltaX, getPositionY() + prevPosDeltaY);
+            setPositionF(getPositionXF() + prevPosDeltaX, getPositionYF() + prevPosDeltaY);
         }
 
         Creature::update(delta);

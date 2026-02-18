@@ -32,12 +32,19 @@ namespace bomberman
          */
         void setSize(const int width, const int height);
         /**
-         * @brief Set the Position of object
-         *
-         * @param x - position x
-         * @param y - position y
-         */
+        * @brief Set the Position of object (integer)
+        *
+        * @param x - position x
+        * @param y - position y
+        */
         void setPosition(const int x, const int y);
+        /**
+        * @brief Set the Position of object (float/sub-pixel)
+        *
+        * @param x - position x
+        * @param y - position y
+        */
+        void setPositionF(const float x, const float y);
         /**
          * @brief Set the Clip of source texture
          *
@@ -66,17 +73,29 @@ namespace bomberman
          */
         int getHeight() const;
         /**
-         * @brief Get the Position X of object
-         *
-         * @return int - position X
-         */
+        * @brief Get the Position X of object (integer)
+        *
+        * @return int - position X
+        */
         int getPositionX() const;
         /**
-         * @brief Get the Position Y of object
-         *
-         * @return int - position Y
-         */
+        * @brief Get the Position Y of object (integer)
+        *
+        * @return int - position Y
+        */
         int getPositionY() const;
+        /**
+        * @brief Get the Position X of object (float)
+        *
+        * @return float - position X
+        */
+        float getPositionXF() const;
+        /**
+        * @brief Get the Position Y of object (float)
+        *
+        * @return float - position Y
+        */
+        float getPositionYF() const;
         /**
          * @brief Get Rect of object
          *
@@ -108,6 +127,8 @@ namespace bomberman
         SDL_Rect rect;                                  // size and position of texture on the screen
         SDL_Rect clip;                                  // what part of texture to draw on the screen
         SDL_RendererFlip flipping = SDL_FLIP_NONE;      // flip of texture
+        float positionX = 0.0f;                         // precise position X
+        float positionY = 0.0f;                         // precise position Y
 
       private:
         bool isAttachedToCamera = true; // follow to camera

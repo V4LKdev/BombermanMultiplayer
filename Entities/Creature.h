@@ -37,8 +37,8 @@ namespace bomberman
 
       protected:
         // for movement revert
-        int prevPosDeltaX = 0;
-        int prevPosDeltaY = 0;
+        float prevPosDeltaX = 0.0f;
+        float prevPosDeltaY = 0.0f;
 
       private:
         bool moving = false; // movement status

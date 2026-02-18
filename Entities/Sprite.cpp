@@ -18,6 +18,9 @@ namespace bomberman
         rect.y = 0;
         rect.w = width;
         rect.h = height;
+
+        // sync float pos with rect
+        setPosition(rect.x, rect.y);
     }
 
     void Sprite::addAnimation(std::shared_ptr<Animation> animation)
