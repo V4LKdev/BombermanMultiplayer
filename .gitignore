@@ -1,2 +1,48 @@
-/.vs
-/Bomberman
+# JetBrains / CLion
+.idea/
+*.iml
+
+# CMake build directories
+build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+.ninja_*
+*.ninja
+build.ninja
+rules.ninja
+
+# Binaries / artifacts
+Bomberman
+Bomberman.exe
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.so.*
+*.dylib
+*.dll
+*.pdb
+*.exe
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Local backups
+*.bak
+
+# Visual Studio / Windows-specific folders
+.vs/
+x64/
+packages/
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
