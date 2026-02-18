@@ -64,14 +64,13 @@ namespace bomberman
         windowWidth = w;
         windowHeight = h;
 
-        assetManager = new AssetManager();
-        sceneManager = new SceneManager();
+        assetManager = std::make_unique<AssetManager>();
+        sceneManager = std::make_unique<SceneManager>();
+        isInitialized = true;
     }
 
     Game::~Game()
     {
-        delete sceneManager;
-        delete assetManager;
         // delete SDL2 C pointers
         SDL_DestroyWindow(window);
         SDL_DestroyRenderer(renderer);
@@ -87,6 +86,11 @@ namespace bomberman
     {
         if(isRunning)
         {
+            return;
+        }
+        if(!isInitialized)
+        {
+            std::cout << "Game::run - initialization failed, exiting." << std::endl;
             return;
         }
 
@@ -153,11 +157,11 @@ namespace bomberman
 
     SceneManager* Game::getSceneManager() const
     {
-        return sceneManager;
+        return sceneManager.get();
     }
 
     AssetManager* Game::getAssetManager() const
     {
-        return assetManager;
+        return assetManager.get();
     }
 } // namespace bomberman

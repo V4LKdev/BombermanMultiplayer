@@ -20,7 +20,8 @@ namespace bomberman
 
     void Scene::insertObject(std::shared_ptr<Object> object, int position)
     {
-        objects.insert(objects.begin() + position, object);
+        int clampedPosition = std::clamp(position, 0, static_cast<int>(objects.size()));
+        objects.insert(objects.begin() + clampedPosition, object);
     }
 
     void Scene::removeObject(std::shared_ptr<Object> object)

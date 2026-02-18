@@ -33,7 +33,7 @@ namespace bomberman
         }
         else
         {
-            std::cout << "SceneManager::activateScene - scene '" << name << "' doesn't exist!" << std::endl;
+            std::cout << "SceneManager::removeScene - scene '" << name << "' doesn't exist!" << std::endl;
         }
     }
 
@@ -60,22 +60,25 @@ namespace bomberman
 
     void SceneManager::onEvent(const SDL_Event& event)
     {
+        if (!currentScene) return;
         currentScene->onEvent(event);
     }
 
     void SceneManager::update(const unsigned int delta)
     {
         // finally remove removed scenes
-        while(removedScenes.size() > 0)
+        while(!removedScenes.empty())
         {
             removedScenes.pop();
         }
 
+        if (!currentScene) return;
         currentScene->update(delta);
     }
 
     void SceneManager::draw() const
     {
+        if (!currentScene) return;
         currentScene->draw();
     }
 } // namespace bomberman

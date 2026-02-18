@@ -71,14 +71,15 @@ namespace bomberman
         SDL_Window* window = nullptr;
         SDL_Renderer* renderer = nullptr;
 
-        SceneManager* sceneManager = nullptr; // scene manager
-        AssetManager* assetManager = nullptr; // asset manager
+        std::unique_ptr<SceneManager> sceneManager = nullptr; // scene manager
+        std::unique_ptr<AssetManager> assetManager = nullptr; // asset manager
 
         // screen parameters
         int windowWidth = 0;
         int windowHeight = 0;
 
-        bool isRunning = false;  // game loop status
+        bool isRunning = false;      // game loop status
+        bool isInitialized = false;  // SDL init status
         Uint32 lastTickTime = 0; // last time for delta calculation
     };
 } // namespace bomberman
