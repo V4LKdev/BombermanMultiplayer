@@ -52,7 +52,7 @@ Stabilize core runtime behavior and refactor collision handling for correctness 
 - Collisions behave consistently without offset artifacts.
 - Code is cleaner and ready for deterministic network simulation.
 
-## 2026-02-21 – ENet Bootstrap (Dedicated Server + Handshake)
+## 2026-02-19 – ENet Bootstrap (Dedicated Server + Handshake)
 
 ### Goal
 Establish a real client/server networking baseline with ENet before gameplay sync work.
@@ -89,3 +89,35 @@ Establish a real client/server networking baseline with ENet before gameplay syn
   - server logs connection + `Hello` parse + `Welcome` send
   - client logs connect + `Hello` send + `Welcome` receive
 - Project now has a working dedicated-server network baseline for next steps (input stream + snapshots).
+
+## 2026-02-20 – Harden NetCommon protocol layer with validation + documentation
+
+### Goal
+Strengthen the network protocol implementation with defensive input validation, comprehensive documentation, and convenience helpers to ensure correctness before gameplay integration.
+
+### Protocol hardening
+- Added `kMaxPacketSize` constant (1400 bytes, below MTU) for bound checking.
+- Reorganized size constants with computed expressions and assertion checks.
+- Added `isValidMsgType()` validator to prevent invalid message types.
+- Enhanced `deserializeHeader()` with multi-stage validation:
+  - payload size bounds checking against `kMaxPacketSize`
+  - full packet availability check before processing
+- Improved `serializeMsgHello()` to zero-pad unused name bytes for determinism.
+- Hardened `deserializeMsgHello()` with forced null-termination + zero-padding normalization.
+
+### Documentation + Convenience
+- Added comprehensive Doxygen-style comments to all structs, functions, and sections.
+- Added `boundedStrLen()` helper for safe string length measurement.
+- Added `setHelloName()` overloads (string_view + C-string) for safe name field initialization.
+- Included detailed wire format comments inline with serialization code.
+- Added `[[nodiscard]]` attributes to deserializer functions.
+- Marked serialization functions `noexcept` for clarity.
+
+### Organization
+- Added `#include <string_view>` for string_view support.
+- Reorganized file into logical sections with clear separators.
+
+### Result
+- Protocol layer is now defense-in-depth against malformed packets.
+- Code is well-documented and easier to audit/extend.
+- Convenience helpers reduce boilerplate in client/server code.
