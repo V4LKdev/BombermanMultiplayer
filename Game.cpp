@@ -71,9 +71,17 @@ namespace bomberman
 
     Game::~Game()
     {
+        // Destroy gameplay/asset owners before SDL subsystem shutdown.
+        // AssetManager holds fonts/textures/sounds that must be released
+        // while SDL_ttf/SDL_image/SDL_mixer are still alive.
+        sceneManager.reset();
+        assetManager.reset();
+
         // delete SDL2 C pointers
-        SDL_DestroyWindow(window);
         SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        renderer = nullptr;
+        window = nullptr;
 
         // SDL2 finish
         Mix_CloseAudio();

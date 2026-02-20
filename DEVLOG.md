@@ -121,3 +121,23 @@ Strengthen the network protocol implementation with defensive input validation, 
 - Protocol layer is now defense-in-depth against malformed packets.
 - Code is well-documented and easier to audit/extend.
 - Convenience helpers reduce boilerplate in client/server code.
+
+## 2026-02-20 – Fix Exit-Time Segmentation Fault
+
+### Goal
+Resolve crash on shutdown (menu exit, window close, Ctrl+C) and stabilize teardown order.
+
+### Diagnosis
+- Debug stacktrace pointed into `FT_Done_Face` during scene/text destruction.
+- `Game` was shutting down SDL/TTF subsystems before owned scene/asset objects were fully released.
+
+### Fix
+- In `Game::~Game()`:
+  - Explicitly reset `sceneManager` and `assetManager` first.
+  - Destroy renderer before window.
+  - Run SDL subsystem shutdown after owned resources are released.
+- Normalized `main` signature to standard `char** argv` form.
+
+### Result
+- Clean shutdown across all tested exit paths.
+- Removed exit-time segfault caused by resource/subsystem destruction order.
