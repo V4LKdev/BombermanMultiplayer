@@ -152,7 +152,7 @@ Move temporary client handshake logic out of `main.cpp` into a dedicated network
 - Moved handshake/connect/send/receive/disconnect flow into `NetClient::handshake(...)`.
 - Updated `main.cpp` to call `NetClient` instead of embedding ENet handshake logic directly.
 - Kept behavior unchanged: attempt handshake, continue with offline gameplay if it fails.
-- Set client binary output name to lowercase `bomberman_client` for consistency with `bomberman_server`.
+- Set server binary output name to uppercase `Bomberman_Server` for consistency with `Bomberman` (client).
 
 ### Result
 - Cleaner separation between app entrypoint and networking responsibilities.

@@ -86,10 +86,10 @@ add_executable(${PROJECT_NAME}
 
 set_target_properties(${PROJECT_NAME}
   PROPERTIES
-    OUTPUT_NAME "bomberman_client"
+    OUTPUT_NAME "Bomberman"
 )
 
-add_executable(bomberman_server
+add_executable(Bomberman_Server
   ${SERVER_SOURCES}
 )
 
@@ -99,7 +99,7 @@ target_include_directories(${PROJECT_NAME}
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-target_include_directories(bomberman_server
+target_include_directories(Bomberman_Server
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
@@ -114,7 +114,7 @@ target_link_libraries(${PROJECT_NAME}
     PkgConfig::ENET
 )
 
-target_link_libraries(bomberman_server
+target_link_libraries(Bomberman_Server
   PRIVATE
     PkgConfig::ENET
 )
@@ -133,7 +133,7 @@ install(TARGETS ${PROJECT_NAME}
   BUNDLE  DESTINATION .
 )
 
-install (TARGETS bomberman_server
+install (TARGETS Bomberman_Server
   RUNTIME DESTINATION .
 )
 
