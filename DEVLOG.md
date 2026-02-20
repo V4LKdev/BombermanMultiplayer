@@ -141,3 +141,19 @@ Resolve crash on shutdown (menu exit, window close, Ctrl+C) and stabilize teardo
 ### Result
 - Clean shutdown across all tested exit paths.
 - Removed exit-time segfault caused by resource/subsystem destruction order.
+
+## 2026-02-20 – Extract Client Handshake + Normalize Binary Naming
+
+### Goal
+Move temporary client handshake logic out of `main.cpp` into a dedicated networking class and make executable naming consistent.
+
+### Changes
+- Added `Net/NetClient.h` and `Net/NetClient.cpp`.
+- Moved handshake/connect/send/receive/disconnect flow into `NetClient::handshake(...)`.
+- Updated `main.cpp` to call `NetClient` instead of embedding ENet handshake logic directly.
+- Kept behavior unchanged: attempt handshake, continue with offline gameplay if it fails.
+- Set client binary output name to lowercase `bomberman_client` for consistency with `bomberman_server`.
+
+### Result
+- Cleaner separation between app entrypoint and networking responsibilities.
+- Client/server executable naming is now consistent.

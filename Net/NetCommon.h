@@ -1,5 +1,5 @@
-#ifndef BOMBERMAN_NETCOMMON_H
-#define BOMBERMAN_NETCOMMON_H
+#ifndef BOMBERMAN_NET_NETCOMMON_H
+#define BOMBERMAN_NET_NETCOMMON_H
 
 #include <array>
 #include <cstddef>
@@ -310,7 +310,7 @@ namespace bomberman::net
      */
     [[nodiscard]] inline bool deserializeMsgHello(const uint8_t* in, std::size_t inSize, MsgHello& outHello)
     {
-        if(inSize < kMsgHelloSize)
+        if(inSize != kMsgHelloSize)
             return false;
 
         outHello.protocolVersion = readU16LE(in);
@@ -353,7 +353,7 @@ namespace bomberman::net
      */
     [[nodiscard]] inline bool deserializeMsgWelcome(const uint8_t* in, std::size_t inSize, MsgWelcome& outWelcome)
     {
-        if(inSize < kMsgWelcomeSize)
+        if(inSize != kMsgWelcomeSize)
         {
             return false;
         }
@@ -434,4 +434,4 @@ namespace bomberman::net
 
 } // namespace bomberman::net
 
-#endif //BOMBERMAN_NETCOMMON_H
+#endif //BOMBERMAN_NET_NETCOMMON_H

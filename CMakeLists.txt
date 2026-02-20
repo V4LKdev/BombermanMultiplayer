@@ -53,11 +53,12 @@ set(SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/Entities/Sound.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Util/Collision.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Util/Pathfinding.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/Net/NetClient.cpp
 )
 
 set(SERVER_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/server_main.cpp
-  # ${CMAKE_CURRENT_SOURCE_DIR}/ServerNet.cpp
+  # ${CMAKE_CURRENT_SOURCE_DIR}/NetServer.cpp
 )
 
 # ---- macOS bundle parameters (from original) ----
@@ -81,6 +82,11 @@ endif()
 add_executable(${PROJECT_NAME}
   ${APP_ICON}
   ${SOURCES}
+)
+
+set_target_properties(${PROJECT_NAME}
+  PROPERTIES
+    OUTPUT_NAME "bomberman_client"
 )
 
 add_executable(bomberman_server
