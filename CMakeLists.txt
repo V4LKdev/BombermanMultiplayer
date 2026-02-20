@@ -23,11 +23,12 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(PkgConfig REQUIRED)
 
-# On Arch, pkg-config is the most reliable way to get SDL2 + friends.
+# pkg-config is the most reliable way to get SDL2 + friends.
 pkg_check_modules(SDL2       REQUIRED IMPORTED_TARGET sdl2)
 pkg_check_modules(SDL2_IMAGE REQUIRED IMPORTED_TARGET SDL2_image)
 pkg_check_modules(SDL2_TTF   REQUIRED IMPORTED_TARGET SDL2_ttf)
 pkg_check_modules(SDL2_MIXER REQUIRED IMPORTED_TARGET SDL2_mixer)
+pkg_check_modules(ENET       REQUIRED IMPORTED_TARGET libenet)
 
 # ---- Sources ----
 
@@ -54,6 +55,11 @@ set(SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/Util/Pathfinding.cpp
 )
 
+set(SERVER_SOURCES
+  ${CMAKE_CURRENT_SOURCE_DIR}/server_main.cpp
+  # ${CMAKE_CURRENT_SOURCE_DIR}/ServerNet.cpp
+)
+
 # ---- macOS bundle parameters (from original) ----
 
 set(APP_ICON "")
@@ -77,8 +83,17 @@ add_executable(${PROJECT_NAME}
   ${SOURCES}
 )
 
+add_executable(bomberman_server
+  ${SERVER_SOURCES}
+)
+
 # Project headers
 target_include_directories(${PROJECT_NAME}
+  PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+target_include_directories(bomberman_server
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
@@ -90,6 +105,12 @@ target_link_libraries(${PROJECT_NAME}
     PkgConfig::SDL2_IMAGE
     PkgConfig::SDL2_TTF
     PkgConfig::SDL2_MIXER
+    PkgConfig::ENET
+)
+
+target_link_libraries(bomberman_server
+  PRIVATE
+    PkgConfig::ENET
 )
 
 # Warnings
@@ -104,6 +125,10 @@ endif()
 install(TARGETS ${PROJECT_NAME}
   RUNTIME DESTINATION .
   BUNDLE  DESTINATION .
+)
+
+install (TARGETS bomberman_server
+  RUNTIME DESTINATION .
 )
 
 if (CMAKE_MACOSX_BUNDLE)
