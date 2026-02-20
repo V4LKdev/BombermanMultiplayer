@@ -51,3 +51,41 @@ Stabilize core runtime behavior and refactor collision handling for correctness 
 ### Result
 - Collisions behave consistently without offset artifacts.
 - Code is cleaner and ready for deterministic network simulation.
+
+## 2026-02-21 – ENet Bootstrap (Dedicated Server + Handshake)
+
+### Goal
+Establish a real client/server networking baseline with ENet before gameplay sync work.
+
+### Build and targets
+- Added ENet dependency via pkg-config (`libenet`).
+- Added separate `bomberman_server` executable target in CMake.
+- Kept existing game executable as the client path.
+
+### Protocol foundation
+- Added `Net/NetCommon.h` with:
+  - protocol constants and message enums (`Hello`, `Welcome`)
+  - wire header schema (`type`, `payloadSize`, `sequence`, `tick`, `flags`)
+  - explicit little-endian read/write helpers (`u16/u32`)
+  - explicit serializers/deserializers for `PacketHeader`, `MsgHello`, and `MsgWelcome`
+- Avoided raw struct memcpy as wire format to reduce cross-platform packing/alignment risk.
+
+### Server prototype
+- Implemented `server_main.cpp`:
+  - ENet init/create host/event loop/cleanup lifecycle
+  - connect/disconnect logging
+  - receive path with defensive packet validation
+  - parse `Hello`, validate protocol, send reliable `Welcome`
+
+### Client bootstrap probe
+- Added temporary startup handshake in `main.cpp`:
+  - connect to localhost server
+  - send `Hello`
+  - receive/validate/log `Welcome`
+  - disconnect and continue startup (offline fallback if handshake fails)
+
+### Result
+- Verified end-to-end handshake:
+  - server logs connection + `Hello` parse + `Welcome` send
+  - client logs connect + `Hello` send + `Welcome` receive
+- Project now has a working dedicated-server network baseline for next steps (input stream + snapshots).
