@@ -10,6 +10,14 @@
 
 namespace bomberman
 {
+    namespace
+    {
+        constexpr int kTargetSimHz = 60;
+        constexpr Uint32 kSimStepMs = 1000u / static_cast<Uint32>(kTargetSimHz);
+        constexpr Uint32 kMaxFrameClampMs = 250u;
+        constexpr int kMaxStepsPerFrame = 8;
+    }
+
     Game::Game(const std::string& windowName, const int width, const int height)
         : windowWidth(width), windowHeight(height)
     {
@@ -103,6 +111,8 @@ namespace bomberman
         }
 
         isRunning = true;
+        lastTickTime = SDL_GetTicks(); // initialize last tick time for frame delta calculation
+        accumulatorMs = 0;
 
         // load assets
         assetManager->load(renderer);
@@ -126,12 +136,35 @@ namespace bomberman
                 }
             }
 
-            // calculate delta
-            Uint32 tickTime = SDL_GetTicks();
-            Uint32 delta = tickTime - lastTickTime;
-            lastTickTime = tickTime;
-            // update current scene
-            sceneManager->update(delta);
+            // calculate frame delta with clamping
+            Uint32 currentTickTime = SDL_GetTicks();
+            Uint32 frameDeltaMs = currentTickTime - lastTickTime;
+            lastTickTime = currentTickTime;
+
+            // clamp frame delta
+            if(frameDeltaMs > kMaxFrameClampMs)
+            {
+                frameDeltaMs = kMaxFrameClampMs;
+            }
+
+            // accumulate frame time
+            accumulatorMs += frameDeltaMs;
+
+            // process simulation steps
+            int stepCount = 0;
+            while(accumulatorMs >= kSimStepMs && stepCount < kMaxStepsPerFrame)
+            {
+                sceneManager->update(kSimStepMs);
+                accumulatorMs -= kSimStepMs;
+                ++stepCount;
+            }
+
+            // log if we hit the safety cap
+            if(stepCount >= kMaxStepsPerFrame)
+            {
+                std::cout << "Warning: Exceeded max update steps (" << kMaxStepsPerFrame
+                          << "). Accumulator: " << accumulatorMs << "ms" << std::endl;
+            }
 
             // clear the screen
             SDL_SetRenderDrawColor(renderer, 0x00, 0x00, 0x00, 0x00);

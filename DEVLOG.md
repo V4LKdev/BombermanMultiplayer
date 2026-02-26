@@ -152,8 +152,28 @@ Move temporary client handshake logic out of `main.cpp` into a dedicated network
 - Moved handshake/connect/send/receive/disconnect flow into `NetClient::handshake(...)`.
 - Updated `main.cpp` to call `NetClient` instead of embedding ENet handshake logic directly.
 - Kept behavior unchanged: attempt handshake, continue with offline gameplay if it fails.
-- Set server binary output name to uppercase `Bomberman_Server` for consistency with `Bomberman` (client).
+- Set server binary output name to lowercase `bomberman_server` for consistency with `bomberman_client`.
 
 ### Result
 - Cleaner separation between app entrypoint and networking responsibilities.
 - Client/server executable naming is now consistent.
+
+## 2026-02-20 – Fixed Timestep Client Loop
+
+### Goal
+Introduce a simulation loop shape suitable for authoritative networking and prediction work.
+
+### Changes
+- Added fixed simulation step processing in `Game::run()` using an accumulator.
+- Added frame-delta clamp to avoid spiral-of-death after long frame stalls.
+- Added max-steps-per-frame safety cap and warning log.
+- Initialized timing state (`lastTickTime`, accumulator) at loop start.
+- Kept render pass decoupled from simulation updates.
+
+### Cleanup
+- Moved timing constants from `Game.h` to `Game.cpp` internal scope.
+- Fixed a malformed constructor doc comment in `Game.h`.
+
+### Result
+- Client simulation now advances on a stable 60 Hz step while rendering remains frame-rate driven.
+- Loop structure is aligned with upcoming network input/snapshot architecture.

@@ -80,7 +80,8 @@ namespace bomberman
 
         bool isRunning = false;      // game loop status
         bool isInitialized = false;  // SDL init status
-        Uint32 lastTickTime = 0; // last time for delta calculation
+        Uint32 lastTickTime = 0;  // last time for delta calculation
+        Uint32 accumulatorMs = 0; // accumulator for fixed timestep
     };
 } // namespace bomberman
 
