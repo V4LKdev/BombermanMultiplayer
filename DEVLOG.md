@@ -1,6 +1,6 @@
 # Bomberman Multiplayer – Dev Log
 
-## 2026-02-18 – Initial Linux setup + movement bugfix
+## 2026-02-18 (e893f17) – Initial Linux setup + movement bugfix
 
 ### Goal
 Get the provided Bomberman repo building + running on Arch Linux (CLion), then fix any platform/runtime blockers.
@@ -29,7 +29,7 @@ Get the provided Bomberman repo building + running on Arch Linux (CLion), then f
 - Added proper .gitignore for CLion/CMake.
 - Removed Windows-only artifacts (x64/, packages/, .sln/.vcxproj) from version control.
 
-## 2026-02-18 – Cleanup + Collision Refactor
+## 2026-02-18 (17362f4, 9ff8772) – Cleanup + Collision Refactor
 
 ### Goal
 Stabilize core runtime behavior and refactor collision handling for correctness and future networking.
@@ -52,7 +52,7 @@ Stabilize core runtime behavior and refactor collision handling for correctness 
 - Collisions behave consistently without offset artifacts.
 - Code is cleaner and ready for deterministic network simulation.
 
-## 2026-02-19 – ENet Bootstrap (Dedicated Server + Handshake)
+## 2026-02-19 (5d165a0) – ENet Bootstrap (Dedicated Server + Handshake)
 
 ### Goal
 Establish a real client/server networking baseline with ENet before gameplay sync work.
@@ -90,7 +90,7 @@ Establish a real client/server networking baseline with ENet before gameplay syn
   - client logs connect + `Hello` send + `Welcome` receive
 - Project now has a working dedicated-server network baseline for next steps (input stream + snapshots).
 
-## 2026-02-20 – Harden NetCommon protocol layer with validation + documentation
+## 2026-02-20 (e538244) – Harden NetCommon protocol layer with validation + documentation
 
 ### Goal
 Strengthen the network protocol implementation with defensive input validation, comprehensive documentation, and convenience helpers to ensure correctness before gameplay integration.
@@ -122,7 +122,7 @@ Strengthen the network protocol implementation with defensive input validation, 
 - Code is well-documented and easier to audit/extend.
 - Convenience helpers reduce boilerplate in client/server code.
 
-## 2026-02-20 – Fix Exit-Time Segmentation Fault
+## 2026-02-20 (7d82276) – Fix Exit-Time Segmentation Fault
 
 ### Goal
 Resolve crash on shutdown (menu exit, window close, Ctrl+C) and stabilize teardown order.
@@ -142,7 +142,7 @@ Resolve crash on shutdown (menu exit, window close, Ctrl+C) and stabilize teardo
 - Clean shutdown across all tested exit paths.
 - Removed exit-time segfault caused by resource/subsystem destruction order.
 
-## 2026-02-20 – Extract Client Handshake + Normalize Binary Naming
+## 2026-02-20 (4323485) – Extract Client Handshake + Normalize Binary Naming
 
 ### Goal
 Move temporary client handshake logic out of `main.cpp` into a dedicated networking class and make executable naming consistent.
@@ -158,7 +158,7 @@ Move temporary client handshake logic out of `main.cpp` into a dedicated network
 - Cleaner separation between app entrypoint and networking responsibilities.
 - Client/server executable naming is now consistent.
 
-## 2026-02-20 – Fixed Timestep Client Loop
+## 2026-02-20 (dd98ab2) – Fixed Timestep Client Loop
 
 ### Goal
 Introduce a simulation loop shape suitable for authoritative networking and prediction work.
@@ -177,3 +177,47 @@ Introduce a simulation loop shape suitable for authoritative networking and pred
 ### Result
 - Client simulation now advances on a stable 60 Hz step while rendering remains frame-rate driven.
 - Loop structure is aligned with upcoming network input/snapshot architecture.
+
+## 2026-02-26 (e9d6d49) – Add Packet Dispatcher To Server Receive Path
+
+### Goal
+Move server message handling from hardcoded `if` checks to a reusable dispatch model for protocol growth.
+
+### Changes
+- Added `PacketDispatcher` to `Net/NetCommon.h` with:
+  - fixed lookup table (`EMsgType -> handler`)
+  - explicit `bind(...)` and `dispatch(...)`
+- Added minimum payload-size coherence checks in header deserialization path.
+- Refactored `server_main.cpp` to:
+  - define `ServerContext`
+  - implement `onHello(...)` handler
+  - bind handlers through dispatcher setup
+  - dispatch validated packets via one receive entrypoint
+
+### Result
+- Server receive path is now structured for adding new message types without branching sprawl.
+- Protocol validation and message routing responsibilities are cleaner.
+
+## 2026-02-26 (f1f5304) – Refactor NetClient To Persistent Connection Lifecycle
+
+### Goal
+Evolve client networking from one-shot handshake probe into a reusable lifecycle object (`connect/pump/disconnect`).
+
+### Changes
+- Refactored `NetClient` to own ENet state via PIMPL (`Impl` with `ENetHost*` and `ENetPeer*`).
+- Added lifecycle support:
+  - `connect(host, port, playerName)`
+  - `pump(timeoutMs)`
+  - `disconnect()`
+  - `isConnected()`
+- Added tracked handshake results on client:
+  - `clientId_`
+  - `serverTickRate_`
+- Moved startup path in `main.cpp` to use `connect(...)` and explicit disconnect.
+- Improved disconnect robustness:
+  - graceful disconnect attempt with short ack wait
+  - force reset fallback
+
+### Result
+- Client now has a persistent connection model suitable for upcoming per-tick networking work.
+- Runtime state needed for next features (input stream/snapshots) is available on `NetClient`.
