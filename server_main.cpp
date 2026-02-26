@@ -13,9 +13,110 @@ namespace
     constexpr std::size_t kMaxPeers = 2;
     constexpr std::size_t kChannelCount = 2;
     constexpr int kServiceTimeoutMs = 16;
+    constexpr uint16_t kServerTickRate = 60;   ///< Server simulation tick rate (Hz), communicated to clients via MsgWelcome
 } // namespace
 
-void HandleEventReceive(ENetHost* server, const ENetEvent& event);
+using namespace bomberman::net;
+
+/** @brief Context passed through the dispatcher's void* to every handler. */
+struct ServerContext
+{
+    ENetHost* host = nullptr;
+    ENetPeer* peer = nullptr;   ///< The peer that sent the current packet
+};
+
+// ---- Message Handlers ----
+
+void onHello(void* ctx,
+             const PacketHeader& /*header*/,
+             const uint8_t* payload,
+             std::size_t payloadSize)
+{
+    auto& sc = *static_cast<ServerContext*>(ctx);
+
+    MsgHello msgHello{};
+    if (!deserializeMsgHello(payload, payloadSize, msgHello))
+    {
+        std::cerr << "[server] Failed to parse Hello payload\n";
+        return;
+    }
+
+    // Check protocol version: if it doesn't match, the payload layout beyond the version field may be incompatible.
+    if (msgHello.protocolVersion != kProtocolVersion)
+    {
+        std::cerr << "[server] Protocol mismatch (client " << msgHello.protocolVersion
+                  << ", server " << kProtocolVersion << ")\n";
+        return;
+    }
+
+    const std::size_t nameLen = boundedStrLen(msgHello.name, kPlayerNameMax);
+    const std::string playerName(msgHello.name, nameLen);
+
+    std::cout << "[server] Hello: version=" << msgHello.protocolVersion
+              << ", name=\"" << playerName << "\"\n";
+
+    MsgWelcome welcomePayload{};
+    welcomePayload.protocolVersion = kProtocolVersion;
+    welcomePayload.clientId = sc.peer->incomingPeerID;
+    welcomePayload.serverTickRate = kServerTickRate;
+
+    const auto outBytes = makeWelcomePacket(welcomePayload, 0, 0);
+
+    ENetPacket* out = enet_packet_create(outBytes.data(), outBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    if (out == nullptr)
+    {
+        std::cerr << "[server] Failed to allocate Welcome packet\n";
+        return;
+    }
+
+    if (enet_peer_send(sc.peer, 0, out) != 0)
+    {
+        std::cerr << "[server] Failed to queue Welcome packet\n";
+        enet_packet_destroy(out);
+        return;
+    }
+
+    enet_host_flush(sc.host);
+    std::cout << "[server] Sent Welcome to clientId=" << welcomePayload.clientId << '\n';
+}
+
+// ---- Dispatcher Setup ----
+
+PacketDispatcher makeServerDispatcher()
+{
+    PacketDispatcher d{};
+    d.bind(EMsgType::Hello, &onHello);
+    // Future: d.bind(EMsgType::Input, &onInput);
+    return d;
+}
+
+// Single global instance — initialized once at startup.
+static const PacketDispatcher gDispatcher = makeServerDispatcher();
+
+// ---- Receive Entry Point ----
+
+void HandleEventReceive(const ENetEvent& event, ServerContext& ctx)
+{
+    std::cout << "[server] Received " << event.packet->dataLength
+              << " bytes on channel " << static_cast<int>(event.channelID) << '\n';
+
+    PacketHeader header{};
+    if (!deserializeHeader(event.packet->data, event.packet->dataLength, header))
+    {
+        std::cerr << "[server] Failed to deserialize PacketHeader (malformed or truncated packet, "
+                  << event.packet->dataLength << " bytes)\n";
+        return;
+    }
+
+    ctx.peer = event.peer;
+
+    if (!gDispatcher.dispatch(&ctx, header, event.packet->data + kPacketHeaderSize, header.payloadSize))
+    {
+        std::cerr << "[server] No handler for message type " << static_cast<int>(header.type) << '\n';
+    }
+}
+
+// ---- Main ----
 
 int main(int /*argc*/, char** /*argv*/)
 {
@@ -38,6 +139,9 @@ int main(int /*argc*/, char** /*argv*/)
     }
 
     std::cout << "[server] Listening on port " << kServerPort << '\n';
+
+    ServerContext ctx{};
+    ctx.host = server;
 
     bool running = true;
 
@@ -62,7 +166,7 @@ int main(int /*argc*/, char** /*argv*/)
                 std::cout << "[server] Peer connected\n";
                 break;
             case ENET_EVENT_TYPE_RECEIVE:
-                HandleEventReceive(server, event);
+                HandleEventReceive(event, ctx);
                 enet_packet_destroy(event.packet);
                 break;
             case ENET_EVENT_TYPE_DISCONNECT:
@@ -80,83 +184,3 @@ int main(int /*argc*/, char** /*argv*/)
     return EXIT_SUCCESS;
 }
 
-void HandleEventReceive(ENetHost* server, const ENetEvent& event)
-{
-    std::cout << "[server] Received " << event.packet->dataLength
-                << " bytes on channel " << static_cast<int>(event.channelID) << '\n';
-
-    using namespace bomberman::net;
-    PacketHeader header{};
-    if(!deserializeHeader(event.packet->data, event.packet->dataLength, header))
-    {
-        std::cerr << "[server] Packet too small for PacketHeader\n";
-        return;
-    }
-
-    if(header.type != EMsgType::Hello)
-    {
-        std::cerr << "[server] Unexpected message type " << static_cast<int>(header.type) << '\n';
-        return;
-    }
-
-    const std::size_t payloadOffset = kPacketHeaderSize;
-    const std::size_t availablePayload = event.packet->dataLength - payloadOffset;
-    if(header.payloadSize != kMsgHelloSize || availablePayload < kMsgHelloSize)
-    {
-        std::cerr << "[server] Invalid Hello payload size\n";
-        return;
-    }
-
-    MsgHello msgHello{};
-    if(!deserializeMsgHello(event.packet->data + payloadOffset, availablePayload, msgHello))
-    {
-        std::cerr << "[server] Failed to parse Hello payload\n";
-        return;
-    }
-
-    const std::size_t nameLen = strnlen(msgHello.name, kPlayerNameMax);
-    const std::string playerName(msgHello.name, nameLen);
-
-    std::cout << "[server] Hello: version=" << msgHello.protocolVersion
-              << ", name=\"" << playerName << "\"\n";
-
-    if(msgHello.protocolVersion != kProtocolVersion)
-    {
-        std::cerr << "[server] Protocol mismatch (client " << msgHello.protocolVersion
-                  << ", server " << kProtocolVersion << ")\n";
-        return;
-    }
-
-    MsgWelcome welcomePayload{};
-    welcomePayload.protocolVersion = kProtocolVersion;
-    welcomePayload.clientId = event.peer->incomingPeerID;
-    welcomePayload.serverTickRate = kServerTickRate;
-
-    std::array<uint8_t, kPacketHeaderSize + kMsgWelcomeSize> outBytes{};
-    PacketHeader outHeader{};
-    outHeader.type = EMsgType::Welcome;
-    outHeader.payloadSize = static_cast<uint16_t>(kMsgWelcomeSize);
-    outHeader.sequence = 0;
-    outHeader.tick = 0;
-    outHeader.flags = 0;
-
-    serializeHeader(outHeader, outBytes.data());
-    serializeMsgWelcome(welcomePayload, outBytes.data() + kPacketHeaderSize);
-
-    ENetPacket* out = enet_packet_create(outBytes.data(), outBytes.size(), ENET_PACKET_FLAG_RELIABLE);
-    if(out == nullptr)
-    {
-        std::cerr << "[server] Failed to allocate Welcome packet\n";
-        return;
-    }
-
-    if(enet_peer_send(event.peer, 0, out) != 0)
-    {
-        std::cerr << "[server] Failed to queue Welcome packet\n";
-        enet_packet_destroy(out);
-        return;
-    }
-
-    enet_host_flush(server);
-    std::cout << "[server] Sent Welcome to clientId=" << welcomePayload.clientId << '\n';
-}

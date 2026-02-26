@@ -11,11 +11,23 @@
  *  @brief NetCommon.h - Common definitions and utilities for the Bomberman network protocol.
  *
  *  This header defines packet structure, message types, and serialization/deserialization helpers for the Bomberman game network protocol.
+ *
+ *  ## Versioning Contract
+ *
+ *  `kProtocolVersion` is a **global, strict-match** version number.
+ *  Both peers MUST agree on exactly the same version during the handshake;
+ *  any mismatch results in a clean rejection with an informative error.
+ *
+ *  When bumping the version:
+ *  1. Increment `kProtocolVersion`.
+ *  2. Update wire-size constants and static_asserts for changed messages.
+ *  3. Update `minPayloadSize()` if any minimum sizes changed.
+ *  4. Update serializers/deserializers for the new field layout.
+ *  All of the above happen atomically in a single commit.
  */
 namespace bomberman::net
 {
     constexpr uint16_t kProtocolVersion = 1;
-    constexpr uint16_t kServerTickRate = 60;
     constexpr std::size_t kPlayerNameMax = 16;
     constexpr std::size_t kMaxPacketSize = 1400; // Must be less than typical MTU (1500 bytes)
 
@@ -56,6 +68,23 @@ namespace bomberman::net
     inline bool isValidMsgType(uint8_t raw) {
         return raw == static_cast<uint8_t>(EMsgType::Hello) ||
                raw == static_cast<uint8_t>(EMsgType::Welcome);
+    }
+
+    /**
+     * @brief Returns the minimum payload size required for a given message type and protocol version.
+     *
+     * @param type The message type.
+     * @param version The protocol version of the sender.
+     * @return The minimum payload size in bytes, or 0 if the type is unknown.
+     */
+    constexpr inline std::size_t minPayloadSize(EMsgType type, [[maybe_unused]] uint16_t version = kProtocolVersion)
+    {
+        switch (type)
+        {
+            case EMsgType::Hello:   return kMsgHelloSize;     // v1: 18 bytes
+            case EMsgType::Welcome: return kMsgWelcomeSize;   // v1: 8 bytes
+            default:                return 0;
+        }
     }
 
     /** ================================================================================================================
@@ -245,7 +274,11 @@ namespace bomberman::net
      *
      *  @return true if deserialization was successful, false if the input data was too small to contain a valid PacketHeader.
      *
-     *  @note Caller should verify 'inSize >= kPacketHeaderSize + outHeader.payloadSize' before attempting to deserialize the payload.
+     *  @note On success, the following invariants hold:
+     *    - inSize >= kPacketHeaderSize + outHeader.payloadSize
+     *    - outHeader.payloadSize >= minPayloadSize(outHeader.type)
+     *    - outHeader.type is a valid EMsgType
+     *  Callers can safely pass (in + kPacketHeaderSize, outHeader.payloadSize) to the appropriate payload deserializer.
      */
     [[nodiscard]] inline bool deserializeHeader(const uint8_t* in, std::size_t inSize, PacketHeader& outHeader)
     {
@@ -255,7 +288,8 @@ namespace bomberman::net
          * 2. Read the message type and validate it against known EMsgType values.
          * 3. Read the payload size and validate it against the maximum allowed size.
          * 4. Check if the input size is sufficient to contain the entire packet (header + payload) based on the payload size.
-         * 5. If all checks pass, populate the outHeader struct with the deserialized values and return true.
+         * 5. Validate type-vs-payload-size coherence: the payload must be at least minPayloadSize(type) bytes.
+         * 6. If all checks pass, populate the outHeader struct with the deserialized values and return true.
          */
 
         if(inSize < kPacketHeaderSize)
@@ -272,7 +306,14 @@ namespace bomberman::net
         if (inSize < kPacketHeaderSize + payloadSize)
             return false;
 
-        outHeader.type = static_cast<EMsgType>(rawType);
+        // Validate type-vs-payload-size coherence: the wire payload must be at least as large as the minimum this message type requires.
+        // This catches truncated or malformed packets before any payload deserializer runs.
+        const auto msgType = static_cast<EMsgType>(rawType);
+        const std::size_t minSize = minPayloadSize(msgType);
+        if (minSize > 0 && payloadSize < minSize)
+            return false;
+
+        outHeader.type = msgType;
         outHeader.payloadSize = payloadSize;
         outHeader.sequence = readU32LE(in + 3);
         outHeader.tick = readU32LE(in + 7);
@@ -310,7 +351,7 @@ namespace bomberman::net
      */
     [[nodiscard]] inline bool deserializeMsgHello(const uint8_t* in, std::size_t inSize, MsgHello& outHello)
     {
-        if(inSize != kMsgHelloSize)
+        if(inSize < kMsgHelloSize)
             return false;
 
         outHello.protocolVersion = readU16LE(in);
@@ -353,7 +394,7 @@ namespace bomberman::net
      */
     [[nodiscard]] inline bool deserializeMsgWelcome(const uint8_t* in, std::size_t inSize, MsgWelcome& outWelcome)
     {
-        if(inSize != kMsgWelcomeSize)
+        if(inSize < kMsgWelcomeSize)
         {
             return false;
         }
@@ -431,6 +472,80 @@ namespace bomberman::net
 
         return bytes;
     }
+
+
+    /** ================================================================================================================
+     *  ==== MESSAGE DISPATCH ==========================================================================================
+     * =================================================================================================================
+     */
+
+    /**
+     *  @brief Signature for a per-message-type handler function.
+     *
+     *  @param context   Opaque caller-supplied pointer (e.g. a server session, a NetClient, etc.).
+     *  @param header    The already-validated PacketHeader for this message.
+     *  @param payload   Pointer to the first byte of the payload (past the header).
+     *  @param payloadSize  Number of payload bytes available (== header.payloadSize, already validated >= minPayloadSize).
+     *
+     *  Handlers can assume safely:
+     *    - The header has passed all `deserializeHeader` checks.
+     *    - `payloadSize >= minPayloadSize(header.type)`.
+     *    - The buffer is valid for `payloadSize` bytes starting at `payload`.
+     */
+    using PacketHandlerFn = void(*)(void* context,
+                                    const PacketHeader& header,
+                                    const uint8_t* payload,
+                                    std::size_t payloadSize);
+
+    /**
+     *  @brief A fixed-size lookup table mapping EMsgType → handler function.
+     *
+     *  Index by the raw uint8_t value of EMsgType.  Unregistered slots are nullptr.
+     *  This keeps dispatch O(1) and avoids any heap allocation or dynamic containers.
+     *
+     *  Usage:
+     *  @code
+     *      PacketDispatcher dispatcher{};   // all slots nullptr
+     *      dispatcher.bind(EMsgType::Hello, &onHello);
+     *      dispatcher.bind(EMsgType::Welcome, &onWelcome);
+     *
+     *      // In receive loop:
+     *      dispatcher.dispatch(myContext, header, payload, payloadSize);
+     *  @endcode
+     */
+    struct PacketDispatcher
+    {
+        static constexpr std::size_t kTableSize = 256; // uint8_t range
+        PacketHandlerFn table[kTableSize]{};            // value-init → all nullptr
+
+        /** @brief Register a handler for a specific message type. Overwrites any previous binding. */
+        void bind(EMsgType type, PacketHandlerFn fn)
+        {
+            table[static_cast<uint8_t>(type)] = fn;
+        }
+
+        /**
+         *  @brief Look up and invoke the handler for the given header's message type.
+         *
+         *  @param context    Opaque pointer forwarded to the handler.
+         *  @param header     The deserialized (and validated) packet header.
+         *  @param payload    Pointer to the payload bytes.
+         *  @param payloadSize  Size of the payload in bytes.
+         *
+         *  @return true if a handler was found and invoked, false if no handler is bound for this message type.
+         */
+        bool dispatch(void* context,
+                      const PacketHeader& header,
+                      const uint8_t* payload,
+                      std::size_t payloadSize) const
+        {
+            const auto fn = table[static_cast<uint8_t>(header.type)];
+            if (!fn) return false;
+
+            fn(context, header, payload, payloadSize);
+            return true;
+        }
+    };
 
 } // namespace bomberman::net
 
