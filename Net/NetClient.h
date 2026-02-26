@@ -29,18 +29,6 @@ namespace bomberman::net
         NetClient& operator=(NetClient&&) noexcept;
 
         /**
-         *  @brief Performs the handshake process with the server by connecting to the specified host and port, sending a Hello message with the player's name, and waiting for a Welcome response.
-         *
-         *  @param host The hostname or IP address of the server to connect to.
-         *  @param port The port number on which the server is listening for connections.
-         *  @param playerName The name of the player to send in the Hello message during the handshake. This name will be truncated if it exceeds the maximum allowed length defined in the protocol.
-         *
-         *  @return true if the handshake exchange succeeded, false if there was an error during the connection or handshake process.
-         */
-        [[deprecated("Use connect() instead")]]
-        bool handshake(const std::string& host, uint16_t port, std::string_view playerName);
-
-        /**
          *  @brief Connects to the server and performs the handshake process.
          *
          *  @param host The hostname or IP address of the server to connect to.

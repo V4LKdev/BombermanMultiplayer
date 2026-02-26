@@ -8,7 +8,6 @@
 int main(int /*argc*/, char** /*argv*/)
 {
     bomberman::net::NetClient client;
-    // client.handshake("127.0.0.1", 12345, "PlayerName");
     if (!client.connect("127.0.0.1", 12345, "PlayerName"))
     {
         std::cerr << "[client] Failed to connect to the server." << std::endl;
