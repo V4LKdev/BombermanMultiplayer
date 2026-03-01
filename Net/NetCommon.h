@@ -57,12 +57,18 @@ namespace bomberman::net
         sizeof(uint32_t) + // clientId
         sizeof(uint16_t);  // serverTickRate
 
+    constexpr std::size_t kMsgInputSize =
+        sizeof(int8_t) + // moveX
+        sizeof(int8_t) + // moveY
+        sizeof(uint8_t);  // actionFlags
+
     /** ---- Static Assertions ----------------------- */
     static_assert(sizeof(char) == 1, "Unexpected char size");
 
     static_assert(kPacketHeaderSize == 12, "PacketHeader size mismatch");
     static_assert(kMsgHelloSize == 18, "MsgHello size mismatch");
     static_assert(kMsgWelcomeSize == 8, "MsgWelcome size mismatch");
+    static_assert(kMsgInputSize == 3, "MsgInput size mismatch");
 
     /**
      *  @brief Enumeration of message types in the Bomberman network protocol.
@@ -70,13 +76,15 @@ namespace bomberman::net
     enum class EMsgType : uint8_t
     {
         Hello = 0x01,
-        Welcome = 0x02
+        Welcome = 0x02,
+        Input = 0x10
     };
 
     /** @brief Checks if a raw byte value corresponds to a valid EMsgType. */
     inline bool isValidMsgType(uint8_t raw) {
         return raw == static_cast<uint8_t>(EMsgType::Hello) ||
-               raw == static_cast<uint8_t>(EMsgType::Welcome);
+               raw == static_cast<uint8_t>(EMsgType::Welcome) ||
+               raw == static_cast<uint8_t>(EMsgType::Input);
     }
 
     /**
@@ -86,12 +94,13 @@ namespace bomberman::net
      * @param version The protocol version of the sender.
      * @return The minimum payload size in bytes, or 0 if the type is unknown.
      */
-    constexpr inline std::size_t minPayloadSize(EMsgType type, [[maybe_unused]] uint16_t version = kProtocolVersion)
+    constexpr std::size_t minPayloadSize(EMsgType type, [[maybe_unused]] uint16_t version = kProtocolVersion)
     {
         switch (type)
         {
             case EMsgType::Hello:   return kMsgHelloSize;     // v1: 18 bytes
             case EMsgType::Welcome: return kMsgWelcomeSize;   // v1: 8 bytes
+            case EMsgType::Input:   return kMsgInputSize;     // v1: 3 bytes
             default:                return 0;
         }
     }
@@ -144,6 +153,15 @@ namespace bomberman::net
         uint16_t serverTickRate;    ///< The tick rate of the server, which the client should use for its internal timing and synchronization
     };
 
+    /**
+    *  @brief Represents the payload of an Input message sent by the client to the server to convey player input actions.
+    */
+    struct MsgInput
+    {
+        int8_t moveX; ///< Range {-1; 0; 1}
+        int8_t moveY; ///< Range {-1; 0; 1}
+        uint8_t actionFlags; // Bitfield for actions like placing a bomb, etc.
+    };
 
      // ================================================================================================================
      // ==== SERIALIZATION HELPERS =====================================================================================
@@ -155,7 +173,7 @@ namespace bomberman::net
     *  @param out The output byte array where the value will be written.
     *  @param value The 16-bit unsigned integer value to write.
     */
-    constexpr inline void writeU16LE(uint8_t* out, uint16_t value)
+    constexpr void writeU16LE(uint8_t* out, uint16_t value)
     {
         out[0] = static_cast<uint8_t>(value & 0xFFu);
         out[1] = static_cast<uint8_t>((value >> 8u) & 0xFFu);
@@ -167,7 +185,7 @@ namespace bomberman::net
      * @param out The output byte array where the value will be written.
      * @param value The 32-bit unsigned integer value to write.
      */
-    constexpr inline void writeU32LE(uint8_t* out, uint32_t value)
+    constexpr void writeU32LE(uint8_t* out, uint32_t value)
     {
         out[0] = static_cast<uint8_t>(value & 0xFFu);
         out[1] = static_cast<uint8_t>((value >> 8u) & 0xFFu);
@@ -181,7 +199,7 @@ namespace bomberman::net
      * @param in The input byte array from which the value will be read.
      * @return The 16-bit unsigned integer value read from the byte array.
      */
-    constexpr inline uint16_t readU16LE(const uint8_t* in)
+    constexpr uint16_t readU16LE(const uint8_t* in)
     {
         return static_cast<uint16_t>(in[0]) |
                (static_cast<uint16_t>(in[1]) << 8u);
@@ -193,7 +211,7 @@ namespace bomberman::net
      * @param in The input byte array from which the value will be read.
      * @return The 32-bit unsigned integer value read from the byte array.
      */
-    constexpr inline uint32_t readU32LE(const uint8_t* in)
+    constexpr uint32_t readU32LE(const uint8_t* in)
     {
         return static_cast<uint32_t>(in[0]) |
                (static_cast<uint32_t>(in[1]) << 8u) |
@@ -288,7 +306,8 @@ namespace bomberman::net
      *    - outHeader.type is a valid EMsgType
      *  Callers can safely pass (in + kPacketHeaderSize, outHeader.payloadSize) to the appropriate payload deserializer.
      */
-    [[nodiscard]] inline bool deserializeHeader(const uint8_t* in, std::size_t inSize, PacketHeader& outHeader)
+    [[nodiscard]]
+    inline bool deserializeHeader(const uint8_t* in, std::size_t inSize, PacketHeader& outHeader)
     {
         /**
          * Deserialization Steps:
@@ -357,7 +376,8 @@ namespace bomberman::net
      *
      *  @return true if deserialization was successful, false if the input data was too small to contain a valid MsgHello.
      */
-    [[nodiscard]] inline bool deserializeMsgHello(const uint8_t* in, std::size_t inSize, MsgHello& outHello)
+    [[nodiscard]]
+    inline bool deserializeMsgHello(const uint8_t* in, std::size_t inSize, MsgHello& outHello)
     {
         if(inSize < kMsgHelloSize)
             return false;
@@ -400,7 +420,8 @@ namespace bomberman::net
      *
      *  @return true if deserialization was successful, false if the input data was too small to contain a valid MsgWelcome.
      */
-    [[nodiscard]] inline bool deserializeMsgWelcome(const uint8_t* in, std::size_t inSize, MsgWelcome& outWelcome)
+    [[nodiscard]]
+    inline bool deserializeMsgWelcome(const uint8_t* in, std::size_t inSize, MsgWelcome& outWelcome)
     {
         if(inSize < kMsgWelcomeSize)
         {
@@ -409,6 +430,53 @@ namespace bomberman::net
         outWelcome.protocolVersion = readU16LE(in);
         outWelcome.clientId = readU32LE(in + 2);
         outWelcome.serverTickRate = readU16LE(in + 6);
+        return true;
+    }
+
+    /**
+     *  @brief Serializes a MsgInput struct into a byte array.
+     *
+     *  @param input The MsgInput struct to serialize.
+     *  @param out The output byte array where the serialized message will be written. Must have at least kMsgInputSize bytes available.
+     *
+     *  @note Total size: 3 bytes
+     */
+    inline void serializeMsgInput(const MsgInput& input, uint8_t* out) noexcept
+    {
+                                                // Wire Pack Format:
+        out[0] = input.moveX;                   // offset 0: 1 byte - moveX
+        out[1] = input.moveY;                   // offset 1: 1 byte - moveY
+        out[2] = input.actionFlags;             // offset 2: 1 byte - action flags
+    }
+
+    /**
+     *  @brief Deserializes a MsgInput struct from a byte array.
+     *
+     *  @param in The input byte array containing the serialized message. Must have at least kMsgInputSize bytes available.
+     *  @param inSize The size of the input byte array in bytes.
+     *  @param outInput The output MsgInput struct where the deserialized message will be stored.
+     *
+     *  @return true if deserialization was successful, false if the input data was too small to contain a valid MsgInput.
+     */
+    [[nodiscard]]
+    inline bool deserializeMsgInput(const uint8_t* in, std::size_t inSize, MsgInput& outInput)
+    {
+        if (inSize < kMsgInputSize)
+        {
+            return false;
+        }
+
+        const auto rawMoveX = static_cast<int8_t>(in[0]);
+        const auto rawMoveY = static_cast<int8_t>(in[1]);
+
+        // Validate that move values are exactly -1, 0, or 1
+        if ((rawMoveX < -1 || rawMoveX > 1) || (rawMoveY < -1 || rawMoveY > 1)) {
+            return false;  // Invalid input values
+        }
+
+        outInput.moveX = rawMoveX;
+        outInput.moveY = rawMoveY;
+        outInput.actionFlags = in[2];
         return true;
     }
 

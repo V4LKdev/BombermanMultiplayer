@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <unordered_map>
 
 #include <enet/enet.h>
 #include "Net/NetCommon.h"
@@ -18,12 +19,21 @@ namespace
 
 using namespace bomberman::net;
 
+/** @brief Input state structure for each connected client */
+struct ClientInputState
+{
+    int8_t moveX;
+    int8_t moveY;
+    uint8_t actionFlags;
+};
 
 /** @brief Context passed through the dispatcher's handler calls. */
 struct ServerContext
 {
     ENetHost* host = nullptr;
     ENetPeer* peer = nullptr;   ///< The peer that sent the current packet
+
+    std::unordered_map<uint32_t /* ClientId */, ClientInputState> inputs; ///< Stores the latest input state for each connected peer
 };
 
 // =====================================================================================================================
@@ -40,12 +50,12 @@ struct ServerContext
  *  4. Constructs a MsgWelcome response with the assigned client ID and server tick rate.
  *  5. Serializes the MsgWelcome into a packet and sends it back to the client reliably.
  *
- *  @param sc The server context containing the ENet host and peer information.
+ *  @param ctx The server context containing the ENet host and peer information.
  *  @param header The deserialized packet header (not used in this handler).
  *  @param payload The raw payload bytes of the Hello message.
  *  @param payloadSize The size of the payload in bytes.
  */
-void onHello(ServerContext& sc, const PacketHeader& /*header*/, const uint8_t* payload, std::size_t payloadSize)
+void onHello(ServerContext& ctx, const PacketHeader& /*header*/, const uint8_t* payload, std::size_t payloadSize)
 {
     /* ---- Receive Hello from client ----*/
 
@@ -74,7 +84,7 @@ void onHello(ServerContext& sc, const PacketHeader& /*header*/, const uint8_t* p
 
     MsgWelcome welcomePayload{};
     welcomePayload.protocolVersion = kProtocolVersion;
-    welcomePayload.clientId = sc.peer->incomingPeerID;
+    welcomePayload.clientId = ctx.peer->incomingPeerID;
     welcomePayload.serverTickRate = kServerTickRate;
 
     const auto outBytes = makeWelcomePacket(welcomePayload, 0, 0);
@@ -86,15 +96,40 @@ void onHello(ServerContext& sc, const PacketHeader& /*header*/, const uint8_t* p
         return;
     }
 
-    if (enet_peer_send(sc.peer, static_cast<uint8_t>(EChannel::Control), out) != 0)
+    if (enet_peer_send(ctx.peer, static_cast<uint8_t>(EChannel::Control), out) != 0)
     {
         std::cerr << "[server] Failed to queue Welcome packet\n";
         enet_packet_destroy(out);
         return;
     }
 
-    enet_host_flush(sc.host);
+    enet_host_flush(ctx.host);
     std::cout << "[server] Sent Welcome to clientId=" << welcomePayload.clientId << '\n';
+}
+
+void onInput(ServerContext& ctx, const PacketHeader& header, const uint8_t* payload, std::size_t size)
+{
+    MsgInput msgInput{};
+    if (!deserializeMsgInput(payload, size, msgInput))
+    {
+        std::cerr << "[server] Failed to parse input payload\n";
+        return;
+    }
+
+    const uint32_t clientId = ctx.peer->incomingPeerID;
+    ctx.inputs[clientId] = {
+        msgInput.moveX,
+        msgInput.moveY,
+        msgInput.actionFlags
+    };
+
+    std::cout << "[server] Received incoming input packet from clientId=" << clientId
+              << ", Sequence: " << header.sequence
+              << ", Tick: " << header.tick
+              << "  : moveX=" << static_cast<int>(msgInput.moveX)
+              << "  , moveY=" << static_cast<int>(msgInput.moveY)
+              << "  , actionFlags=" << static_cast<int>(msgInput.actionFlags) << '\n';
+
 }
 
 // =====================================================================================================================
@@ -110,7 +145,7 @@ PacketDispatcher<ServerContext> makeServerDispatcher()
     PacketDispatcher<ServerContext> d{};
 
     d.bind(EMsgType::Hello, &onHello);
-    // Future: d.bind(EMsgType::Input, &onInput);
+    d.bind(EMsgType::Input, &onInput);
 
     return d;
 }
@@ -123,7 +158,7 @@ static const PacketDispatcher<ServerContext> gDispatcher = makeServerDispatcher(
 /**
  *  @brief Handles an ENet receive event by dispatching the received packet through the server's PacketDispatcher.
  */
-void HandleEventReceive(const ENetEvent& event, ServerContext& ctx)
+void handleEventReceive(const ENetEvent& event, ServerContext& ctx)
 {
     std::cout << "[server] Received " << event.packet->dataLength
               << " bytes on channel " << static_cast<int>(event.channelID) << '\n';
@@ -185,11 +220,12 @@ int main(int /*argc*/, char** /*argv*/)
                 std::cout << "[server] Peer connected\n";
                 break;
             case ENET_EVENT_TYPE_RECEIVE:
-                HandleEventReceive(event, ctx);
+                handleEventReceive(event, ctx);
                 enet_packet_destroy(event.packet);
                 break;
             case ENET_EVENT_TYPE_DISCONNECT:
                 std::cout << "[server] Peer disconnected\n";
+                ctx.inputs.erase(event.peer->incomingPeerID);
                 event.peer->data = nullptr;
                 break;
             case ENET_EVENT_TYPE_NONE:
