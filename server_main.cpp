@@ -1,38 +1,53 @@
 
 #include <cstdlib>
 #include <iostream>
-#include <cstring>
 #include <string>
 
 #include <enet/enet.h>
 #include "Net/NetCommon.h"
+#include "Net/PacketDispatch.h"
 
 namespace
 {
     constexpr enet_uint16 kServerPort = 12345;
     constexpr std::size_t kMaxPeers = 2;
-    constexpr std::size_t kChannelCount = 2;
     constexpr int kServiceTimeoutMs = 16;
-    constexpr uint16_t kServerTickRate = 60;   ///< Server simulation tick rate (Hz), communicated to clients via MsgWelcome
+    constexpr uint16_t kServerTickRate = 60;
 } // namespace
+
 
 using namespace bomberman::net;
 
-/** @brief Context passed through the dispatcher's void* to every handler. */
+
+/** @brief Context passed through the dispatcher's handler calls. */
 struct ServerContext
 {
     ENetHost* host = nullptr;
     ENetPeer* peer = nullptr;   ///< The peer that sent the current packet
 };
 
-// ---- Message Handlers ----
+// =====================================================================================================================
+// ==== Message Handler Implementations ================================================================================
+// =====================================================================================================================
 
-void onHello(void* ctx,
-             const PacketHeader& /*header*/,
-             const uint8_t* payload,
-             std::size_t payloadSize)
+/**
+ *  @brief Handler for Hello messages received from clients during the handshake process.
+ *
+ *  This handler performs the following steps:
+ *  1. Deserializes the MsgHello payload and validates it.
+ *  2. Checks the protocol version for compatibility.
+ *  3. Logs the client's name and protocol version.
+ *  4. Constructs a MsgWelcome response with the assigned client ID and server tick rate.
+ *  5. Serializes the MsgWelcome into a packet and sends it back to the client reliably.
+ *
+ *  @param sc The server context containing the ENet host and peer information.
+ *  @param header The deserialized packet header (not used in this handler).
+ *  @param payload The raw payload bytes of the Hello message.
+ *  @param payloadSize The size of the payload in bytes.
+ */
+void onHello(ServerContext& sc, const PacketHeader& /*header*/, const uint8_t* payload, std::size_t payloadSize)
 {
-    auto& sc = *static_cast<ServerContext*>(ctx);
+    /* ---- Receive Hello from client ----*/
 
     MsgHello msgHello{};
     if (!deserializeMsgHello(payload, payloadSize, msgHello))
@@ -41,7 +56,6 @@ void onHello(void* ctx,
         return;
     }
 
-    // Check protocol version: if it doesn't match, the payload layout beyond the version field may be incompatible.
     if (msgHello.protocolVersion != kProtocolVersion)
     {
         std::cerr << "[server] Protocol mismatch (client " << msgHello.protocolVersion
@@ -54,6 +68,9 @@ void onHello(void* ctx,
 
     std::cout << "[server] Hello: version=" << msgHello.protocolVersion
               << ", name=\"" << playerName << "\"\n";
+
+
+    /* ---- Send Welcome response to client ---- */
 
     MsgWelcome welcomePayload{};
     welcomePayload.protocolVersion = kProtocolVersion;
@@ -69,7 +86,7 @@ void onHello(void* ctx,
         return;
     }
 
-    if (enet_peer_send(sc.peer, 0, out) != 0)
+    if (enet_peer_send(sc.peer, static_cast<uint8_t>(EChannel::Control), out) != 0)
     {
         std::cerr << "[server] Failed to queue Welcome packet\n";
         enet_packet_destroy(out);
@@ -80,46 +97,46 @@ void onHello(void* ctx,
     std::cout << "[server] Sent Welcome to clientId=" << welcomePayload.clientId << '\n';
 }
 
-// ---- Dispatcher Setup ----
+// =====================================================================================================================
+// ==== Packet Dispatcher Setup ========================================================================================
+// =====================================================================================================================
 
-PacketDispatcher makeServerDispatcher()
+/**
+ * @brief Creates and configures the PacketDispatcher for the server,
+ * binding message types to their respective handlers.
+ */
+PacketDispatcher<ServerContext> makeServerDispatcher()
 {
-    PacketDispatcher d{};
+    PacketDispatcher<ServerContext> d{};
+
     d.bind(EMsgType::Hello, &onHello);
     // Future: d.bind(EMsgType::Input, &onInput);
+
     return d;
 }
 
-// Single global instance — initialized once at startup.
-static const PacketDispatcher gDispatcher = makeServerDispatcher();
+/**
+ *  @brief Global PacketDispatcher instance for the server, initialized with the configured handlers.
+ */
+static const PacketDispatcher<ServerContext> gDispatcher = makeServerDispatcher();
 
-// ---- Receive Entry Point ----
-
+/**
+ *  @brief Handles an ENet receive event by dispatching the received packet through the server's PacketDispatcher.
+ */
 void HandleEventReceive(const ENetEvent& event, ServerContext& ctx)
 {
     std::cout << "[server] Received " << event.packet->dataLength
               << " bytes on channel " << static_cast<int>(event.channelID) << '\n';
 
-    PacketHeader header{};
-    if (!deserializeHeader(event.packet->data, event.packet->dataLength, header))
-    {
-        std::cerr << "[server] Failed to deserialize PacketHeader (malformed or truncated packet, "
-                  << event.packet->dataLength << " bytes)\n";
-        return;
-    }
-
     ctx.peer = event.peer;
 
-    if (!gDispatcher.dispatch(&ctx, header, event.packet->data + kPacketHeaderSize, header.payloadSize))
-    {
-        std::cerr << "[server] No handler for message type " << static_cast<int>(header.type) << '\n';
-    }
+    dispatchPacket("[server]", gDispatcher, ctx, event.packet->data, event.packet->dataLength);
 }
 
-// ---- Main ----
 
 int main(int /*argc*/, char** /*argv*/)
 {
+    // 1. Initialize ENet
     if(enet_initialize() != 0)
     {
         std::cerr << "[server] ENet initialization failed\n";
@@ -130,6 +147,7 @@ int main(int /*argc*/, char** /*argv*/)
     address.host = ENET_HOST_ANY;
     address.port = kServerPort;
 
+    // 2. Create ENet host for the server
     ENetHost* server = enet_host_create(&address, kMaxPeers, kChannelCount, 0, 0);
     if(server == nullptr)
     {
@@ -145,6 +163,7 @@ int main(int /*argc*/, char** /*argv*/)
 
     bool running = true;
 
+    // 3. Main event loop
     while(running)
     {
         ENetEvent event{};
@@ -178,6 +197,7 @@ int main(int /*argc*/, char** /*argv*/)
         }
     }
 
+    // 4. Clean up and shutdown
     enet_host_destroy(server);
     enet_deinitialize();
     std::cout << "[server] Shutdown complete\n";

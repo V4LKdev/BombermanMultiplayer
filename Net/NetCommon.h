@@ -31,6 +31,15 @@ namespace bomberman::net
     constexpr std::size_t kPlayerNameMax = 16;
     constexpr std::size_t kMaxPacketSize = 1400; // Must be less than typical MTU (1500 bytes)
 
+    /** ---- Channel Configuration ------------------- */
+    /** @brief ENet channel identifiers. Used to distinguish between reliable (control) and unreliable (game state) traffic. */
+    enum class EChannel : uint8_t
+    {
+        Control = 0,   ///< Reliable control messages (handshake, input, commands)
+        GameState = 1  ///< Unreliable game state snapshots (positions, animations, etc.)
+    };
+    constexpr std::size_t kChannelCount = 2; ///< Total number of ENet channels
+
     /** ---- Wire Sizes ---------------------------- */
     constexpr std::size_t kPacketHeaderSize =
         sizeof(uint8_t) +  // type
@@ -87,10 +96,10 @@ namespace bomberman::net
         }
     }
 
-    /** ================================================================================================================
-     *  ==== PACKET STRUCTS ============================================================================================
-     * =================================================================================================================
-     */
+     // ================================================================================================================
+     // ==== PACKET STRUCTS ============================================================================================
+     // ================================================================================================================
+
 
     /**
     *  @brief Represents the header of a network packet in the Bomberman protocol.
@@ -136,10 +145,9 @@ namespace bomberman::net
     };
 
 
-    /** ================================================================================================================
-     *  ==== SERIALIZATION HELPERS =====================================================================================
-     * =================================================================================================================
-     */
+     // ================================================================================================================
+     // ==== SERIALIZATION HELPERS =====================================================================================
+     // ================================================================================================================
 
     /**
     *  @brief Writes a 16-bit unsigned integer to a byte array in little-endian format.
@@ -242,10 +250,10 @@ namespace bomberman::net
         setHelloName(hello, std::string_view{name, n});
     }
 
-    /** ================================================================================================================
-     *  ==== (DE)SERIALIZATION FUNCTIONS ===============================================================================
-     * =================================================================================================================
-     */
+     // ================================================================================================================
+     // ==== (DE)SERIALIZATION FUNCTIONS ===============================================================================
+     // ================================================================================================================
+
 
     /**
      *  @brief Serializes a PacketHeader struct into a byte array in the Bomberman network protocol format.
@@ -405,10 +413,9 @@ namespace bomberman::net
     }
 
 
-    /** ================================================================================================================
-     *  ==== PACKET CONSTRUCTION HELPERS ===============================================================================
-     * =================================================================================================================
-     */
+     // ================================================================================================================
+     // ==== PACKET CONSTRUCTION HELPERS ===============================================================================
+     // ================================================================================================================
 
 
     /**
@@ -473,79 +480,6 @@ namespace bomberman::net
         return bytes;
     }
 
-
-    /** ================================================================================================================
-     *  ==== MESSAGE DISPATCH ==========================================================================================
-     * =================================================================================================================
-     */
-
-    /**
-     *  @brief Signature for a per-message-type handler function.
-     *
-     *  @param context   Opaque caller-supplied pointer (e.g. a server session, a NetClient, etc.).
-     *  @param header    The already-validated PacketHeader for this message.
-     *  @param payload   Pointer to the first byte of the payload (past the header).
-     *  @param payloadSize  Number of payload bytes available (== header.payloadSize, already validated >= minPayloadSize).
-     *
-     *  Handlers can assume safely:
-     *    - The header has passed all `deserializeHeader` checks.
-     *    - `payloadSize >= minPayloadSize(header.type)`.
-     *    - The buffer is valid for `payloadSize` bytes starting at `payload`.
-     */
-    using PacketHandlerFn = void(*)(void* context,
-                                    const PacketHeader& header,
-                                    const uint8_t* payload,
-                                    std::size_t payloadSize);
-
-    /**
-     *  @brief A fixed-size lookup table mapping EMsgType → handler function.
-     *
-     *  Index by the raw uint8_t value of EMsgType.  Unregistered slots are nullptr.
-     *  This keeps dispatch O(1) and avoids any heap allocation or dynamic containers.
-     *
-     *  Usage:
-     *  @code
-     *      PacketDispatcher dispatcher{};   // all slots nullptr
-     *      dispatcher.bind(EMsgType::Hello, &onHello);
-     *      dispatcher.bind(EMsgType::Welcome, &onWelcome);
-     *
-     *      // In receive loop:
-     *      dispatcher.dispatch(myContext, header, payload, payloadSize);
-     *  @endcode
-     */
-    struct PacketDispatcher
-    {
-        static constexpr std::size_t kTableSize = 256; // uint8_t range
-        PacketHandlerFn table[kTableSize]{};            // value-init → all nullptr
-
-        /** @brief Register a handler for a specific message type. Overwrites any previous binding. */
-        void bind(EMsgType type, PacketHandlerFn fn)
-        {
-            table[static_cast<uint8_t>(type)] = fn;
-        }
-
-        /**
-         *  @brief Look up and invoke the handler for the given header's message type.
-         *
-         *  @param context    Opaque pointer forwarded to the handler.
-         *  @param header     The deserialized (and validated) packet header.
-         *  @param payload    Pointer to the payload bytes.
-         *  @param payloadSize  Size of the payload in bytes.
-         *
-         *  @return true if a handler was found and invoked, false if no handler is bound for this message type.
-         */
-        bool dispatch(void* context,
-                      const PacketHeader& header,
-                      const uint8_t* payload,
-                      std::size_t payloadSize) const
-        {
-            const auto fn = table[static_cast<uint8_t>(header.type)];
-            if (!fn) return false;
-
-            fn(context, header, payload, payloadSize);
-            return true;
-        }
-    };
 
 } // namespace bomberman::net
 
