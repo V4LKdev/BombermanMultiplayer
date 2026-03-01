@@ -161,7 +161,13 @@ namespace bomberman::net
         int8_t moveX; ///< Range {-1; 0; 1}
         int8_t moveY; ///< Range {-1; 0; 1}
         uint8_t actionFlags; // Bitfield for actions like placing a bomb, etc.
+
+        enum ActionFlag : uint8_t
+        {
+            PlaceBomb = 0x01
+        };
     };
+
 
      // ================================================================================================================
      // ==== SERIALIZATION HELPERS =====================================================================================

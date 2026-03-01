@@ -3,9 +3,11 @@
 #include <SDL_ttf.h>
 
 #include <iostream>
+#include <algorithm>
 
 #include "Game.h"
-#include "Scenes/LevelScene.h"
+
+#include "Net/NetClient.h"
 #include "Scenes/MenuScene.h"
 
 namespace bomberman
@@ -18,8 +20,8 @@ namespace bomberman
         constexpr int kMaxStepsPerFrame = 8;
     }
 
-    Game::Game(const std::string& windowName, const int width, const int height)
-        : windowWidth(width), windowHeight(height)
+    Game::Game(const std::string& windowName, const int width, const int height, net::NetClient* inNetClient)
+        : windowWidth(width), windowHeight(height), netClient(inNetClient)
     {
         // let's init SDL2
         if(SDL_Init(SDL_INIT_VIDEO) != 0)
@@ -114,11 +116,15 @@ namespace bomberman
         lastTickTime = SDL_GetTicks(); // initialize last tick time for frame delta calculation
         accumulatorMs = 0;
 
+        uint32_t clientTick = 0;
+
         // load assets
         assetManager->load(renderer);
         // create menu scene
         sceneManager->addScene("menu", std::make_shared<MenuScene>(this));
         sceneManager->activateScene("menu");
+
+        bool previousBombHeld = false;
 
         SDL_Event event;
 
@@ -157,6 +163,35 @@ namespace bomberman
                 sceneManager->update(kSimStepMs);
                 accumulatorMs -= kSimStepMs;
                 ++stepCount;
+                ++clientTick;
+
+                // If connected
+                if (netClient != nullptr && netClient->isConnected())
+                {
+                    netClient->pump(0);
+
+                    net::MsgInput msgInput{};
+                    const Uint8* input = SDL_GetKeyboardState(nullptr);
+
+                    const bool left  = input[SDL_SCANCODE_LEFT]  || input[SDL_SCANCODE_A];
+                    const bool right = input[SDL_SCANCODE_RIGHT] || input[SDL_SCANCODE_D];
+                    const bool up    = input[SDL_SCANCODE_UP]    || input[SDL_SCANCODE_W];
+                    const bool down  = input[SDL_SCANCODE_DOWN]  || input[SDL_SCANCODE_S];
+
+                    msgInput.moveX = static_cast<int8_t>((right ? 1 : 0) + (left ? -1 : 0));
+                    msgInput.moveY = static_cast<int8_t>((down  ? 1 : 0) + (up   ? -1 : 0));
+
+                    // Clamp
+                    msgInput.moveX = std::max<int8_t>(-1, std::min<int8_t>(1, msgInput.moveX));
+                    msgInput.moveY = std::max<int8_t>(-1, std::min<int8_t>(1, msgInput.moveY));
+
+                    // Set action flags
+                    const bool bombHeld = input[SDL_SCANCODE_SPACE] != 0;
+                    msgInput.actionFlags = bombHeld && !previousBombHeld ? net::MsgInput::ActionFlag::PlaceBomb : 0;
+                    previousBombHeld = bombHeld;
+
+                    netClient->sendInput(msgInput, clientTick);
+                }
             }
 
             // log if we hit the safety cap

@@ -9,6 +9,8 @@
 
 namespace bomberman
 {
+    namespace net { class NetClient; }
+
     class Game
     {
       public:
@@ -18,8 +20,9 @@ namespace bomberman
          * @param windowName - name of window
          * @param windowWidth - width of window
          * @param windowHeight - height of window
+         * @param inNetClient - optional network client reference for multiplayer support
          */
-        Game(const std::string& windowName, const int windowWidth, const int windowHeight);
+        Game(const std::string& windowName, const int windowWidth, const int windowHeight, net::NetClient* inNetClient = nullptr);
         /**
          * @brief Destroy Game
          *
@@ -82,6 +85,8 @@ namespace bomberman
         bool isInitialized = false;  // SDL init status
         Uint32 lastTickTime = 0;  // last time for delta calculation
         Uint32 accumulatorMs = 0; // accumulator for fixed timestep
+
+        net::NetClient* netClient = nullptr;
     };
 } // namespace bomberman
 
