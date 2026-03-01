@@ -275,7 +275,7 @@ Unify client receive handling under the same dispatcher model and remove duplica
 - Client now uses one receive path for both handshake and future runtime messages.
 - Handshake flow is cleaner and aligned with long-term message architecture.
 
-## 2026-03-01 (pending) – Add Input Message Path + Client Smoke Test
+## 2026-03-01 – Add Input Message Path + Client Smoke Test
 
 ### Goal
 Implement the first gameplay-relevant message path after handshake: client `Input` intent transmission to server with validation and observability.
@@ -311,6 +311,3 @@ Implement the first gameplay-relevant message path after handshake: client `Inpu
 ### Result
 - The first end-to-end gameplay message path (`Input`) is now functional and observable.
 - Handshake-only networking baseline is now extended to runtime traffic.
-
-### Next
-- Replace temporary smoke loop in `main.cpp` with real per-tick gameplay input capture/send integration.
