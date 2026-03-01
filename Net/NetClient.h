@@ -1,8 +1,6 @@
-
 #ifndef BOMBERMAN_NET_NETCLIENT_H
 #define BOMBERMAN_NET_NETCLIENT_H
 
-#include <cstdint>
 #include <memory>
 #include <string_view>
 #include <string>
@@ -20,7 +18,7 @@ namespace bomberman::net
         NetClient();
         ~NetClient();
 
-        // Non-copyable (owns ENet resources)
+        // Non-copyable
         NetClient(const NetClient&) = delete;
         NetClient& operator=(const NetClient&) = delete;
 
@@ -69,6 +67,7 @@ namespace bomberman::net
         uint16_t serverTickRate() const { return serverTickRate_; }
 
     private:
+
         /**
          *  @brief Opaque ENet implementation detail.
          *
@@ -87,6 +86,12 @@ namespace bomberman::net
         bool initializeENet();
         void shutdownENet();
         bool performHandshake(std::string_view playerName);
+
+        /** @brief Processes a validated Welcome payload. Called by the dispatcher handler. */
+        void handleWelcome(const uint8_t* payload, std::size_t payloadSize);
+
+        /** @brief Cleans up state after the server disconnects us. Does not send a disconnect request. */
+        void handleRemoteDisconnect();
     };
 
 } // namespace bomberman::net
