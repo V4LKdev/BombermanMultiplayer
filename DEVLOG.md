@@ -221,3 +221,56 @@ Evolve client networking from one-shot handshake probe into a reusable lifecycle
 ### Result
 - Client now has a persistent connection model suitable for upcoming per-tick networking work.
 - Runtime state needed for next features (input stream/snapshots) is available on `NetClient`.
+
+## 2026-03-01 (acc5869) – Add Typed Packet Dispatch Module
+
+### Goal
+Separate packet dispatching from protocol definitions and introduce a typed dispatch layer shared by server/client receive paths.
+
+### Changes
+- Added new `Net/PacketDispatch.h` with:
+  - `tryParsePacket(...)` helper for shared header + payload extraction
+  - `PacketDispatcher<TContext>` (typed dispatch table, no `void*`)
+  - `dispatchPacket(...)` convenience function (parse + dispatch + error logs)
+- Updated `Net/NetCommon.h`:
+  - moved legacy untyped dispatcher out
+  - added channel constants:
+    - `EChannel::Control`
+    - `EChannel::GameState`
+    - `kChannelCount`
+- Refactored `server_main.cpp`:
+  - server dispatcher now uses `PacketDispatcher<ServerContext>`
+  - `onHello(...)` now receives typed context directly
+  - receive path now calls `dispatchPacket(...)`
+  - welcome send now uses `EChannel::Control`
+
+### Result
+- Shared packet parse/dispatch logic is now centralized and reusable.
+- Server receive code is cleaner, safer, and ready for additional message handlers.
+
+## 2026-03-01 (e193d3a) – Refactor NetClient To Dispatcher-Driven Handshake
+
+### Goal
+Unify client receive handling under the same dispatcher model and remove duplicated one-off handshake parsing.
+
+### Changes
+- Updated `NetClient::Impl`:
+  - added `PacketDispatcher<NetClient> dispatcher`
+  - added `handshakeComplete` flag
+- Added client-side receive handlers:
+  - `NetClient::handleWelcome(...)`
+  - `NetClient::handleRemoteDisconnect()`
+  - `Impl::onWelcome(...)` trampoline bound in constructor
+- Updated `NetClient::pump(...)`:
+  - routes packets through `dispatchPacket(...)`
+  - handles remote disconnect with dedicated cleanup path
+- Updated `NetClient::performHandshake(...)`:
+  - sends `Hello` on `EChannel::Control`
+  - waits for `Welcome` by polling `pump(...)` until `handshakeComplete`
+  - resets handshake state before each attempt
+- Updated `main.cpp`:
+  - removed explicit `disconnect()` call and rely on `NetClient` destructor cleanup
+
+### Result
+- Client now uses one receive path for both handshake and future runtime messages.
+- Handshake flow is cleaner and aligned with long-term message architecture.
