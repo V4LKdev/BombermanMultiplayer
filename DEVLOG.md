@@ -274,3 +274,43 @@ Unify client receive handling under the same dispatcher model and remove duplica
 ### Result
 - Client now uses one receive path for both handshake and future runtime messages.
 - Handshake flow is cleaner and aligned with long-term message architecture.
+
+## 2026-03-01 (pending) – Add Input Message Path + Client Smoke Test
+
+### Goal
+Implement the first gameplay-relevant message path after handshake: client `Input` intent transmission to server with validation and observability.
+
+### Changes
+- Extended `Net/NetCommon.h` protocol definitions:
+  - added `EMsgType::Input`
+  - added fixed payload struct `MsgInput` (`moveX`, `moveY`, `actionFlags`)
+  - added `kMsgInputSize` and `minPayloadSize(EMsgType::Input)` coverage
+  - added `serializeMsgInput(...)` / `deserializeMsgInput(...)` with axis validation
+- Updated `server_main.cpp`:
+  - added `ClientInputState` and per-client latest-input cache in `ServerContext`
+  - implemented `onInput(...)` handler (parse + store + log)
+  - bound `EMsgType::Input` in server dispatcher
+  - cleaned disconnect handling to erase only that client's cached input
+- Updated `NetClient`:
+  - added public `sendInput(const MsgInput&, uint32_t clientTick)`
+  - added per-session input sequence counter (`nextInputSequence`)
+  - implemented packet construction + send path (Input on `EChannel::GameState`, unreliable)
+  - added rate-limited input-send logging
+  - reset input sequence state on disconnect/remote-disconnect
+- Added temporary runtime smoke test in `main.cpp`:
+  - after successful connect, send ~1 second of test input at negotiated tick rate
+  - pump networking each tick for immediate flush/receive processing
+
+### Verification
+- Ran server/client binaries built from current targets (`Bomberman_Server`, `Bomberman`).
+- Observed expected handshake plus Input stream:
+  - server receives channel `1` packets of 15 bytes (12-byte header + 3-byte input payload)
+  - sequence and tick increment correctly
+  - alternating `moveX` values deserialize correctly on server
+
+### Result
+- The first end-to-end gameplay message path (`Input`) is now functional and observable.
+- Handshake-only networking baseline is now extended to runtime traffic.
+
+### Next
+- Replace temporary smoke loop in `main.cpp` with real per-tick gameplay input capture/send integration.
