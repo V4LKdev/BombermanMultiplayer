@@ -311,3 +311,32 @@ Implement the first gameplay-relevant message path after handshake: client `Inpu
 ### Result
 - The first end-to-end gameplay message path (`Input`) is now functional and observable.
 - Handshake-only networking baseline is now extended to runtime traffic.
+## 2026-03-01 (394b176) – Integrate Live Input Streaming Into Game Loop
+
+### Goal
+Replace the temporary startup smoke-test with real runtime input packet generation and sending during gameplay.
+
+### Changes
+- Updated `Game` constructor and ownership surface:
+  - added optional non-owning `NetClient*` parameter to `Game`
+  - stored pointer in `Game` for runtime networking access
+- Updated `main.cpp`:
+  - removed temporary one-second startup smoke-test loop
+  - passed `&client` into `Game` construction
+- Updated `Game::run()` fixed-step loop:
+  - added monotonic `clientTick` incremented each simulation step
+  - pumps `NetClient` only when connected
+  - samples keyboard state each fixed step and builds `MsgInput`
+  - maps movement from both arrow keys and WASD to signed axis intent
+  - emits edge-triggered bomb action flag (single pulse on press)
+  - sends input intent through `NetClient::sendInput(...)` each fixed step while connected
+- Updated protocol convenience in `NetCommon.h`:
+  - added `MsgInput::ActionFlag::PlaceBomb`
+
+### Verification
+- Confirmed end-to-end runtime behavior with server/client:
+  - live movement intent updates (`moveX/moveY`) are received by server while playing
+  - bomb action flag pulses are emitted on key press (edge-triggered), not continuously while held
+
+### Result
+- Input networking is now integrated into the real gameplay loop instead of a startup-only smoke path.
