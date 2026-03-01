@@ -12,6 +12,7 @@ namespace bomberman::net
     {
         constexpr int kConnectTimeoutMs = 2000;
         constexpr int kResponseTimeoutMs = 1000;
+        constexpr uint32_t kInputLogEveryN = 30;
     }
 
     /** @brief Opaque ENet implementation — only visible inside this translation unit. */
@@ -21,6 +22,7 @@ namespace bomberman::net
         ENetPeer* peer = nullptr;
         PacketDispatcher<NetClient> dispatcher;  // Message dispatcher for incoming packets
         bool handshakeComplete = false;  // Set to true when Welcome is successfully processed
+        uint32_t nextInputSequence = 0;
 
         // ---- Dispatcher handler trampolines ----
         // Impl is a nested type of NetClient, so it has access to private members.
@@ -173,7 +175,11 @@ namespace bomberman::net
         connected_ = false;
         clientId_ = 0;
         serverTickRate_ = 0;
-        if (impl_) impl_->handshakeComplete = false;
+        if (impl_)
+        {
+            impl_->handshakeComplete = false;
+            impl_->nextInputSequence = 0;
+        }
         shutdownENet();
     }
 
@@ -219,6 +225,7 @@ namespace bomberman::net
             }
 
             impl_->handshakeComplete = false;
+            impl_->nextInputSequence = 0;
         }
 
         connected_ = false;
@@ -268,6 +275,46 @@ namespace bomberman::net
         }
 
         if (shouldDisconnect) handleRemoteDisconnect();
+    }
+
+    void NetClient::sendInput(const MsgInput& input, uint32_t clientTick)
+    {
+        if (!impl_ || !connected_ || !impl_->peer || !impl_->host)
+            return;
+
+        PacketHeader header{};
+        header.type = EMsgType::Input;
+        header.payloadSize = static_cast<uint16_t>(kMsgInputSize);
+        header.sequence = ++impl_->nextInputSequence;
+        header.tick = clientTick;
+        header.flags = 0;
+
+        std::array<uint8_t, kPacketHeaderSize + kMsgInputSize> bytes{};
+        serializeHeader(header, bytes.data());
+        serializeMsgInput(input, bytes.data() + kPacketHeaderSize);
+
+        ENetPacket* packet = enet_packet_create(bytes.data(), bytes.size(), 0);
+        if (packet == nullptr)
+        {
+            std::cerr << "[client] Failed to allocate Input packet\n";
+            return;
+        }
+
+        if (enet_peer_send(impl_->peer, static_cast<uint8_t>(EChannel::GameState), packet) != 0)
+        {
+            std::cerr << "[client] Failed to queue Input packet\n";
+            enet_packet_destroy(packet);
+            return;
+        }
+
+        if ((header.sequence % kInputLogEveryN) == 0)
+        {
+            std::cout << "[client] Sent Input seq=" << header.sequence
+                      << " tick=" << header.tick
+                      << " move=(" << static_cast<int>(input.moveX) << ","
+                      << static_cast<int>(input.moveY) << ")"
+                      << " actions=" << static_cast<int>(input.actionFlags) << '\n';
+        }
     }
 
     bool NetClient::performHandshake(std::string_view playerName)

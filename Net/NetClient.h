@@ -5,6 +5,8 @@
 #include <string_view>
 #include <string>
 
+#include "NetCommon.h"
+
 
 namespace bomberman::net
 {
@@ -49,6 +51,16 @@ namespace bomberman::net
          *  @param timeoutMs The maximum time in milliseconds to wait for network events before returning. A value of 0 means to return immediately if there are no events (non-blocking).
          */
         void pump(uint16_t timeoutMs = 0);
+
+        /**
+         *  @brief Sends an input message to the server with the given input state and client tick.
+         *
+         *  @param input The MsgInput struct containing the player's input state to send to the server.
+         *  @param clientTick The client's current tick value to include in the packet header for sync purposes.
+         */
+        void sendInput(const MsgInput& input, uint32_t clientTick);
+
+
 
         /**
          *  @brief Checks if the client is currently connected to the server.
