@@ -8,39 +8,48 @@
 #include <string_view>
 
 /**
- *  @brief NetCommon.h - Common definitions and utilities for the Bomberman network protocol.
+ * @brief Shared protocol constants, message types, and wire helpers.
  *
- *  This header defines packet structure, message types, and serialization/deserialization helpers for the Bomberman game network protocol.
- *
- *  ## Versioning Contract
- *
- *  `kProtocolVersion` is a **global, strict-match** version number.
- *  Both peers MUST agree on exactly the same version during the handshake;
- *  any mismatch results in a clean rejection with an informative error.
- *
- *  When bumping the version:
- *  1. Increment `kProtocolVersion`.
- *  2. Update wire-size constants and static_asserts for changed messages.
- *  3. Update `minPayloadSize()` if any minimum sizes changed.
- *  4. Update serializers/deserializers for the new field layout.
- *  All of the above happen atomically in a single commit.
+ * The protocol requires strict version match during handshake.
+ * When changing wire layout, update:
+ * 1. `kProtocolVersion`
+ * 2. Size constants and `static_assert` checks
+ * 3. `minPayloadSize()`
+ * 4. Affected serializers and deserializers
  */
+
 namespace bomberman::net
 {
+    // =================================================================================================================
+    // ===== Protocol Constants ========================================================================================
+    // =================================================================================================================
+
     constexpr uint16_t kProtocolVersion = 1;
     constexpr std::size_t kPlayerNameMax = 16;
-    constexpr std::size_t kMaxPacketSize = 1400; // Must be less than typical MTU (1500 bytes)
+    constexpr std::size_t kMaxPacketSize = 1400; ///< Upper packet size bound (below typical 1500-byte MTU).
+    constexpr uint32_t kInputLogEveryN = 30;     ///< Input log sampling interval on client and server. (TODO: replace with proper telemetry)
 
-    /** ---- Channel Configuration ------------------- */
-    /** @brief ENet channel identifiers. Used to distinguish between reliable (control) and unreliable (game state) traffic. */
+    /** @brief ENet channel identifiers. */
     enum class EChannel : uint8_t
     {
-        Control = 0,   ///< Reliable control messages (handshake, input, commands)
-        GameState = 1  ///< Unreliable game state snapshots (positions, animations, etc.)
+        Control = 0,   ///< Reliable control traffic.
+        GameState = 1  ///< Unreliable gameplay traffic.
     };
-    constexpr std::size_t kChannelCount = 2; ///< Total number of ENet channels
+    constexpr std::size_t kChannelCount = 2; ///< Total configured ENet channels.
 
-    /** ---- Wire Sizes ---------------------------- */
+    /** @brief Returns a human-readable name for a channel ID. */
+    constexpr std::string_view channelName(uint8_t id)
+    {
+        switch (id)
+        {
+            case static_cast<uint8_t>(EChannel::Control):   return "Control";
+            case static_cast<uint8_t>(EChannel::GameState): return "GameState";
+            default:                                        return "Unknown";
+        }
+    }
+
+
+    /** @brief Header wire size in bytes. */
     constexpr std::size_t kPacketHeaderSize =
         sizeof(uint8_t) +  // type
         sizeof(uint16_t) + // payloadSize
@@ -48,35 +57,41 @@ namespace bomberman::net
         sizeof(uint32_t) + // tick
         sizeof(uint8_t);   // flags
 
+    /** @brief Hello payload wire size in bytes. */
     constexpr std::size_t kMsgHelloSize =
         sizeof(uint16_t) + // protocolVersion
         kPlayerNameMax;    // name (fixed-size field)
 
+    /** @brief Welcome payload wire size in bytes. */
     constexpr std::size_t kMsgWelcomeSize =
         sizeof(uint16_t) + // protocolVersion
         sizeof(uint32_t) + // clientId
         sizeof(uint16_t);  // serverTickRate
 
+    /** @brief Input payload wire size in bytes. */
     constexpr std::size_t kMsgInputSize =
-        sizeof(int8_t) + // moveX
-        sizeof(int8_t) + // moveY
-        sizeof(uint8_t);  // actionFlags
+        sizeof(int8_t) +   // moveX
+        sizeof(int8_t) +   // moveY
+        sizeof(uint16_t);  // bombCommandId
 
-    /** ---- Static Assertions ----------------------- */
+    /** @brief Compile-time checks for expected wire sizes. */
     static_assert(sizeof(char) == 1, "Unexpected char size");
 
     static_assert(kPacketHeaderSize == 12, "PacketHeader size mismatch");
     static_assert(kMsgHelloSize == 18, "MsgHello size mismatch");
     static_assert(kMsgWelcomeSize == 8, "MsgWelcome size mismatch");
-    static_assert(kMsgInputSize == 3, "MsgInput size mismatch");
+    static_assert(kMsgInputSize == 4, "MsgInput size mismatch");
 
-    /**
-     *  @brief Enumeration of message types in the Bomberman network protocol.
-     */
+    // =================================================================================================================
+    // ===== Message Types =============================================================================================
+    // =================================================================================================================
+
+    /** @brief Message type identifiers used in packet headers. */
     enum class EMsgType : uint8_t
     {
         Hello = 0x01,
         Welcome = 0x02,
+        // TODO: Add Reject = 0x03: server sends this on handshake failure
         Input = 0x10
     };
 
@@ -87,110 +102,82 @@ namespace bomberman::net
                raw == static_cast<uint8_t>(EMsgType::Input);
     }
 
-    /**
-     * @brief Returns the minimum payload size required for a given message type and protocol version.
-     *
-     * @param type The message type.
-     * @param version The protocol version of the sender.
-     * @return The minimum payload size in bytes, or 0 if the type is unknown.
-     */
+    /** @brief Returns minimum payload size for a message type/version. */
     constexpr std::size_t minPayloadSize(EMsgType type, [[maybe_unused]] uint16_t version = kProtocolVersion)
     {
         switch (type)
         {
             case EMsgType::Hello:   return kMsgHelloSize;     // v1: 18 bytes
             case EMsgType::Welcome: return kMsgWelcomeSize;   // v1: 8 bytes
-            case EMsgType::Input:   return kMsgInputSize;     // v1: 3 bytes
+            case EMsgType::Input:   return kMsgInputSize;     // v1: 4 bytes
             default:                return 0;
         }
     }
 
-     // ================================================================================================================
-     // ==== PACKET STRUCTS ============================================================================================
-     // ================================================================================================================
+    // =================================================================================================================
+    // ===== Wire Payload Types ========================================================================================
+    // =================================================================================================================
 
-
-    /**
-    *  @brief Represents the header of a network packet in the Bomberman protocol.
-    *
-    *  The PacketHeader contains metadata for routing, sequencing, and interpreting the packet payload.
-    */
+    /** @brief Packet metadata prefix present on every wire message. */
     struct PacketHeader
     {
-        EMsgType type;          ///< The type of the message
-        uint16_t payloadSize;   ///< The size of the payload in bytes, not including the header
-        uint32_t sequence;      ///< A sequence number for reliable packets to allow for ordering and duplicate detection on application level
-        uint32_t tick;          ///< The server tick at which the packet was sent (for client packets, this is the client's current tick)
-        uint8_t flags;          ///< Additional flags for the packet
+        EMsgType type{};          ///< Message type identifier.
+        uint16_t payloadSize = 0; ///< Payload size in bytes, excluding header.
+        uint32_t sequence = 0;    ///< Message sequence value (message-specific semantics).
+        uint32_t tick = 0;        ///< Sender tick at packet creation time.
+        uint8_t flags = 0;        ///< Reserved packet flags.
     };
 
-    /**
-     *  @brief Represents the payload of a Hello message sent by the client to the server during the handshake process.
-     */
+    /** @brief Hello payload sent by client during handshake. */
     struct MsgHello
     {
-        uint16_t protocolVersion;   ///< The protocol version the client is using
+        uint16_t protocolVersion; ///< Client protocol version.
 
         /**
-        * @brief Player display name (fixed-size wire field).
-        *
-        * Wire format: exactly @ref kPlayerNameMax bytes.
-        * The name MUST be NUL-terminated within the buffer and
-        * the remaining bytes are zero-padded.
-        *
-        * Max usable bytes for the name content is (kPlayerNameMax - 1).
-        */
+         * @brief Player display name in a fixed-size wire field.
+         *
+         * The field is always @ref kPlayerNameMax bytes. The value must be
+         * NUL-terminated and zero-padded. Maximum visible length is
+         * `kPlayerNameMax - 1`.
+         */
         char name[kPlayerNameMax];
     };
 
-    /**
-     *  @brief Represents the payload of a Welcome message sent by the server to the client in response to a Hello message during the handshake process.
-     */
+    /** @brief Welcome payload sent by server in response to Hello. */
     struct MsgWelcome
     {
-        uint16_t protocolVersion;   ///< The protocol version the server is using
-        uint32_t clientId;          ///< A unique identifier assigned by the server to the client
-        uint16_t serverTickRate;    ///< The tick rate of the server, which the client should use for its internal timing and synchronization
+        uint16_t protocolVersion; ///< Server protocol version.
+        uint32_t clientId;        ///< Server-assigned client identifier.
+        uint16_t serverTickRate;  ///< Authoritative server simulation tick rate.
     };
 
-    /**
-    *  @brief Represents the payload of an Input message sent by the client to the server to convey player input actions.
-    */
+    /** @brief Input payload sent by client each simulation tick. */
     struct MsgInput
     {
-        int8_t moveX; ///< Range {-1; 0; 1}
-        int8_t moveY; ///< Range {-1; 0; 1}
-        uint8_t actionFlags; // Bitfield for actions like placing a bomb, etc.
+        int8_t moveX; ///< Horizontal movement in {-1, 0, 1}.
+        int8_t moveY; ///< Vertical movement in {-1, 0, 1}.
 
-        enum ActionFlag : uint8_t
-        {
-            PlaceBomb = 0x01
-        };
+        /**
+         * @brief Monotonically increasing bomb-placement command identifier.
+         *
+         * Incremented on each bomb key edge and sent every input tick.
+         * The server applies a new request when this value changes.
+         */
+        uint16_t bombCommandId = 0;
     };
 
+    // =================================================================================================================
+    // ===== Endian Helpers ============================================================================================
+    // =================================================================================================================
 
-     // ================================================================================================================
-     // ==== SERIALIZATION HELPERS =====================================================================================
-     // ================================================================================================================
-
-    /**
-    *  @brief Writes a 16-bit unsigned integer to a byte array in little-endian format.
-    *
-    *  @param out The output byte array where the value will be written.
-    *  @param value The 16-bit unsigned integer value to write.
-    */
+    /** @brief Writes a 16-bit value using little-endian encoding. */
     constexpr void writeU16LE(uint8_t* out, uint16_t value)
     {
         out[0] = static_cast<uint8_t>(value & 0xFFu);
         out[1] = static_cast<uint8_t>((value >> 8u) & 0xFFu);
     }
 
-    /**
-     * @brief Writes a 32-bit unsigned integer to a byte array in little-endian format.
-     *
-     * @param out The output byte array where the value will be written.
-     * @param value The 32-bit unsigned integer value to write.
-     */
+    /** @brief Writes a 32-bit value using little-endian encoding. */
     constexpr void writeU32LE(uint8_t* out, uint32_t value)
     {
         out[0] = static_cast<uint8_t>(value & 0xFFu);
@@ -199,24 +186,14 @@ namespace bomberman::net
         out[3] = static_cast<uint8_t>((value >> 24u) & 0xFFu);
     }
 
-    /**
-     * @brief Reads a 16-bit unsigned integer from a byte array in little-endian format.
-     *
-     * @param in The input byte array from which the value will be read.
-     * @return The 16-bit unsigned integer value read from the byte array.
-     */
+    /** @brief Reads a 16-bit value encoded as little-endian. */
     constexpr uint16_t readU16LE(const uint8_t* in)
     {
         return static_cast<uint16_t>(in[0]) |
                (static_cast<uint16_t>(in[1]) << 8u);
     }
 
-    /**
-     * @brief Reads a 32-bit unsigned integer from a byte array in little-endian format.
-     *
-     * @param in The input byte array from which the value will be read.
-     * @return The 32-bit unsigned integer value read from the byte array.
-     */
+    /** @brief Reads a 32-bit value encoded as little-endian. */
     constexpr uint32_t readU32LE(const uint8_t* in)
     {
         return static_cast<uint32_t>(in[0]) |
@@ -225,15 +202,8 @@ namespace bomberman::net
                (static_cast<uint32_t>(in[3]) << 24u);
     }
 
-    /**
-     * @brief Computes the length of a C-style string up to a maximum number of bytes.
-     *
-     * @param s The input C-style string pointer (may be null).
-     * @param maxBytes The maximum number of bytes to examine in the string.
-     *
-     * @return The length of the string in bytes, not including the null terminator, but at most `maxBytes`.
-     */
-    inline std::size_t boundedStrLen(const char* s, std::size_t maxBytes)
+    /** @brief Returns string length capped to `maxBytes` for bounded C strings. */
+    constexpr std::size_t boundedStrLen(const char* s, std::size_t maxBytes)
     {
         if (!s) return 0;
 
@@ -246,23 +216,16 @@ namespace bomberman::net
     }
 
 
-    /**
-     * @brief Sets the name field of a MsgHello struct from a std::string_view, ensuring proper null-termination and padding.
-     *
-     * @param hello The MsgHello struct whose name field will be set.
-     * @param name The input string view containing the player's name. If the name is longer than (kPlayerNameMax - 1), it will be truncated.
-     *
-     * This function ensures that the name field in the MsgHello struct is properly null-terminated and padded with zeros if the input name is shorter than kPlayerNameMax.
-     */
+    /** @brief Sets `MsgHello::name` from `string_view` with truncation and zero padding. */
     inline void setHelloName(MsgHello& hello, std::string_view name)
     {
-        // Clear the name buffer first to ensure any unused bytes are zero-padded, and to guarantee null-termination
+        // Clear first so unused bytes remain zero-padded.
         std::memset(hello.name, 0, kPlayerNameMax);
 
         const std::size_t n = (name.size() < (kPlayerNameMax - 1)) ? name.size() : (kPlayerNameMax - 1);
         std::memcpy(hello.name, name.data(), n);
     }
-    /** @brief Overload of setHelloName that accepts a C-style string. If the input pointer is null, the name will be set to an empty string. */
+    /** @brief C-string overload of setHelloName. */
     inline void setHelloName(MsgHello& hello, const char* name)
     {
         if (!name) {
@@ -274,77 +237,57 @@ namespace bomberman::net
         setHelloName(hello, std::string_view{name, n});
     }
 
-     // ================================================================================================================
-     // ==== (DE)SERIALIZATION FUNCTIONS ===============================================================================
-     // ================================================================================================================
+    // =================================================================================================================
+    // ===== Serialization =============================================================================================
+    // =================================================================================================================
 
-
-    /**
-     *  @brief Serializes a PacketHeader struct into a byte array in the Bomberman network protocol format.
-     *
-     *  @param header The PacketHeader struct to serialize.
-     *  @param out The output byte array where the serialized header will be written. Must have at least kPacketHeaderSize bytes available.
-     *
-     *  @note Total size: 12 bytes
-     */
+    /** @brief Serializes `PacketHeader` into `kPacketHeaderSize` bytes. */
     inline void serializeHeader(const PacketHeader& header, uint8_t* out) noexcept
     {
-                                                        // Wire Pack Format:
-        out[0] = static_cast<uint8_t>(header.type);     // offset 0: 1 byte  - message type
-        writeU16LE(out + 1, header.payloadSize);        // offset 1: 2 bytes - payload size (excluding header)
-        writeU32LE(out + 3, header.sequence);           // offset 3: 4 bytes - sequence number
-        writeU32LE(out + 7, header.tick);               // offset 7: 4 bytes - tick
-        out[11] = header.flags;                         // offset 11: 1 byte - flags
+        out[0] = static_cast<uint8_t>(header.type);
+        writeU16LE(out + 1, header.payloadSize);
+        writeU32LE(out + 3, header.sequence);
+        writeU32LE(out + 7, header.tick);
+        out[11] = header.flags;
     }
 
     /**
-     *  @brief Deserializes a PacketHeader struct from a byte array.
+     * @brief Deserializes and validates PacketHeader.
      *
-     *  @param in The input byte array containing the serialized header. Must have at least kPacketHeaderSize bytes available.
-     *  @param inSize The size of the input byte array in bytes.
-     *  @param outHeader The output PacketHeader struct where the deserialized header will be stored.
-     *
-     *  @return true if deserialization was successful, false if the input data was too small to contain a valid PacketHeader.
-     *
-     *  @note On success, the following invariants hold:
-     *    - inSize >= kPacketHeaderSize + outHeader.payloadSize
-     *    - outHeader.payloadSize >= minPayloadSize(outHeader.type)
-     *    - outHeader.type is a valid EMsgType
-     *  Callers can safely pass (in + kPacketHeaderSize, outHeader.payloadSize) to the appropriate payload deserializer.
+     * Validates type, payload bounds, and input buffer length.
      */
     [[nodiscard]]
     inline bool deserializeHeader(const uint8_t* in, std::size_t inSize, PacketHeader& outHeader)
     {
-        /**
-         * Deserialization Steps:
-         * 1. Check if input size is at least the size of the header.
-         * 2. Read the message type and validate it against known EMsgType values.
-         * 3. Read the payload size and validate it against the maximum allowed size.
-         * 4. Check if the input size is sufficient to contain the entire packet (header + payload) based on the payload size.
-         * 5. Validate type-vs-payload-size coherence: the payload must be at least minPayloadSize(type) bytes.
-         * 6. If all checks pass, populate the outHeader struct with the deserialized values and return true.
-         */
-
-        if(inSize < kPacketHeaderSize)
+        if (inSize < kPacketHeaderSize)
+        {
             return false;
+        }
 
         const uint8_t rawType = in[0];
         if (!isValidMsgType(rawType))
+        {
             return false;
+        }
 
         const uint16_t payloadSize = readU16LE(in + 1);
         if (payloadSize > (kMaxPacketSize - kPacketHeaderSize))
+        {
             return false;
+        }
 
         if (inSize < kPacketHeaderSize + payloadSize)
+        {
             return false;
+        }
 
-        // Validate type-vs-payload-size coherence: the wire payload must be at least as large as the minimum this message type requires.
-        // This catches truncated or malformed packets before any payload deserializer runs.
+        // Ensure payload is large enough for the declared message type.
         const auto msgType = static_cast<EMsgType>(rawType);
         const std::size_t minSize = minPayloadSize(msgType);
         if (minSize > 0 && payloadSize < minSize)
+        {
             return false;
+        }
 
         outHeader.type = msgType;
         outHeader.payloadSize = payloadSize;
@@ -354,39 +297,23 @@ namespace bomberman::net
         return true;
     }
 
-    /**
-     *  @brief Serializes a MsgHello struct into a byte array.
-     *
-     *  @param hello The MsgHello struct to serialize.
-     *  @param out The output byte array where the serialized message will be written. Must have at least kMsgHelloSize bytes available.
-     *
-     *  @note Total size: 18 bytes (with kPlayerNameMax = 16)
-     */
+    /** @brief Serializes `MsgHello` to fixed-size wire payload. */
     inline void serializeMsgHello(const MsgHello& hello, uint8_t* out) noexcept
     {
-                                                                    // Wire Pack Format:
-        writeU16LE(out, hello.protocolVersion);                     // offset 0: 2 bytes - protocol version
-        std::memset(out + 2, 0, kPlayerNameMax);              // offset 2: 16 bytes - name (zero-padded)
-
-
+        writeU16LE(out, hello.protocolVersion);
+        std::memset(out + 2, 0, kPlayerNameMax);
         const std::size_t nameLen = boundedStrLen(hello.name, kPlayerNameMax - 1);
-        std::memcpy(out + 2, hello.name, nameLen);           // copy the name content into the output buffer
+        std::memcpy(out + 2, hello.name, nameLen);
     }
 
-    /**
-     *  @brief Deserializes a MsgHello struct from a byte array.
-     *
-     *  @param in The input byte array containing the serialized message. Must have at least kMsgHelloSize bytes available.
-     *  @param inSize The size of the input byte array in bytes.
-     *  @param outHello The output MsgHello struct where the deserialized message will be stored.
-     *
-     *  @return true if deserialization was successful, false if the input data was too small to contain a valid MsgHello.
-     */
+    /** @brief Deserializes `MsgHello` from fixed-size wire payload. */
     [[nodiscard]]
     inline bool deserializeMsgHello(const uint8_t* in, std::size_t inSize, MsgHello& outHello)
     {
-        if(inSize < kMsgHelloSize)
+        if (inSize < kMsgHelloSize)
+        {
             return false;
+        }
 
         outHello.protocolVersion = readU16LE(in);
         std::memcpy(outHello.name, in + 2, kPlayerNameMax);
@@ -394,42 +321,26 @@ namespace bomberman::net
         // Guarantee C-string safety even if sender violated the contract.
         outHello.name[kPlayerNameMax - 1] = '\0';
 
-        // Normalize to "zero-padded remainder" invariant in-memory.
+        // Normalize to in-memory zero-padding invariant.
         const std::size_t n = boundedStrLen(outHello.name, kPlayerNameMax - 1);
         std::memset(outHello.name + n, 0, kPlayerNameMax - n);
 
         return true;
     }
 
-    /**
-     *  @brief Serializes a MsgWelcome struct into a byte array.
-     *
-     *  @param welcome The MsgWelcome struct to serialize.
-     *  @param out The output byte array where the serialized message will be written. Must have at least kMsgWelcomeSize bytes available.
-     *
-     *  @note Total size: 8 bytes
-     */
+    /** @brief Serializes `MsgWelcome` to fixed-size wire payload. */
     inline void serializeMsgWelcome(const MsgWelcome& welcome, uint8_t* out) noexcept
     {
-                                                            // Wire Pack Format:
-        writeU16LE(out, welcome.protocolVersion);           // offset 0: 2 bytes - protocol version
-        writeU32LE(out + 2, welcome.clientId);              // offset 2: 4 bytes - client ID
-        writeU16LE(out + 6, welcome.serverTickRate);        // offset 6: 2 bytes - server tick rate
+        writeU16LE(out, welcome.protocolVersion);
+        writeU32LE(out + 2, welcome.clientId);
+        writeU16LE(out + 6, welcome.serverTickRate);
     }
 
-    /**
-     *  @brief Deserializes a MsgWelcome struct from a byte array.
-     *
-     *  @param in The input byte array containing the serialized message. Must have at least kMsgWelcomeSize bytes available.
-     *  @param inSize The size of the input byte array in bytes.
-     *  @param outWelcome The output MsgWelcome struct where the deserialized message will be stored.
-     *
-     *  @return true if deserialization was successful, false if the input data was too small to contain a valid MsgWelcome.
-     */
+    /** @brief Deserializes `MsgWelcome` from fixed-size wire payload. */
     [[nodiscard]]
     inline bool deserializeMsgWelcome(const uint8_t* in, std::size_t inSize, MsgWelcome& outWelcome)
     {
-        if(inSize < kMsgWelcomeSize)
+        if (inSize < kMsgWelcomeSize)
         {
             return false;
         }
@@ -439,31 +350,15 @@ namespace bomberman::net
         return true;
     }
 
-    /**
-     *  @brief Serializes a MsgInput struct into a byte array.
-     *
-     *  @param input The MsgInput struct to serialize.
-     *  @param out The output byte array where the serialized message will be written. Must have at least kMsgInputSize bytes available.
-     *
-     *  @note Total size: 3 bytes
-     */
+    /** @brief Serializes `MsgInput` to fixed-size wire payload. */
     inline void serializeMsgInput(const MsgInput& input, uint8_t* out) noexcept
     {
-                                                // Wire Pack Format:
-        out[0] = input.moveX;                   // offset 0: 1 byte - moveX
-        out[1] = input.moveY;                   // offset 1: 1 byte - moveY
-        out[2] = input.actionFlags;             // offset 2: 1 byte - action flags
+        out[0] = input.moveX;
+        out[1] = input.moveY;
+        writeU16LE(out + 2, input.bombCommandId);
     }
 
-    /**
-     *  @brief Deserializes a MsgInput struct from a byte array.
-     *
-     *  @param in The input byte array containing the serialized message. Must have at least kMsgInputSize bytes available.
-     *  @param inSize The size of the input byte array in bytes.
-     *  @param outInput The output MsgInput struct where the deserialized message will be stored.
-     *
-     *  @return true if deserialization was successful, false if the input data was too small to contain a valid MsgInput.
-     */
+    /** @brief Deserializes `MsgInput` from fixed-size wire payload. */
     [[nodiscard]]
     inline bool deserializeMsgInput(const uint8_t* in, std::size_t inSize, MsgInput& outInput)
     {
@@ -475,35 +370,25 @@ namespace bomberman::net
         const auto rawMoveX = static_cast<int8_t>(in[0]);
         const auto rawMoveY = static_cast<int8_t>(in[1]);
 
-        // Validate that move values are exactly -1, 0, or 1
-        if ((rawMoveX < -1 || rawMoveX > 1) || (rawMoveY < -1 || rawMoveY > 1)) {
-            return false;  // Invalid input values
+        // Validate movement domain.
+        if ((rawMoveX < -1 || rawMoveX > 1) || (rawMoveY < -1 || rawMoveY > 1))
+        {
+            return false;
         }
 
         outInput.moveX = rawMoveX;
         outInput.moveY = rawMoveY;
-        outInput.actionFlags = in[2];
+        outInput.bombCommandId = readU16LE(in + 2);
         return true;
     }
 
+    // =================================================================================================================
+    // ===== Packet Builders ===========================================================================================
+    // =================================================================================================================
 
-     // ================================================================================================================
-     // ==== PACKET CONSTRUCTION HELPERS ===============================================================================
-     // ================================================================================================================
-
-
-    /**
-     *  @brief Constructs a complete Hello packet (header + payload) as a byte array ready to be sent over the network.
-     *
-     *  @param hello The MsgHello struct containing the payload data for the Hello message.
-     *  @param sequence The sequence number to use in the packet header for this Hello message.
-     *  @param tick The tick value to use in the packet header for this Hello message.
-     *
-     *  @return A std::array containing the serialized Hello packet (header + payload)
-     */
+    /** @brief Builds a full Hello packet (header + payload). */
     inline std::array<uint8_t, kPacketHeaderSize + kMsgHelloSize> makeHelloPacket(const MsgHello& hello, uint32_t sequence, uint32_t tick)
     {
-        // Construct the packet header
         PacketHeader header{};
         header.type = EMsgType::Hello;
         header.payloadSize = static_cast<uint16_t>(kMsgHelloSize);
@@ -511,14 +396,13 @@ namespace bomberman::net
         header.tick = tick;
         header.flags = 0;
 
-        // Serialize the header and payload into a byte array
         std::array<uint8_t, kPacketHeaderSize + kMsgHelloSize> bytes{};
         serializeHeader(header, bytes.data());
         serializeMsgHello(hello, bytes.data() + kPacketHeaderSize);
 
         return bytes;
     }
-    /** @brief Overload of makeHelloPacket that constructs the MsgHello struct from a player name string view and protocol version, then creates the packet. */
+    /** @brief Convenience overload building Hello from name and version. */
     inline std::array<uint8_t, kPacketHeaderSize + kMsgHelloSize> makeHelloPacket(std::string_view name, uint16_t protocolVersion, uint32_t sequence, uint32_t tick)
     {
         MsgHello hello{};
@@ -527,18 +411,9 @@ namespace bomberman::net
         return makeHelloPacket(hello, sequence, tick);
     }
 
-    /**
-     *  @brief Constructs a complete Welcome packet (header + payload) as a byte array ready to be sent over the network.
-     *
-     *  @param welcome The MsgWelcome struct containing the payload data for the Welcome message.
-     *  @param sequence The sequence number to use in the packet header for this Welcome message.
-     *  @param tick The tick value to use in the packet header for this Welcome message.
-     *
-     *  @return A std::array containing the serialized Welcome packet (header + payload)
-     */
+    /** @brief Builds a full Welcome packet (header + payload). */
     inline std::array<uint8_t, kPacketHeaderSize + kMsgWelcomeSize> makeWelcomePacket(const MsgWelcome& welcome, uint32_t sequence, uint32_t tick)
     {
-        // Construct the packet header
         PacketHeader header{};
         header.type = EMsgType::Welcome;
         header.payloadSize = static_cast<uint16_t>(kMsgWelcomeSize);
@@ -546,7 +421,6 @@ namespace bomberman::net
         header.tick = tick;
         header.flags = 0;
 
-        // Serialize the header and payload into a byte array
         std::array<uint8_t, kPacketHeaderSize + kMsgWelcomeSize> bytes{};
         serializeHeader(header, bytes.data());
         serializeMsgWelcome(welcome, bytes.data() + kPacketHeaderSize);
@@ -557,4 +431,4 @@ namespace bomberman::net
 
 } // namespace bomberman::net
 
-#endif //BOMBERMAN_NET_NETCOMMON_H
+#endif // BOMBERMAN_NET_NETCOMMON_H
