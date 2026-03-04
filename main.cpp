@@ -1,5 +1,7 @@
+#include <charconv>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <string_view>
 
@@ -13,12 +15,13 @@ namespace
     {
         spdlog::level::level_enum logLevel = static_cast<spdlog::level::level_enum>(BOMBERMAN_DEFAULT_LOG_LEVEL);
         std::string logFile;
+        uint16_t port = 12345; // Default port
     };
 
     void printUsage(const char* exeName)
     {
         std::cout
-            << "Usage: " << exeName << " [--log-level <trace|debug|info|warn|error|critical>] [--log-file <path>]\n";
+            << "Usage: " << exeName << " [--log-level <trace|debug|info|warn|error|critical>] [--log-file <path>] [--port <port override>]\n";
     }
 
     bool parseLogLevel(std::string_view text, spdlog::level::level_enum& outLevel)
@@ -30,6 +33,22 @@ namespace
         if (text == "error")    { outLevel = spdlog::level::err; return true; }
         if (text == "critical") { outLevel = spdlog::level::critical; return true; }
         return false;
+    }
+
+    bool parsePort(std::string_view text, uint16_t& outPort)
+    {
+        unsigned int value = 0;
+        const char* begin = text.data();
+        const char* end = begin + text.size();
+        const auto [ptr, ec] = std::from_chars(begin, end, value);
+        if (ec != std::errc{} || ptr != end || value == 0 ||
+            value > std::numeric_limits<uint16_t>::max())
+        {
+            return false;
+        }
+
+        outPort = static_cast<uint16_t>(value);
+        return true;
     }
 
     bool parseCli(int argc, char** argv, CliOptions& outOptions)
@@ -76,6 +95,25 @@ namespace
                 continue;
             }
 
+            if (arg == "--port")
+            {
+                if (i + 1 >= argc)
+                {
+                    std::cerr << "Missing value for --port\n";
+                    printUsage(argv[0]);
+                    return false;
+                }
+
+                const std::string_view value = argv[++i];
+                if (!parsePort(value, outOptions.port))
+                {
+                    std::cerr << "Invalid port: " << value << '\n';
+                    printUsage(argv[0]);
+                    return false;
+                }
+                continue;
+            }
+
             std::cerr << "Unknown argument: " << arg << '\n';
             printUsage(argv[0]);
             return false;
@@ -105,7 +143,7 @@ int main(int argc, char** argv)
 
     // TODO: Read host, port, and player name from CLI args or config file. Also refactor into non-blocking statemachine
     bomberman::net::NetClient client;
-    const auto connectResult = client.connect("127.0.0.1", 12345, "PlayerName");
+    const auto connectResult = client.connect("127.0.0.1", cli.port, "PlayerName");
 
     if (connectResult != bomberman::net::EConnectState::Connected)
     {

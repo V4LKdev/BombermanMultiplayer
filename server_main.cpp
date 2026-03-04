@@ -1,6 +1,8 @@
+#include <charconv>
 #include <csignal>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -27,16 +29,16 @@ namespace
 
     struct CliOptions
     {
-        spdlog::level::level_enum logLevel =
-            static_cast<spdlog::level::level_enum>(BOMBERMAN_DEFAULT_LOG_LEVEL);
+        spdlog::level::level_enum logLevel = static_cast<spdlog::level::level_enum>(BOMBERMAN_DEFAULT_LOG_LEVEL);
         std::string logFile;
+        uint16_t port = kServerPort;
     };
 
     void printUsage(const char* exeName)
     {
         std::cout
             << "Usage: " << exeName
-            << " [--log-level <trace|debug|info|warn|error|critical>] [--log-file <path>]\n";
+            << " [--log-level <trace|debug|info|warn|error|critical>] [--log-file <path>] [--port <port override>]\n";
     }
 
     bool parseLogLevel(std::string_view text, spdlog::level::level_enum& outLevel)
@@ -48,6 +50,22 @@ namespace
         if (text == "error")    { outLevel = spdlog::level::err; return true; }
         if (text == "critical") { outLevel = spdlog::level::critical; return true; }
         return false;
+    }
+
+    bool parsePort(std::string_view text, uint16_t& outPort)
+    {
+        unsigned int value = 0;
+        const char* begin = text.data();
+        const char* end = begin + text.size();
+        const auto [ptr, ec] = std::from_chars(begin, end, value);
+        if (ec != std::errc{} || ptr != end || value == 0 ||
+            value > std::numeric_limits<uint16_t>::max())
+        {
+            return false;
+        }
+
+        outPort = static_cast<uint16_t>(value);
+        return true;
     }
 
     bool parseCli(int argc, char** argv, CliOptions& outOptions)
@@ -91,6 +109,25 @@ namespace
                 }
 
                 outOptions.logFile = argv[++i];
+                continue;
+            }
+
+            if (arg == "--port")
+            {
+                if (i + 1 >= argc)
+                {
+                    std::cerr << "Missing value for --port\n";
+                    printUsage(argv[0]);
+                    return false;
+                }
+
+                const std::string_view value = argv[++i];
+                if (!parsePort(value, outOptions.port))
+                {
+                    std::cerr << "Invalid port: " << value << '\n';
+                    printUsage(argv[0]);
+                    return false;
+                }
                 continue;
             }
 
@@ -226,6 +263,9 @@ void handleEventReceive(const ENetEvent& event, ServerState& state)
     dispatchPacket(gDispatcher, ctx, event.packet->data, event.packet->dataLength);
 }
 
+// =====================================================================================================================
+// ==== Main Loop ======================================================================================================
+// =====================================================================================================================
 
 /**
  * @brief Entry point for the Bomberman dedicated server.
@@ -258,17 +298,17 @@ int main(int argc, char** argv)
     // Create the server host.
     ENetAddress address{};
     address.host = ENET_HOST_ANY;
-    address.port = kServerPort;
+    address.port = cli.port;
 
     ENetHost* server = enet_host_create(&address, kMaxPeers, kChannelCount, 0, 0);
     if (server == nullptr)
     {
-        LOG_SERVER_ERROR("Failed to create ENet host on port {}", kServerPort);
+        LOG_SERVER_ERROR("Failed to create ENet host on port {}", cli.port);
         enet_deinitialize();
         return EXIT_FAILURE;
     }
 
-    LOG_SERVER_INFO("Listening on port {} (max {} peers)", kServerPort, kMaxPeers);
+    LOG_SERVER_INFO("Listening on port {} (max {} peers)", cli.port, kMaxPeers);
 
     ServerState state{};
     state.host = server;
