@@ -102,12 +102,6 @@ int main(int argc, char** argv)
 
     // Initialize project-wide named loggers.
     bomberman::log::init(cli.logLevel, cli.logFile);
-    // TODO: Temporary log-level probes for validating runtime/compile-time gating. Remove after verification.
-    LOG_CLIENT_TRACE("probe: trace");
-    LOG_CLIENT_DEBUG("probe: debug");
-    LOG_CLIENT_INFO("probe: info");
-    LOG_CLIENT_WARN("probe: warn");
-    LOG_CLIENT_ERROR("probe: error");
 
     // TODO: Read host, port, and player name from CLI args or config file. Also refactor into non-blocking statemachine
     bomberman::net::NetClient client;
