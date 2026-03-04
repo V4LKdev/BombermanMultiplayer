@@ -15,78 +15,77 @@ namespace bomberman
     {
       public:
         /**
-         * @brief Create Game
+         * @brief Constructs game runtime and initializes SDL subsystems.
          *
-         * @param windowName - name of window
-         * @param windowWidth - width of window
-         * @param windowHeight - height of window
-         * @param inNetClient - optional network client reference for multiplayer support
+         * @param windowName Window title.
+         * @param windowWidth Initial window width.
+         * @param windowHeight Initial window height.
+         * @param inNetClient Optional multiplayer client (not owned).
          */
-        Game(const std::string& windowName, const int windowWidth, const int windowHeight, net::NetClient* inNetClient = nullptr);
-        /**
-         * @brief Destroy Game
-         *
-         */
+        Game(const std::string& windowName, int windowWidth, int windowHeight, net::NetClient* inNetClient = nullptr);
+
+        /** @brief Releases runtime resources and shuts down SDL subsystems. */
         ~Game();
-        /**
-         * @brief Run game loop
-         *
-         */
+
+        /** @brief Runs the main loop until stop() is requested. */
         void run();
-        /**
-         * @brief Stop game loop
-         *
-         */
+
+        /** @brief Requests the main loop to stop. */
         void stop();
+
         /**
-         * @brief Get the Window Width
-         *
-         * @return int - window width
+         * @brief Returns current window width in pixels.
          */
+        [[nodiscard]]
         int getWindowWidth() const;
+
         /**
-         * @brief Get the Window Height
-         *
-         * @return int - window height
+         * @brief Returns current window height in pixels.
          */
+        [[nodiscard]]
         int getWindowHeight() const;
+
         /**
-         * @brief Get SDL2 Renderer
-         *
-         * @return SDL_Renderer* - SDL2 renderer
+         * @brief Returns SDL renderer pointer.
          */
+        [[nodiscard]]
         SDL_Renderer* getRenderer() const;
+
         /**
-         * @brief Get Scene Manager reference
-         *
-         * @return SceneManager* - scene manager reference
+         * @brief Returns scene manager pointer.
          */
+        [[nodiscard]]
         SceneManager* getSceneManager() const;
+
         /**
-         * @brief Get Asset Manager reference
-         *
-         * @return AssetManager* - asset manager reference
+         * @brief Returns asset manager pointer.
          */
+        [[nodiscard]]
         AssetManager* getAssetManager() const;
 
       private:
-        // SDL2 C pointers
+        // SDL pointers.
         SDL_Window* window = nullptr;
         SDL_Renderer* renderer = nullptr;
 
-        std::unique_ptr<SceneManager> sceneManager = nullptr; // scene manager
-        std::unique_ptr<AssetManager> assetManager = nullptr; // asset manager
+        std::unique_ptr<SceneManager> sceneManager = nullptr;
+        std::unique_ptr<AssetManager> assetManager = nullptr;
 
-        // screen parameters
+        // Screen parameters.
         int windowWidth = 0;
         int windowHeight = 0;
 
-        bool isRunning = false;      // game loop status
-        bool isInitialized = false;  // SDL init status
-        Uint32 lastTickTime = 0;  // last time for delta calculation
-        Uint32 accumulatorMs = 0; // accumulator for fixed timestep
+        bool isRunning = false;
+        bool isInitialized = false;
+        Uint32 lastTickTime = 0;
+        Uint32 accumulatorMs = 0;
 
-        net::NetClient* netClient = nullptr;
+        net::NetClient* netClient_ = nullptr; ///< Optional network client for multiplayer (not owned)
+        bool previousBombHeld_ = false;        ///< Previous bomb key state for edge detection.
+        uint16_t bombCommandId_ = 0;           ///< Monotonically increasing bomb command id.
+
+        /** @brief Samples keyboard state, builds a MsgInput, and sends it to the server. */
+        void pollNetInput(uint32_t clientTick);
     };
 } // namespace bomberman
 

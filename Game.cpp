@@ -2,13 +2,13 @@
 #include <SDL_mixer.h>
 #include <SDL_ttf.h>
 
-#include <iostream>
 #include <algorithm>
 
 #include "Game.h"
 
 #include "Net/NetClient.h"
 #include "Scenes/MenuScene.h"
+#include "Util/Log.h"
 
 namespace bomberman
 {
@@ -21,54 +21,54 @@ namespace bomberman
     }
 
     Game::Game(const std::string& windowName, const int width, const int height, net::NetClient* inNetClient)
-        : windowWidth(width), windowHeight(height), netClient(inNetClient)
+        : windowWidth(width), windowHeight(height), netClient_(inNetClient)
     {
-        // let's init SDL2
+        // Initialize SDL.
         if(SDL_Init(SDL_INIT_VIDEO) != 0)
         {
-            std::cout << "SDL_Init Error: " << SDL_GetError() << std::endl;
+            LOG_GAME_ERROR("SDL_Init failed: {}", SDL_GetError());
             return;
         }
 
-        // let's init SDL2 TTF
+        // Initialize SDL_ttf.
         if(TTF_Init() != 0)
         {
-            std::cout << "TTF_Init Error: " << TTF_GetError() << std::endl;
+            LOG_GAME_ERROR("TTF_Init failed: {}", TTF_GetError());
             return;
         }
 
-        // let's init SDL2 Image
+        // Initialize SDL_image.
         if(!(IMG_Init(IMG_INIT_PNG) & IMG_INIT_PNG))
         {
-            std::cout << "IMG_Init Error: " << IMG_GetError() << std::endl;
+            LOG_GAME_ERROR("IMG_Init failed: {}", IMG_GetError());
             return;
         }
 
-        // let's init SDL2 Mixer
+        // Initialize SDL_mixer.
         if(Mix_OpenAudio(22050, MIX_DEFAULT_FORMAT, 2, 4096) == -1)
         {
-            std::cout << "Mix_OpenAudio Error: " << Mix_GetError() << std::endl;
+            LOG_GAME_ERROR("Mix_OpenAudio failed: {}", Mix_GetError());
             return;
         }
 
-        // create a window
+        // Create window.
         window = SDL_CreateWindow(windowName.c_str(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                                   windowWidth, windowHeight, SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI);
         if(!window)
         {
-            std::cout << "SDL_CreateWindow Error: " << SDL_GetError() << std::endl;
+            LOG_GAME_ERROR("SDL_CreateWindow failed: {}", SDL_GetError());
             return;
         }
 
-        // create a renderer for window
+        // Create renderer.
         renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
         if(renderer == nullptr)
         {
-            std::cout << "SDL_CreateRenderer Error: " << SDL_GetError() << std::endl;
+            LOG_GAME_ERROR("SDL_CreateRenderer failed: {}", SDL_GetError());
             return;
         }
 
-        // we need new size due to possible high resolution on mac and ios
+        // Query renderer output size to account for high DPI.
         int w, h;
         SDL_GetRendererOutputSize(renderer, &w, &h);
         windowWidth = w;
@@ -108,55 +108,56 @@ namespace bomberman
         }
         if(!isInitialized)
         {
-            std::cout << "Game::run - initialization failed, exiting." << std::endl;
+            LOG_GAME_ERROR("Initialization failed, cannot run game loop");
             return;
         }
 
         isRunning = true;
-        lastTickTime = SDL_GetTicks(); // initialize last tick time for frame delta calculation
+        // Initialize frame timing state for fixed-step simulation.
+        lastTickTime = SDL_GetTicks();
         accumulatorMs = 0;
 
         uint32_t clientTick = 0;
 
-        // load assets
+        // Load initial resources and scene.
         assetManager->load(renderer);
-        // create menu scene
         sceneManager->addScene("menu", std::make_shared<MenuScene>(this));
         sceneManager->activateScene("menu");
-
-        bool previousBombHeld = false;
 
         SDL_Event event;
 
         while(isRunning)
         {
-            // check SDL2 events
+            // Process SDL events.
             while(SDL_PollEvent(&event))
             {
-                // send event to current scene
                 sceneManager->onEvent(event);
-                // stop loop on quit
                 if(event.type == SDL_QUIT)
                 {
                     stop();
                 }
             }
 
-            // calculate frame delta with clamping
+            // Calculate frame delta with clamping.
             Uint32 currentTickTime = SDL_GetTicks();
             Uint32 frameDeltaMs = currentTickTime - lastTickTime;
             lastTickTime = currentTickTime;
 
-            // clamp frame delta
             if(frameDeltaMs > kMaxFrameClampMs)
             {
                 frameDeltaMs = kMaxFrameClampMs;
             }
 
-            // accumulate frame time
+            // Accumulate frame time.
             accumulatorMs += frameDeltaMs;
 
-            // process simulation steps
+            // Drain incoming network events.
+            if (netClient_ != nullptr && netClient_->isConnected())
+            {
+                netClient_->pump(0);
+            }
+
+            // Process fixed simulation steps.
             int stepCount = 0;
             while(accumulatorMs >= kSimStepMs && stepCount < kMaxStepsPerFrame)
             {
@@ -165,50 +166,56 @@ namespace bomberman
                 ++stepCount;
                 ++clientTick;
 
-                // If connected
-                if (netClient != nullptr && netClient->isConnected())
+                // Send input once per simulation tick.
+                if (netClient_ != nullptr && netClient_->isConnected())
                 {
-                    netClient->pump(0);
-
-                    net::MsgInput msgInput{};
-                    const Uint8* input = SDL_GetKeyboardState(nullptr);
-
-                    const bool left  = input[SDL_SCANCODE_LEFT]  || input[SDL_SCANCODE_A];
-                    const bool right = input[SDL_SCANCODE_RIGHT] || input[SDL_SCANCODE_D];
-                    const bool up    = input[SDL_SCANCODE_UP]    || input[SDL_SCANCODE_W];
-                    const bool down  = input[SDL_SCANCODE_DOWN]  || input[SDL_SCANCODE_S];
-
-                    msgInput.moveX = static_cast<int8_t>((right ? 1 : 0) + (left ? -1 : 0));
-                    msgInput.moveY = static_cast<int8_t>((down  ? 1 : 0) + (up   ? -1 : 0));
-
-                    // Clamp
-                    msgInput.moveX = std::max<int8_t>(-1, std::min<int8_t>(1, msgInput.moveX));
-                    msgInput.moveY = std::max<int8_t>(-1, std::min<int8_t>(1, msgInput.moveY));
-
-                    // Set action flags
-                    const bool bombHeld = input[SDL_SCANCODE_SPACE] != 0;
-                    msgInput.actionFlags = bombHeld && !previousBombHeld ? net::MsgInput::ActionFlag::PlaceBomb : 0;
-                    previousBombHeld = bombHeld;
-
-                    netClient->sendInput(msgInput, clientTick);
+                    pollNetInput(clientTick);
                 }
             }
 
-            // log if we hit the safety cap
+            // Log if the safety cap is hit.
             if(stepCount >= kMaxStepsPerFrame)
             {
-                std::cout << "Warning: Exceeded max update steps (" << kMaxStepsPerFrame
-                          << "). Accumulator: " << accumulatorMs << "ms" << std::endl;
+                LOG_GAME_WARN("Exceeded max update steps ({}), accumulator={}ms", kMaxStepsPerFrame, accumulatorMs);
             }
 
-            // clear the screen
+            // Render current frame.
             SDL_SetRenderDrawColor(renderer, 0x00, 0x00, 0x00, 0x00);
             SDL_RenderClear(renderer);
-            // draw current scene
             sceneManager->draw();
-            // flip the backbuffer
             SDL_RenderPresent(renderer);
         }
+    }
+
+    void Game::pollNetInput(uint32_t clientTick)
+    {
+        net::MsgInput msgInput{};
+        const Uint8* keys = SDL_GetKeyboardState(nullptr);
+
+        const bool left  = keys[SDL_SCANCODE_LEFT]  || keys[SDL_SCANCODE_A];
+        const bool right = keys[SDL_SCANCODE_RIGHT] || keys[SDL_SCANCODE_D];
+        const bool up    = keys[SDL_SCANCODE_UP]    || keys[SDL_SCANCODE_W];
+        const bool down  = keys[SDL_SCANCODE_DOWN]  || keys[SDL_SCANCODE_S];
+
+        msgInput.moveX = static_cast<int8_t>((right ? 1 : 0) + (left ? -1 : 0));
+        msgInput.moveY = static_cast<int8_t>((down  ? 1 : 0) + (up   ? -1 : 0));
+
+        // Clamp to valid range for protocol validation.
+        msgInput.moveX = std::max<int8_t>(-1, std::min<int8_t>(1, msgInput.moveX));
+        msgInput.moveY = std::max<int8_t>(-1, std::min<int8_t>(1, msgInput.moveY));
+
+        // Edge-detect bomb placement: increment persistent command id.
+        const bool bombHeld = keys[SDL_SCANCODE_SPACE] != 0;
+        if (bombHeld && !previousBombHeld_)
+        {
+            if (++bombCommandId_ == 0) bombCommandId_ = 1; // skip 0
+        }
+        previousBombHeld_ = bombHeld;
+
+        // Always send current bombCommandId
+        msgInput.bombCommandId = bombCommandId_;
+
+        netClient_->sendInput(msgInput, clientTick);
     }
 
     void Game::stop()
