@@ -340,3 +340,45 @@ Replace the temporary startup smoke-test with real runtime input packet generati
 
 ### Result
 - Input networking is now integrated into the real gameplay loop instead of a startup-only smoke path.
+
+## 2026-03-02 (57c1000) – Add spdlog Logging Foundation
+
+### Goal
+Introduce a centralized logging layer and wire it into the build.
+
+### Changes
+- Added `Util/Log.h` and `Util/Log.cpp` with named subsystem loggers and `LOG_*` macros.
+- Added spdlog dependency and compile definitions in CMake.
+- Added logging-related ignore rules (`LOGGING_PLAN.md`, `logs/`) to `.gitignore`.
+
+### Result
+- Client/server/game/protocol logging now uses one shared infrastructure with configurable levels.
+
+## 2026-03-03 (0929039, 5eec5ef) – Protocol/Dispatch Cleanup + NetClient Lifecycle Refactor
+
+### Goal
+Clean up protocol/dispatch utilities and make client connection state explicit.
+
+### Changes
+- Refactored `NetCommon` and `PacketDispatch` for clearer protocol helpers and structured comments.
+- Added `Net/NetSend.h` to centralize reliable/unreliable ENet send helpers.
+- Refactored `NetClient` connect flow to return `EConnectState` with specific failure reasons.
+- Added connection-state naming helpers and improved cleanup paths (`releaseResources`, `resetState`).
+- Updated `main.cpp` to use state-aware connect handling and offline fallback logging.
+
+### Result
+- Network transport code is cleaner and easier to extend, and connection failures are now explicit and diagnosable.
+
+## 2026-03-04 (adea28d) – Integrate Persistent Bomb Command Input Flow
+
+### Goal
+Finalize runtime input path around persistent bomb command IDs.
+
+### Changes
+- Updated `Game` input polling to maintain and send persistent `bombCommandId`.
+- Simplified per-tick input sending path and aligned comments/docs with project style.
+- Updated server input handling to track latest input and deduplicate bomb requests by command ID.
+- Added graceful signal-driven shutdown flow and improved server loop/log clarity.
+
+### Result
+- Bomb placement intent is now represented by convergent command IDs end-to-end in the live game/server loop.
