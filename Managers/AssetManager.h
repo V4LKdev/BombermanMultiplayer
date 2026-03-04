@@ -74,11 +74,20 @@ namespace bomberman
          */
         void load(SDL_Renderer* renderer);
         /**
-         * @brief Get font
+         * @brief Get font at its default loaded point size.
          *
          * @return std::shared_ptr<TTF_Font> - loaded font
          */
         std::shared_ptr<TTF_Font> getFont() const;
+        /**
+         * @brief Open the same font file at a specific point size.
+         *
+         * The caller owns the returned instance; it is not cached.
+         *
+         * @param pointSize Desired point size.
+         * @return std::shared_ptr<TTF_Font> or nullptr on failure.
+         */
+        std::shared_ptr<TTF_Font> getFont(int pointSize) const;
         /**
          * @brief Get textures
          *
@@ -132,6 +141,7 @@ namespace bomberman
         void loadSound(SoundEnum sound, const std::string& filePath);
 
         std::shared_ptr<TTF_Font> font = nullptr;                                          // font
+        std::string fontPath_;                                                             // path used to load font, for sized variants
         std::unordered_map<Texture, std::shared_ptr<SDL_Texture>, EnumClassHash> textures; // map of textures
         std::unordered_map<MusicEnum, std::shared_ptr<Mix_Music>, EnumClassHash> musics;       // map of music
         std::unordered_map<SoundEnum, std::shared_ptr<Mix_Chunk>, EnumClassHash> sounds;       // map of sounds

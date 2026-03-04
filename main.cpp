@@ -10,13 +10,11 @@
 
 namespace
 {
-    constexpr uint16_t kServerPort = 12345;
-
     struct CliOptions
     {
         spdlog::level::level_enum logLevel = static_cast<spdlog::level::level_enum>(BOMBERMAN_DEFAULT_LOG_LEVEL);
         std::string logFile;
-        uint16_t port = kServerPort;
+        uint16_t port = bomberman::net::kDefaultServerPort;
     };
 
     void printUsage(const char* exeName)
@@ -101,8 +99,7 @@ namespace
 /**
  * @brief Entry point for the Bomberman client application.
  *
- * Initializes logging, attempts a server connection, and runs the game loop.
- * If the connection fails, the game continues in offline mode.
+ * Initializes logging, and runs the game loop.
  */
 int main(int argc, char** argv)
 {
@@ -117,28 +114,14 @@ int main(int argc, char** argv)
 
     // Initiate async connection to server.
     bomberman::net::NetClient client;
-    client.beginConnect("127.0.0.1", cli.port, "PlayerName");
 
-    // TODO: Move polling into menu scene loop so the UI stays responsive during connect.
-    // Poll until connection resolves (connected or failed).
-    while (client.connectState() == bomberman::net::EConnectState::Connecting ||
-           client.connectState() == bomberman::net::EConnectState::Handshaking)
-    {
-        client.pump(16);
-    }
-
-    if (client.connectState() != bomberman::net::EConnectState::Connected)
-    {
-        LOG_CLIENT_WARN("Could not connect to server ({}) -> running in offline mode",
-                        bomberman::net::connectStateName(client.connectState()));
-    }
-
-    // Pass network client only when connected, otherwise run offline.
+    // Create game instance.
     bomberman::Game game(
         "bomberman",
         800,
         600,
-        client.isConnected() ? &client : nullptr);
+        &client,
+        cli.port);
 
     game.run();
 

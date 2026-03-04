@@ -27,6 +27,12 @@ namespace bomberman
         loadText();
     }
 
+    void Text::fitToContent()
+    {
+        rect.w = clip.w;
+        rect.h = clip.h;
+    }
+
     void Text::loadText()
     {
         if(!font)
@@ -35,8 +41,10 @@ namespace bomberman
             return;
         }
 
+        const char* renderText = text.empty() ? " " : text.c_str();
+
         // create surface
-        SDL_Surface* surface = TTF_RenderUTF8_Solid(font.get(), text.c_str(), color);
+        SDL_Surface* surface = TTF_RenderUTF8_Solid(font.get(), renderText, color);
         if(!surface)
         {
             std::cout << "TTF_RenderText_SolidError: " << TTF_GetError() << std::endl;

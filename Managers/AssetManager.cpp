@@ -56,12 +56,22 @@ namespace bomberman
 
     void AssetManager::loadFont()
     {
-        // load font
-        font = std::shared_ptr<TTF_Font>(TTF_OpenFont("assets/font.ttf", 32), TTF_CloseFont);
+        fontPath_ = "assets/font.ttf";
+        font = std::shared_ptr<TTF_Font>(TTF_OpenFont(fontPath_.c_str(), 32), TTF_CloseFont);
         if(!font)
         {
             std::cout << "TTF_OpenFont Error: " << TTF_GetError() << std::endl;
         }
+    }
+
+    std::shared_ptr<TTF_Font> AssetManager::getFont(const int pointSize) const
+    {
+        auto sized = std::shared_ptr<TTF_Font>(TTF_OpenFont(fontPath_.c_str(), pointSize), TTF_CloseFont);
+        if (!sized)
+        {
+            std::cout << "TTF_OpenFont (sized) Error: " << TTF_GetError() << std::endl;
+        }
+        return sized;
     }
 
     void AssetManager::loadTexture(SDL_Renderer* renderer, Texture texture, const std::string& filePath)

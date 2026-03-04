@@ -20,8 +20,9 @@ namespace bomberman
         constexpr int kMaxStepsPerFrame = 8;
     }
 
-    Game::Game(const std::string& windowName, const int width, const int height, net::NetClient* inNetClient)
-        : windowWidth(width), windowHeight(height), netClient_(inNetClient)
+    Game::Game(const std::string& windowName, const int width, const int height,
+               net::NetClient* inNetClient, const uint16_t serverPort)
+        : windowWidth(width), windowHeight(height), netClient_(inNetClient), serverPort_(serverPort)
     {
         // Initialize SDL.
         if(SDL_Init(SDL_INIT_VIDEO) != 0)
@@ -152,7 +153,7 @@ namespace bomberman
             accumulatorMs += frameDeltaMs;
 
             // Drain incoming network events.
-            if (netClient_ != nullptr && netClient_->isConnected())
+            if (netClient_ != nullptr)
             {
                 netClient_->pump(0);
             }
@@ -247,4 +248,15 @@ namespace bomberman
     {
         return assetManager.get();
     }
+
+    net::NetClient* Game::getNetClient() const
+    {
+        return netClient_;
+    }
+
+    uint16_t Game::getServerPort() const
+    {
+        return serverPort_;
+    }
+
 } // namespace bomberman

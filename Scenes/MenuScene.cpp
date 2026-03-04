@@ -2,6 +2,7 @@
 
 #include "Entities/Sprite.h"
 #include "Game.h"
+#include "Scenes/ConnectScene.h"
 #include "Scenes/GameOverScene.h"
 #include "Scenes/LevelScene.h"
 #include "Scenes/MenuScene.h"
@@ -47,29 +48,48 @@ namespace bomberman
 
     MenuScene::MenuScene(Game* _game) : Scene(_game)
     {
-        // background
-        auto background = std::make_shared<Sprite>(game->getAssetManager()->getTexture(Texture::MenuBack),
-                                                   game->getRenderer());
-        background->setPosition(30, 20);
-        background->setSize(game->getWindowWidth() - 60,
-                            static_cast<int>(game->getWindowHeight() / 1.5f) - 20);
+        // Fixed layout tuned for 800x600 menu composition.
+        const int bgW = 500;
+        const int bgH = 306;
+        const int bgX = (game->getWindowWidth() - bgW) / 2;
+        const int bgY = 20;
+        auto background = std::make_shared<Sprite>(game->getAssetManager()->getTexture(Texture::MenuBack), game->getRenderer());
+        background->setPosition(bgX, bgY);
+        background->setSize(bgW, bgH);
         addObject(background);
 
-        // start menu
+        // Buttons: per-label widths, all centered on the same axis.
+        const int startW = 190;
+        const int onlineW = 220;
+        const int exitW = 160;
+        const int itemH = 40;
+        const int center = game->getWindowWidth() / 2;
+        const int startX = center - (startW / 2);
+        const int onlineX = center - (onlineW / 2);
+        const int exitX = center - (exitW / 2);
+        const int startTop = 342;
+        const int onlineTop = 424;
+        const int exitTop = 506;
+
+        // START
         startText = std::make_shared<Text>(game->getAssetManager()->getFont(), game->getRenderer(), "START");
-        startText->setColor(colorPressed);
-        startText->setSize(static_cast<int>(game->getWindowWidth() / 4.0f),
-                           static_cast<int>(game->getWindowHeight() / 20.0f));
-        startText->setPosition(static_cast<int>(game->getWindowWidth() / 2.0f - startText->getWidth() / 2.0f),
-                               background->getHeight() + 60);
+        startText->setColor(colorSelected);
+        startText->setSize(startW, itemH);
+        startText->setPosition(startX, startTop);
         addObject(startText);
 
-        // exit menu
+        // ONLINE
+        onlineText = std::make_shared<Text>(game->getAssetManager()->getFont(), game->getRenderer(), "ONLINE");
+        onlineText->setColor(colorStandard);
+        onlineText->setSize(onlineW, itemH);
+        onlineText->setPosition(onlineX, onlineTop);
+        addObject(onlineText);
+
+        // EXIT
         exitText = std::make_shared<Text>(game->getAssetManager()->getFont(), game->getRenderer(), "EXIT");
-        exitText->setSize(static_cast<int>(game->getWindowWidth() / 4.0f),
-                          static_cast<int>(game->getWindowHeight() / 20.0f));
-        exitText->setPosition(startText->getPositionX(),
-                              startText->getPositionY() + exitText->getHeight() + 40);
+        exitText->setColor(colorStandard);
+        exitText->setSize(exitW, itemH);
+        exitText->setPosition(exitX, exitTop);
         addObject(exitText);
 
         game->getSceneManager()->addScene("gameover", std::make_shared<GameOverScene>(game));
@@ -122,14 +142,18 @@ namespace bomberman
         // reset menu items color
         startText->setColor(colorStandard);
         exitText->setColor(colorStandard);
+        onlineText->setColor(colorStandard);
         // change color of selected menu item
         switch(currentSelectedMenu)
         {
             case MenuItem::Start:
-                startText->setColor(colorPressed);
+                startText->setColor(colorSelected);
                 break;
             case MenuItem::Exit:
-                exitText->setColor(colorPressed);
+                exitText->setColor(colorSelected);
+                break;
+            case MenuItem::Online:
+                onlineText->setColor(colorSelected);
                 break;
             default:
                 break;
@@ -148,6 +172,10 @@ namespace bomberman
             case MenuItem::Exit:
                 // stop game loop
                 game->stop();
+                break;
+            case MenuItem::Online:
+                game->getSceneManager()->addScene("connect", std::make_shared<ConnectScene>(game, game->getServerPort()));
+                game->getSceneManager()->activateScene("connect");
                 break;
             default:
                 break;

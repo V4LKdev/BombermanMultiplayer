@@ -18,6 +18,7 @@ namespace bomberman
     {
         None,
         Start,
+        Online,
         Exit,
         Last
     };
@@ -64,13 +65,14 @@ namespace bomberman
         void onMenuItemPress();
 
         std::shared_ptr<Text> startText = nullptr;      // menu start
+        std::shared_ptr<Text> onlineText = nullptr;     // menu online
         std::shared_ptr<Text> exitText = nullptr;       // menu exit
         std::shared_ptr<Music> menuMusic = nullptr;     // menu music
         MenuItem currentSelectedMenu = MenuItem::Start; // current selected menu
 
         // const colors for menu selection
-        const SDL_Color colorStandard = {255, 255, 255, 255};
-        const SDL_Color colorPressed = {66, 134, 244, 255};
+        const SDL_Color colorStandard = {255, 255, 255, 255};  ///< Default unselected item
+        const SDL_Color colorSelected = {66,  134, 244, 255};  ///< Currently highlighted item
     };
 } // namespace bomberman
 

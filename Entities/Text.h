@@ -34,6 +34,12 @@ namespace bomberman
          * @param color - color of text
          */
         void setColor(const SDL_Color& color);
+        /**
+         * @brief Resizes the render rect to the current glyph texture size.
+         *
+         * Useful for text that should keep its natural width/height and avoid stretching.
+         */
+        void fitToContent();
 
       private:
         /**

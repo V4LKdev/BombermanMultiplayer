@@ -17,7 +17,6 @@ using namespace bomberman::net;
 // TODO: Read these from a config file or CLI arguments
 namespace
 {
-    constexpr uint16_t kServerPort = 12345;
     constexpr std::size_t kMaxPeers = 2;
     constexpr int kServiceTimeoutMs = 16;
     constexpr uint16_t kServerTickRate = 60;
@@ -30,7 +29,7 @@ namespace
     {
         spdlog::level::level_enum logLevel = static_cast<spdlog::level::level_enum>(BOMBERMAN_DEFAULT_LOG_LEVEL);
         std::string logFile;
-        uint16_t port = kServerPort;
+        uint16_t port = kDefaultServerPort;
     };
 
     void printUsage(const char* exeName)

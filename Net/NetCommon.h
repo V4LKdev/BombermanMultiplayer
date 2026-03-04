@@ -25,6 +25,7 @@ namespace bomberman::net
     // =================================================================================================================
 
     constexpr uint16_t kProtocolVersion = 1;
+    constexpr uint16_t kDefaultServerPort = 12345; ///< Default server port used by both client and server.
     constexpr std::size_t kPlayerNameMax = 16;
     constexpr std::size_t kMaxPacketSize = 1400; ///< Upper packet size bound (below typical 1500-byte MTU).
     constexpr uint32_t kInputLogEveryN = 30;     ///< Input log sampling interval on client and server. (TODO: replace with proper telemetry)
