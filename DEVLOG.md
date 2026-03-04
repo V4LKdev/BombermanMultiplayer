@@ -436,3 +436,25 @@ Reduce duplicated CLI parsing code between client and server mains.
 
 ### Result
 - Client/server CLI behavior remains unchanged, with less duplicated parsing logic and cleaner mains.
+
+## 2026-03-04 (a529a87) – Move NetClient To Async Connect/Handshake State Flow
+
+### Goal
+Remove the remaining blocking connect/handshake path from `NetClient` and drive connection progress through `pump(...)`.
+
+### Changes
+- Removed blocking `connect(...)` and `performHandshake(...)` flow.
+- Added `beginConnect(...)` to initiate ENet connect and defer handshake progression to `pump(...)`.
+- Added `cancelConnect()` to abort in-progress `Connecting`/`Handshaking` attempts cleanly.
+- Added async timeout tracking (`connectStartTime`, `handshakeStartTime`) with separate connect/handshake timeouts.
+- Updated event handling:
+  - on `ENET_EVENT_TYPE_CONNECT`, send `Hello` and transition to `Handshaking`
+  - on `Welcome`, transition to `Connected`
+  - ignore unexpected `CONNECT` events outside `Connecting`
+- Fixed protocol-mismatch handling to set terminal `FailedProtocol` state and release resources in the pump path.
+- Cleared async pending fields in `resetState()` to avoid stale reconnect state.
+- Updated `main.cpp` startup path to use `beginConnect(...)` and poll until state resolves.
+- Reorganized `NetClient.h/.cpp` sections/comments to match repository conventions.
+
+### Result
+- Connection lifecycle is now state-driven and pump-based, which is compatible with moving connect progression into menu/UI logic.
