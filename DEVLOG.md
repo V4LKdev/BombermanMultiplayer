@@ -458,3 +458,22 @@ Remove the remaining blocking connect/handshake path from `NetClient` and drive 
 
 ### Result
 - Connection lifecycle is now state-driven and pump-based, which is compatible with moving connect progression into menu/UI logic.
+
+## 2026-03-04 (132c5b5) – Add ConnectScene Form Scaffold + Menu Routing
+
+### Goal
+Move online setup UI out of `MenuScene` and prepare a clean connect form scene.
+
+### Changes
+- Added `Scenes/ConnectScene.h/.cpp` and wired it into CMake.
+- Updated `MenuScene` to route `Online` into `ConnectScene`.
+- Added non-functional connect form UI with focused fields for:
+  - player name
+  - server IP
+  - read-only port display
+- Added text helpers for content-sized rendering (`Text::fitToContent`) and empty-text safety.
+- Passed client port into `Game` and through to `ConnectScene`.
+- Added `kDefaultServerPort` in `NetCommon` and reused it in client/server defaults.
+
+### Result
+- The online flow now has a dedicated scene with working form UX, ready for connect logic wiring next.
