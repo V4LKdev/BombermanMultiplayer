@@ -9,16 +9,19 @@
 
 namespace bomberman::net
 {
+    // =================================================================================================================
+    // Connection State
+    // =================================================================================================================
+
     /**
      * @brief Represents the current state of the client connection lifecycle.
      *
-     * Used both as internal state and as a return value from connect(),
-     * giving callers precise information about what happened.
+     * Used as internal state and as external status for callers.
      */
     enum class EConnectState : uint8_t
     {
         Disconnected,       ///< Not connected, no resources held
-        Connecting,         ///< ENet connect in progress (future: async)
+        Connecting,         ///< ENet connect in progress, waiting for CONNECT event
         Handshaking,        ///< TCP-level connected, waiting for Welcome
         Connected,          ///< Fully connected and handshake complete
         FailedResolve,      ///< Could not resolve host address
@@ -56,7 +59,7 @@ namespace bomberman::net
      * @brief ENet-backed client connection and protocol endpoint.
      *
      * Owns the client-side ENet host/peer lifecycle and exposes
-     * connect, receive pumping, and input sending for runtime gameplay.
+     * connect flow, receive pumping, and input sending for runtime gameplay.
      */
     class NetClient
     {
@@ -72,21 +75,38 @@ namespace bomberman::net
         NetClient(NetClient&&) noexcept;
         NetClient& operator=(NetClient&&) noexcept;
 
+        // =============================================================================================================
+        // Connection Lifecycle
+        // =============================================================================================================
+
         /**
-         * @brief Connects to a server and performs Hello/Welcome handshake.
+         * @brief Initiates non-blocking connection to the server and starts handshake process.
          *
          * @param host Server hostname or IP address.
          * @param port Server port.
          * @param playerName Player name sent in the Hello payload.
          *
-         * @return EConnectState::Connected on success, or a specific failure state.
+         * @note Use 'connectState()' to query connection progress.
          */
-        EConnectState connect(const std::string& host, uint16_t port, std::string_view playerName);
+        void beginConnect(const std::string& host, uint16_t port, std::string_view playerName);
 
         /**
          * @brief Disconnects from the server and releases connection resources.
          */
         void disconnect();
+
+        /**
+         * @brief Aborts an in-progress beginConnect() attempt.
+         *
+         * Safe to call in any state. If called while Connecting or Handshaking,
+         * releases resources and transitions to Disconnected.
+         * Has no effect when already Connected or Disconnected.
+         */
+        void cancelConnect();
+
+        // =============================================================================================================
+        // Runtime I/O
+        // =============================================================================================================
 
         /**
          * @brief Processes ENet events for this client host.
@@ -132,6 +152,10 @@ namespace bomberman::net
         uint16_t serverTickRate() const { return serverTickRate_; }
 
     private:
+        // =============================================================================================================
+        // Internals
+        // =============================================================================================================
+
         /**
          * @brief Opaque ENet implementation detail.
          *
@@ -149,7 +173,6 @@ namespace bomberman::net
 
         bool initializeENet();
         void shutdownENet();
-        EConnectState performHandshake(std::string_view playerName);
 
         /** @brief Handles a validated Welcome payload from the dispatcher. */
         void handleWelcome(const uint8_t* payload, std::size_t payloadSize);
@@ -160,7 +183,7 @@ namespace bomberman::net
         /**
          * @brief Tears down ENet peer/host resources without touching logical state.
          *
-         * Used by connect() failure paths so state_ retains the failure reason.
+         * Used by connection failure paths so state_ retains the failure reason.
          * Does NOT send a disconnect request to the remote peer.
          */
         void releaseResources();

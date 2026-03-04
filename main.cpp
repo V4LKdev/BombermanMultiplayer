@@ -115,14 +115,22 @@ int main(int argc, char** argv)
     // Initialize project-wide named loggers.
     bomberman::log::init(cli.logLevel, cli.logFile);
 
-    // TODO: Read host, port, and player name from CLI args or config file. Also refactor into non-blocking statemachine
+    // Initiate async connection to server.
     bomberman::net::NetClient client;
-    const auto connectResult = client.connect("127.0.0.1", cli.port, "PlayerName");
+    client.beginConnect("127.0.0.1", cli.port, "PlayerName");
 
-    if (connectResult != bomberman::net::EConnectState::Connected)
+    // TODO: Move polling into menu scene loop so the UI stays responsive during connect.
+    // Poll until connection resolves (connected or failed).
+    while (client.connectState() == bomberman::net::EConnectState::Connecting ||
+           client.connectState() == bomberman::net::EConnectState::Handshaking)
+    {
+        client.pump(16);
+    }
+
+    if (client.connectState() != bomberman::net::EConnectState::Connected)
     {
         LOG_CLIENT_WARN("Could not connect to server ({}) -> running in offline mode",
-                        bomberman::net::connectStateName(connectResult));
+                        bomberman::net::connectStateName(client.connectState()));
     }
 
     // Pass network client only when connected, otherwise run offline.
