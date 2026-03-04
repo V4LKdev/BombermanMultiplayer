@@ -8,6 +8,7 @@
 #include <string_view>
 
 #include "Entities/Text.h"
+#include "Net/NetClient.h"
 #include "Scenes/Scene.h"
 
 namespace bomberman
@@ -41,6 +42,11 @@ namespace bomberman
          */
         virtual void onEvent(const SDL_Event& event) override;
 
+        /**
+         * @brief Polls NetClient connection state and updates status text.
+         */
+        virtual void update(unsigned int delta) override;
+
       private:
         // Default placeholder values, also used as fallback when fields are empty at connect time.
         static constexpr std::string_view kDefaultPlayerName = "Player";
@@ -66,6 +72,26 @@ namespace bomberman
 
         void recenterValueText();
 
+        /** @brief Returns the player name to use, falling back to kDefaultPlayerName if the field is empty. */
+        [[nodiscard]] std::string_view effectivePlayerName() const;
+        /** @brief Returns the host to use, falling back to kDefaultHost if the field is empty. */
+        [[nodiscard]] std::string_view effectiveHost() const;
+
+        /**
+         * @brief Validates inputs and kicks off an async connect via NetClient.
+         *
+         * No-ops if already connecting/connected. Sets status text on validation failure.
+         */
+        void tryStartConnect();
+
+        /**
+         * @brief Sets connectStateText content and color in one call.
+         *
+         * @param message  Text to display.
+         * @param color    Text color.
+         */
+        void setStatusText(std::string_view message, SDL_Color color);
+
         std::shared_ptr<Text> titleText          = nullptr;
         std::shared_ptr<Text> playerNameLabelText = nullptr;
         std::shared_ptr<Text> playerNameValueText = nullptr;
@@ -88,6 +114,8 @@ namespace bomberman
         int hostFieldX_ = 0;
         int hostFieldY_ = 0;
         int hostFieldW_ = 0;
+
+        net::EConnectState lastConnectState_ = net::EConnectState::Disconnected; ///< Tracks last seen state to avoid redundant text updates.
     };
 } // namespace bomberman
 

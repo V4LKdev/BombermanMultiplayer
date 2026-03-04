@@ -5,6 +5,7 @@
 #include <string>
 
 #include "Game.h"
+#include "Net/NetClient.h"
 #include "Net/NetCommon.h"
 
 namespace
@@ -67,13 +68,13 @@ namespace bomberman
         addObject(connectButtonText);
 
         // --- Status ---
-        connectStateText = std::make_shared<Text>(game->getAssetManager()->getFont(), game->getRenderer(),
-                                                  "Status: Not connected");
+        connectStateText = std::make_shared<Text>(game->getAssetManager()->getFont(), game->getRenderer(), "");
         connectStateText->setSize(220, 20);
         connectStateText->setPosition(centerX - 110, 498);
         addObject(connectStateText);
 
         refreshFormText();
+        setStatusText("Not connected", {150, 150, 150, 255});
     }
 
     void ConnectScene::onEnter()
@@ -101,6 +102,12 @@ namespace bomberman
             {
                 if (!hostTouched_) { host_.clear(); hostTouched_ = true; }
                 appendSanitizedText(host_, event.text.text, true);
+                // Reset the status hint while the user edits, but only when we're idle —
+                // if a failure state is showing (e.g. "Invalid IP address" from tryStartConnect,
+                // or a network failure from update()), we want to clear it. Any non-Disconnected
+                // state means a real connect is in progress and update() owns the status text.
+                if (lastConnectState_ == net::EConnectState::Disconnected)
+                    setStatusText("Not connected", {150, 150, 150, 255});
                 refreshFormText();
             }
             return;
@@ -112,9 +119,19 @@ namespace bomberman
         switch (event.key.keysym.scancode)
         {
             case SDL_SCANCODE_ESCAPE:
+            {
+                // Cancel any in-progress connection attempt before leaving.
+                net::NetClient* client = game->getNetClient();
+                if (client)
+                {
+                    const auto state = client->connectState();
+                    if (state == net::EConnectState::Connecting || state == net::EConnectState::Handshaking)
+                        client->cancelConnect();
+                }
                 game->getSceneManager()->activateScene("menu");
                 game->getSceneManager()->removeScene("connect");
                 return;
+            }
 
             case SDL_SCANCODE_TAB:
             case SDL_SCANCODE_DOWN:
@@ -140,29 +157,17 @@ namespace bomberman
                     if (!host_.empty())
                         host_.pop_back();
                     if (host_.empty()) hostTouched_ = false;
+                    // Clear validation error as the user edits.
+                    if (lastConnectState_ == net::EConnectState::Disconnected)
+                        setStatusText("Not connected", {150, 150, 150, 255});
                     refreshFormText();
                 }
                 return;
 
             case SDL_SCANCODE_RETURN:
                 if (focusField_ == FocusField::ConnectButton)
-                {
-                    // Resolve effective values (fall back to placeholders when fields are empty).
-                    const std::string_view effectiveHost =
-                        host_.empty() ? kDefaultHost : std::string_view(host_);
-
-                    if (!isValidIPv4(effectiveHost))
-                    {
-                        connectStateText->setText("Invalid IP address");
-                        return;
-                    }
-
-                    // TODO: trigger connect flow
-                    // const std::string_view effectiveName =
-                    //     playerName_.empty() ? kDefaultPlayerName : std::string_view(playerName_);
-                    // game->getNetClient()->beginConnect(std::string(effectiveHost), port_, effectiveName);
-                }
-                else if (focusField_ == FocusField::PlayerName || focusField_ == FocusField::Host)
+                    tryStartConnect();
+                else
                 {
                     // RETURN advances focus from a text field.
                     advanceFocus(+1);
@@ -172,19 +177,7 @@ namespace bomberman
 
             case SDL_SCANCODE_SPACE:
                 if (focusField_ == FocusField::ConnectButton)
-                {
-                    // SPACE also confirms the button, consistent with the rest of the UI.
-                    const std::string_view effectiveHost =
-                        host_.empty() ? kDefaultHost : std::string_view(host_);
-
-                    if (!isValidIPv4(effectiveHost))
-                    {
-                        connectStateText->setText("Invalid IP address");
-                        return;
-                    }
-
-                    // TODO: trigger connect flow
-                }
+                    tryStartConnect();
                 // On text fields, SPACE is intentionally not handled here —
                 // SDL_TEXTINPUT fires separately and inserts the space character.
                 return;
@@ -205,7 +198,7 @@ namespace bomberman
         playerNameLabelText->setColor(kLabelColor);
         hostLabelText->setColor(kLabelColor);
         portValueText->setColor(kReadOnlyColor);
-        connectStateText->setColor(kHintColor);
+        // Status text color is managed by setStatusText; don't override it here.
 
         const bool showNamePlaceholder = playerName_.empty();
         const bool showHostPlaceholder = host_.empty();
@@ -342,5 +335,97 @@ namespace bomberman
         // Clamp to field left edge when content width exceeds the field box.
         playerNameValueText->setPosition(std::max(playerNameFieldX_, nameX), playerNameFieldY_);
         hostValueText->setPosition(std::max(hostFieldX_, hostX), hostFieldY_);
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+
+    std::string_view ConnectScene::effectivePlayerName() const
+    {
+        return playerName_.empty() ? kDefaultPlayerName : std::string_view(playerName_);
+    }
+
+    std::string_view ConnectScene::effectiveHost() const
+    {
+        return host_.empty() ? kDefaultHost : std::string_view(host_);
+    }
+
+    void ConnectScene::setStatusText(const std::string_view message, const SDL_Color color)
+    {
+        connectStateText->setText(std::string(message));
+        connectStateText->setColor(color);
+    }
+
+    void ConnectScene::tryStartConnect()
+    {
+        net::NetClient* client = game->getNetClient();
+        if (!client)
+        {
+            setStatusText("No network client", {220, 80, 80, 255});
+            return;
+        }
+
+        // Ignore if already mid-connect or connected.
+        const auto state = client->connectState();
+        if (state == net::EConnectState::Connecting || state == net::EConnectState::Handshaking)
+            return;
+        if (state == net::EConnectState::Connected)
+            return;
+
+        const std::string_view host = effectiveHost();
+        if (!isValidIPv4(host))
+        {
+            setStatusText("Invalid IP address", {220, 80, 80, 255});
+            return;
+        }
+
+        client->beginConnect(std::string(host), port_, effectivePlayerName());
+        // Status text will be updated on the next update() tick once state changes.
+    }
+
+    void ConnectScene::update(const unsigned int delta)
+    {
+        Scene::update(delta);
+
+        net::NetClient* client = game->getNetClient();
+        if (!client)
+            return;
+
+        const auto state = client->connectState();
+        if (state == lastConnectState_)
+            return;
+
+        lastConnectState_ = state;
+
+        switch (state)
+        {
+            case net::EConnectState::Disconnected:
+                setStatusText("Not connected", {150, 150, 150, 255});
+                break;
+            case net::EConnectState::Connecting:
+                setStatusText("Connecting...", {180, 180, 60, 255});
+                break;
+            case net::EConnectState::Handshaking:
+                setStatusText("Handshaking...", {180, 180, 60, 255});
+                break;
+            case net::EConnectState::Connected:
+                setStatusText("Connected!", {80, 220, 80, 255});
+                // TODO: transition to online gameplay scene once it exists.
+                break;
+            case net::EConnectState::FailedResolve:
+                setStatusText("Could not resolve host", {220, 80, 80, 255});
+                break;
+            case net::EConnectState::FailedConnect:
+                setStatusText("Connection timed out", {220, 80, 80, 255});
+                break;
+            case net::EConnectState::FailedHandshake:
+                setStatusText("Handshake failed", {220, 80, 80, 255});
+                break;
+            case net::EConnectState::FailedProtocol:
+                setStatusText("Protocol version mismatch", {220, 80, 80, 255});
+                break;
+            case net::EConnectState::FailedInit:
+                setStatusText("Network init failed", {220, 80, 80, 255});
+                break;
+        }
     }
 } // namespace bomberman
