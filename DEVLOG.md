@@ -421,3 +421,18 @@ Allow runtime port override on both targets while keeping a default fallback por
 
 ### Result
 - Both binaries now support a default-port workflow with optional per-run port overrides.
+
+## 2026-03-04 (4cbcdf7) – Extract Shared CLI Parse Helpers
+
+### Goal
+Reduce duplicated CLI parsing code between client and server mains.
+
+### Changes
+- Added `Util/CliCommon.h` (header-only helper module).
+- Moved shared parsing helpers into `bomberman::cli` namespace:
+  - `parseLogLevel(...)`
+  - `parsePort(...)`
+- Updated `main.cpp` and `server_main.cpp` to use shared helpers while keeping target-specific `parseCli(...)` local.
+
+### Result
+- Client/server CLI behavior remains unchanged, with less duplicated parsing logic and cleaner mains.
