@@ -1,5 +1,8 @@
 #include <csignal>
 #include <cstdlib>
+#include <iostream>
+#include <string>
+#include <string_view>
 #include <unordered_map>
 
 #include <enet/enet.h>
@@ -21,6 +24,83 @@ namespace
     /// Global flag for graceful shutdown
     volatile std::sig_atomic_t gRunning = 1;
     void onSignal(int /*sig*/) { gRunning = 0; }
+
+    struct CliOptions
+    {
+        spdlog::level::level_enum logLevel =
+            static_cast<spdlog::level::level_enum>(BOMBERMAN_DEFAULT_LOG_LEVEL);
+        std::string logFile;
+    };
+
+    void printUsage(const char* exeName)
+    {
+        std::cout
+            << "Usage: " << exeName
+            << " [--log-level <trace|debug|info|warn|error|critical>] [--log-file <path>]\n";
+    }
+
+    bool parseLogLevel(std::string_view text, spdlog::level::level_enum& outLevel)
+    {
+        if (text == "trace")    { outLevel = spdlog::level::trace; return true; }
+        if (text == "debug")    { outLevel = spdlog::level::debug; return true; }
+        if (text == "info")     { outLevel = spdlog::level::info; return true; }
+        if (text == "warn")     { outLevel = spdlog::level::warn; return true; }
+        if (text == "error")    { outLevel = spdlog::level::err; return true; }
+        if (text == "critical") { outLevel = spdlog::level::critical; return true; }
+        return false;
+    }
+
+    bool parseCli(int argc, char** argv, CliOptions& outOptions)
+    {
+        for (int i = 1; i < argc; ++i)
+        {
+            const std::string_view arg = argv[i];
+
+            if (arg == "--help")
+            {
+                printUsage(argv[0]);
+                return false;
+            }
+
+            if (arg == "--log-level")
+            {
+                if (i + 1 >= argc)
+                {
+                    std::cerr << "Missing value for --log-level\n";
+                    printUsage(argv[0]);
+                    return false;
+                }
+
+                const std::string_view value = argv[++i];
+                if (!parseLogLevel(value, outOptions.logLevel))
+                {
+                    std::cerr << "Invalid log level: " << value << '\n';
+                    printUsage(argv[0]);
+                    return false;
+                }
+                continue;
+            }
+
+            if (arg == "--log-file")
+            {
+                if (i + 1 >= argc)
+                {
+                    std::cerr << "Missing value for --log-file\n";
+                    printUsage(argv[0]);
+                    return false;
+                }
+
+                outOptions.logFile = argv[++i];
+                continue;
+            }
+
+            std::cerr << "Unknown argument: " << arg << '\n';
+            printUsage(argv[0]);
+            return false;
+        }
+
+        return true;
+    }
 } // namespace
 
 
@@ -153,10 +233,16 @@ void handleEventReceive(const ENetEvent& event, ServerState& state)
  * Initializes logging and ENet, creates the server host, and runs the
  * event-drain loop until interrupted by SIGINT / SIGTERM.
  */
-int main(int /*argc*/, char** /*argv*/)
+int main(int argc, char** argv)
 {
+    CliOptions cli{};
+    if (!parseCli(argc, argv, cli))
+    {
+        return EXIT_FAILURE;
+    }
+
     // Initialize project-wide named loggers.
-    bomberman::log::init();
+    bomberman::log::init(cli.logLevel, cli.logFile);
 
     // Register signal handlers for graceful shutdown.
     std::signal(SIGINT,  onSignal);
@@ -234,4 +320,3 @@ int main(int /*argc*/, char** /*argv*/)
     LOG_SERVER_INFO("Shutdown complete");
     return EXIT_SUCCESS;
 }
-
