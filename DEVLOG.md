@@ -382,3 +382,26 @@ Finalize runtime input path around persistent bomb command IDs.
 
 ### Result
 - Bomb placement intent is now represented by convergent command IDs end-to-end in the live game/server loop.
+
+## 2026-03-04 (fc7240f, 77cb586) – Add Runtime Log CLI Flags and Validate Build Gating
+
+### Goal
+Add practical runtime logging controls for client/server runs and verify compile-time log-level safety.
+
+### Changes
+- Added CLI parsing to `main.cpp` and `server_main.cpp`:
+  - `--log-level <trace|debug|info|warn|error|critical>`
+  - `--log-file <path>`
+  - `--help`
+- Wired parsed values into `bomberman::log::init(level, file)`.
+- Added temporary probe logs in client startup to validate level behavior, then removed them after verification.
+
+### Verification
+- Confirmed invalid/missing CLI argument handling prints clear usage errors.
+- Confirmed file logging writes to provided paths.
+- Confirmed compile-time gating behavior:
+  - Debug build emits debug (trace compiled out with current `SPDLOG_ACTIVE_LEVEL`).
+  - Release build does not emit debug/trace even when requested via CLI.
+
+### Result
+- Logging verbosity and file output are now configurable per run while preserving release safety.
