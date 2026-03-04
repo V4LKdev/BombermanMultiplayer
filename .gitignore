@@ -48,3 +48,5 @@ packages/
 *.vcxproj.user
 NET_PLAN.md
 NET_DAILY_STEPS.md
+LOGGING_PLAN.md
+logs/

@@ -29,6 +29,7 @@ pkg_check_modules(SDL2_IMAGE REQUIRED IMPORTED_TARGET SDL2_image)
 pkg_check_modules(SDL2_TTF   REQUIRED IMPORTED_TARGET SDL2_ttf)
 pkg_check_modules(SDL2_MIXER REQUIRED IMPORTED_TARGET SDL2_mixer)
 pkg_check_modules(ENET       REQUIRED IMPORTED_TARGET libenet)
+pkg_check_modules(SPDLOG     REQUIRED IMPORTED_TARGET spdlog)
 
 # ---- Sources ----
 
@@ -53,11 +54,13 @@ set(SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/Entities/Sound.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Util/Collision.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Util/Pathfinding.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/Util/Log.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Net/NetClient.cpp
 )
 
 set(SERVER_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/server_main.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/Util/Log.cpp
   # ${CMAKE_CURRENT_SOURCE_DIR}/NetServer.cpp
 )
 
@@ -112,11 +115,13 @@ target_link_libraries(${PROJECT_NAME}
     PkgConfig::SDL2_TTF
     PkgConfig::SDL2_MIXER
     PkgConfig::ENET
+    PkgConfig::SPDLOG
 )
 
 target_link_libraries(Bomberman_Server
   PRIVATE
     PkgConfig::ENET
+    PkgConfig::SPDLOG
 )
 
 # Warnings
@@ -125,6 +130,17 @@ if (MSVC)
 else()
   target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -Wpedantic)
 endif()
+
+# spdlog compile-time log level gate (what exists in the binary).
+# spdlog runtime default log level (what is actually printed).
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+  $<IF:$<CONFIG:Debug>,SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_DEBUG,SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_INFO>
+  $<IF:$<CONFIG:Debug>,BOMBERMAN_DEFAULT_LOG_LEVEL=SPDLOG_LEVEL_DEBUG,BOMBERMAN_DEFAULT_LOG_LEVEL=SPDLOG_LEVEL_INFO>
+)
+target_compile_definitions(Bomberman_Server PRIVATE
+  $<IF:$<CONFIG:Debug>,SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_DEBUG,SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_INFO>
+  $<IF:$<CONFIG:Debug>,BOMBERMAN_DEFAULT_LOG_LEVEL=SPDLOG_LEVEL_DEBUG,BOMBERMAN_DEFAULT_LOG_LEVEL=SPDLOG_LEVEL_INFO>
+)
 
 # ---- Install / Resources ----
 
