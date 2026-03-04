@@ -405,3 +405,19 @@ Add practical runtime logging controls for client/server runs and verify compile
 
 ### Result
 - Logging verbosity and file output are now configurable per run while preserving release safety.
+
+## 2026-03-04 (e885294) – Add `--port` CLI Override for Client and Server
+
+### Goal
+Allow runtime port override on both targets while keeping a default fallback port.
+
+### Changes
+- Added `--port <value>` parsing to both `main.cpp` and `server_main.cpp`.
+- Added strict port validation (numeric, fully parsed, range `1..65535`).
+- Wired parsed port into:
+  - client connect target (`NetClient::connect(..., port, ...)`)
+  - server bind address (`ENetAddress::port`)
+- Updated usage output and missing/invalid value error paths.
+
+### Result
+- Both binaries now support a default-port workflow with optional per-run port overrides.
