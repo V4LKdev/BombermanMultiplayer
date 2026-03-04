@@ -477,3 +477,21 @@ Move online setup UI out of `MenuScene` and prepare a clean connect form scene.
 
 ### Result
 - The online flow now has a dedicated scene with working form UX, ready for connect logic wiring next.
+
+## 2026-03-04 (40a5c79) – ConnectScene Async Connect Wiring + Live Status
+
+### Goal
+Hook the connect form into `NetClient` async connect flow and reflect state changes live in the scene.
+
+### Changes
+- Added `ConnectScene` helpers to keep connect flow concise:
+  - effective player/host value accessors (with placeholder fallback)
+  - `tryStartConnect()` input validation + async connect start
+  - `setStatusText()` for centralized status UI updates
+- Wired connect button activation (`Enter` / `Space`) to call `beginConnect(...)`.
+- Added per-frame state polling in `ConnectScene::update(...)` and mapped `EConnectState` to user-facing status text/colors.
+- Added `Esc` behavior to cancel in-progress connect attempts via `cancelConnect()` before returning to menu.
+- Kept host validation on form submit and inline error messaging.
+
+### Result
+- The connect screen now drives async connection attempts and shows real-time status feedback end-to-end.
