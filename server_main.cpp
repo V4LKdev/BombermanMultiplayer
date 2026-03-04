@@ -1,8 +1,6 @@
-#include <charconv>
 #include <csignal>
 #include <cstdlib>
 #include <iostream>
-#include <limits>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -11,6 +9,7 @@
 #include "Net/NetCommon.h"
 #include "Net/NetSend.h"
 #include "Net/PacketDispatch.h"
+#include "Util/CliCommon.h"
 #include "Util/Log.h"
 
 using namespace bomberman::net;
@@ -18,7 +17,7 @@ using namespace bomberman::net;
 // TODO: Read these from a config file or CLI arguments
 namespace
 {
-    constexpr enet_uint16 kServerPort = 12345;
+    constexpr uint16_t kServerPort = 12345;
     constexpr std::size_t kMaxPeers = 2;
     constexpr int kServiceTimeoutMs = 16;
     constexpr uint16_t kServerTickRate = 60;
@@ -39,33 +38,6 @@ namespace
         std::cout
             << "Usage: " << exeName
             << " [--log-level <trace|debug|info|warn|error|critical>] [--log-file <path>] [--port <port override>]\n";
-    }
-
-    bool parseLogLevel(std::string_view text, spdlog::level::level_enum& outLevel)
-    {
-        if (text == "trace")    { outLevel = spdlog::level::trace; return true; }
-        if (text == "debug")    { outLevel = spdlog::level::debug; return true; }
-        if (text == "info")     { outLevel = spdlog::level::info; return true; }
-        if (text == "warn")     { outLevel = spdlog::level::warn; return true; }
-        if (text == "error")    { outLevel = spdlog::level::err; return true; }
-        if (text == "critical") { outLevel = spdlog::level::critical; return true; }
-        return false;
-    }
-
-    bool parsePort(std::string_view text, uint16_t& outPort)
-    {
-        unsigned int value = 0;
-        const char* begin = text.data();
-        const char* end = begin + text.size();
-        const auto [ptr, ec] = std::from_chars(begin, end, value);
-        if (ec != std::errc{} || ptr != end || value == 0 ||
-            value > std::numeric_limits<uint16_t>::max())
-        {
-            return false;
-        }
-
-        outPort = static_cast<uint16_t>(value);
-        return true;
     }
 
     bool parseCli(int argc, char** argv, CliOptions& outOptions)
@@ -90,7 +62,7 @@ namespace
                 }
 
                 const std::string_view value = argv[++i];
-                if (!parseLogLevel(value, outOptions.logLevel))
+                if (!bomberman::cli::parseLogLevel(value, outOptions.logLevel))
                 {
                     std::cerr << "Invalid log level: " << value << '\n';
                     printUsage(argv[0]);
@@ -122,7 +94,7 @@ namespace
                 }
 
                 const std::string_view value = argv[++i];
-                if (!parsePort(value, outOptions.port))
+                if (!bomberman::cli::parsePort(value, outOptions.port))
                 {
                     std::cerr << "Invalid port: " << value << '\n';
                     printUsage(argv[0]);
