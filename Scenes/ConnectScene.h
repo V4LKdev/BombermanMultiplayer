@@ -27,24 +27,9 @@ namespace bomberman
          */
         ConnectScene(Game* game, uint16_t port);
 
-        /**
-         * @brief Enables SDL text input while this scene is active.
-         */
         virtual void onEnter() override;
-
-        /**
-         * @brief Disables SDL text input when leaving this scene.
-         */
         virtual void onExit() override;
-
-        /**
-         * @brief Handles form focus and text input events.
-         */
         virtual void onEvent(const SDL_Event& event) override;
-
-        /**
-         * @brief Polls NetClient connection state and updates status text.
-         */
         virtual void update(unsigned int delta) override;
 
       private:
@@ -64,18 +49,23 @@ namespace bomberman
         void appendSanitizedText(std::string& target, std::string_view chunk, bool isHostField);
 
         /** @brief Returns the pixel width of the given text using the form font. */
-        [[nodiscard]] int measureTextWidth(std::string_view text) const;
-        [[nodiscard]] bool fitsFieldWidth(std::string_view text, bool isHostField) const;
+        [[nodiscard]]
+        int measureTextWidth(std::string_view text) const;
+        [[nodiscard]]
+        bool fitsFieldWidth(std::string_view text, bool isHostField) const;
 
         /** @brief Returns true if @p ip is a syntactically valid dotted-decimal IPv4 address. */
-        [[nodiscard]] static bool isValidIPv4(std::string_view ip);
+        [[nodiscard]]
+        static bool isValidIPv4(std::string_view ip);
 
         void recenterValueText();
 
         /** @brief Returns the player name to use, falling back to kDefaultPlayerName if the field is empty. */
-        [[nodiscard]] std::string_view effectivePlayerName() const;
+        [[nodiscard]]
+        std::string_view effectivePlayerName() const;
         /** @brief Returns the host to use, falling back to kDefaultHost if the field is empty. */
-        [[nodiscard]] std::string_view effectiveHost() const;
+        [[nodiscard]]
+        std::string_view effectiveHost() const;
 
         /**
          * @brief Validates inputs and kicks off an async connect via NetClient.
@@ -108,6 +98,8 @@ namespace bomberman
         bool hostTouched_       = false; ///< True once the host field has received its first keystroke.
         uint16_t port_ = 0; ///< Read-only server port, displayed for info only.
 
+        bool enteredOnlineFlow_ = false;
+
         int playerNameFieldX_ = 0;
         int playerNameFieldY_ = 0;
         int playerNameFieldW_ = 0;
@@ -115,7 +107,7 @@ namespace bomberman
         int hostFieldY_ = 0;
         int hostFieldW_ = 0;
 
-        net::EConnectState lastConnectState_ = net::EConnectState::Disconnected; ///< Tracks last seen state to avoid redundant text updates.
+        net::EConnectState lastConnectState_ = net::EConnectState::Disconnected; ///< Cached state to avoid redundant status text updates.
     };
 } // namespace bomberman
 

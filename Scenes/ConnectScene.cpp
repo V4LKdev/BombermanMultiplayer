@@ -5,6 +5,7 @@
 #include <string>
 
 #include "Game.h"
+#include "StageScene.h"
 #include "Net/NetClient.h"
 #include "Net/NetCommon.h"
 
@@ -55,10 +56,11 @@ namespace bomberman
         addObject(hostValueText);
 
         // --- Port (read-only) ---
+        constexpr int kPortOffsetY = 38;
         portValueText = std::make_shared<Text>(game->getAssetManager()->getFont(16), game->getRenderer(),
                                                "/" + std::to_string(port_));
         portValueText->fitToContent();
-        portValueText->setPosition(centerX - portValueText->getWidth() / 2, hostFieldY_ + 38);
+        portValueText->setPosition(centerX - portValueText->getWidth() / 2, hostFieldY_ + kPortOffsetY);
         addObject(portValueText);
 
         // --- Connect button ---
@@ -102,10 +104,7 @@ namespace bomberman
             {
                 if (!hostTouched_) { host_.clear(); hostTouched_ = true; }
                 appendSanitizedText(host_, event.text.text, true);
-                // Reset the status hint while the user edits, but only when we're idle —
-                // if a failure state is showing (e.g. "Invalid IP address" from tryStartConnect,
-                // or a network failure from update()), we want to clear it. Any non-Disconnected
-                // state means a real connect is in progress and update() owns the status text.
+                // Clear stale failure message when user edits; don't touch it while a connect is in progress.
                 if (lastConnectState_ == net::EConnectState::Disconnected)
                     setStatusText("Not connected", {150, 150, 150, 255});
                 refreshFormText();
@@ -216,7 +215,7 @@ namespace bomberman
 
     void ConnectScene::advanceFocus(const int direction)
     {
-        // Clear the touched flag for the field we're leaving so re-entering it resets again.
+        // Reset touched flag so re-entering an empty field shows the placeholder again.
         if (focusField_ == FocusField::PlayerName) playerNameTouched_ = false;
         else if (focusField_ == FocusField::Host)  hostTouched_ = false;
 
@@ -229,9 +228,6 @@ namespace bomberman
     {
         if (!isHostField)
         {
-            if (target.size() >= kMaxPlayerNameLen)
-                return;
-
             for (const char c : chunk)
             {
                 if (target.size() >= kMaxPlayerNameLen)
@@ -254,9 +250,6 @@ namespace bomberman
             }
             return;
         }
-
-        if (target.size() >= kMaxIpv4HostLen)
-            return;
 
         for (const char c : chunk)
         {
@@ -292,7 +285,6 @@ namespace bomberman
         return measureTextWidth(text) <= fieldWidth;
     }
 
-    // static
     bool ConnectScene::isValidIPv4(std::string_view ip)
     {
         int octetCount = 0;
@@ -337,7 +329,9 @@ namespace bomberman
         hostValueText->setPosition(std::max(hostFieldX_, hostX), hostFieldY_);
     }
 
-    // -----------------------------------------------------------------------------------------------------------------
+    // =================================================================================================================
+    // ==== Connection logic and status updates ========================================================================
+    // =================================================================================================================
 
     std::string_view ConnectScene::effectivePlayerName() const
     {
@@ -409,7 +403,14 @@ namespace bomberman
                 break;
             case net::EConnectState::Connected:
                 setStatusText("Connected!", {80, 220, 80, 255});
-                // TODO: transition to online gameplay scene once it exists.
+
+                if (!enteredOnlineFlow_)
+                {
+                    enteredOnlineFlow_ = true;
+                    game->getSceneManager()->addScene("stage", std::make_shared<StageScene>(game, 1, 0));
+                    game->getSceneManager()->activateScene("stage");
+                    game->getSceneManager()->removeScene("connect");
+                }
                 break;
             case net::EConnectState::FailedResolve:
                 setStatusText("Could not resolve host", {220, 80, 80, 255});
