@@ -111,7 +111,10 @@ namespace bomberman::net
 
         // Already connected or in-progress: ignore duplicate calls.
         if (isConnected() || state_ == EConnectState::Connecting || state_ == EConnectState::Handshaking)
+        {
+            LOG_CLIENT_DEBUG("beginConnect() called while already in state {} – ignoring", connectStateName(state_));
             return;
+        }
 
         if (!initializeENet())
         {
@@ -166,11 +169,15 @@ namespace bomberman::net
         {
             enet_peer_disconnect(impl_->peer, 0);
 
-            // Wait for disconnect acknowledgement.
+            // Wait for disconnect acknowledgement (capped to avoid unbounded spin).
+            constexpr int kDisconnectDrainMaxIter = 50;
             ENetEvent event{};
             bool disconnectAckReceived = false;
-            while (!disconnectAckReceived && enet_host_service(impl_->host, &event, 100) > 0)
+            int iter = 0;
+            while (!disconnectAckReceived && iter < kDisconnectDrainMaxIter
+                   && enet_host_service(impl_->host, &event, 100) > 0)
             {
+                ++iter;
                 switch (event.type)
                 {
                     case ENET_EVENT_TYPE_RECEIVE:
@@ -399,24 +406,16 @@ namespace bomberman::net
         if (!impl_ || !isConnected())
             return;
 
-        PacketHeader header{};
-        header.type = EMsgType::Input;
-        header.payloadSize = static_cast<uint16_t>(kMsgInputSize);
-        header.sequence = ++impl_->nextInputSequence;
-        header.tick = clientTick;
-        header.flags = 0;
-
-        std::array<uint8_t, kPacketHeaderSize + kMsgInputSize> bytes{};
-        serializeHeader(header, bytes.data());
-        serializeMsgInput(input, bytes.data() + kPacketHeaderSize);
+        const uint32_t seq = ++impl_->nextInputSequence;
+        const auto bytes = makeInputPacket(input, seq, clientTick);
 
         if (!sendUnreliable(impl_->host, impl_->peer, bytes))
             return;
 
-        if ((header.sequence % kInputLogEveryN) == 0)
+        if ((seq % kInputLogEveryN) == 0)
         {
             LOG_CLIENT_DEBUG("Sent Input seq={} tick={} move=({},{}) bombCmdId={}",
-                             header.sequence, header.tick,
+                             seq, clientTick,
                              static_cast<int>(input.moveX), static_cast<int>(input.moveY),
                              input.bombCommandId);
         }
