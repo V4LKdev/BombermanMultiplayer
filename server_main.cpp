@@ -1,14 +1,14 @@
 #include <csignal>
+#include <chrono>
 #include <cstdlib>
 #include <iostream>
 #include <string>
 #include <string_view>
-#include <unordered_map>
-
 #include <enet/enet.h>
+
 #include "Net/NetCommon.h"
-#include "Net/NetSend.h"
-#include "Net/PacketDispatch.h"
+#include "Server/ServerHandlers.h"
+#include "Server/ServerSession.h"
 #include "Util/CliCommon.h"
 #include "Util/Log.h"
 
@@ -17,9 +17,13 @@ using namespace bomberman::net;
 // TODO: Read these from a config file or CLI arguments
 namespace
 {
+    using ServerClock = std::chrono::steady_clock;
+
     constexpr std::size_t kMaxPeers = 2;
     constexpr int kServiceTimeoutMs = 16;
-    constexpr uint16_t kServerTickRate = 60;
+    constexpr uint32_t kSimStepMs = 1000u / bomberman::server::kServerTickRate;
+    constexpr uint32_t kMaxFrameClampMs = 250u;
+    constexpr uint32_t kMaxStepsPerFrame = 8;
 
     /// Global flag for graceful shutdown
     volatile std::sig_atomic_t gRunning = 1;
@@ -111,129 +115,6 @@ namespace
     }
 } // namespace
 
-
-// =====================================================================================================================
-// ==== Server-Side Types ==============================================================================================
-// =====================================================================================================================
-
-// TODO: Evolve into a better ClientState with input history, ack tracking, etc.
-
-/** @brief Long-lived server state shared across all dispatch calls. */
-struct ServerState
-{
-    ENetHost* host = nullptr;
-    std::unordered_map<uint32_t, MsgInput> inputs;              ///< Latest input state per connected client
-    std::unordered_map<uint32_t, uint16_t> lastBombCommandId;   ///< Last seen bombCommandId per client (for dedup)
-};
-
-/** @brief Per-dispatch context passed to handlers - bundles shared state with the sending peer. */
-struct ServerContext
-{
-    ServerState& state;
-    ENetPeer*    peer;
-};
-
-
-// =====================================================================================================================
-// ==== Message Handlers ===============================================================================================
-// =====================================================================================================================
-
-/** @brief Handles a Hello handshake message - validates protocol version and replies with Welcome. */
-void onHello(ServerContext& ctx, const PacketHeader& /*header*/, const uint8_t* payload, std::size_t payloadSize)
-{
-    MsgHello msgHello{};
-    if (!deserializeMsgHello(payload, payloadSize, msgHello))
-    {
-        LOG_SERVER_WARN("Failed to parse Hello payload");
-        return;
-    }
-
-    // TODO: Send a Reject message instead of silently dropping on protocol mismatch
-    if (msgHello.protocolVersion != kProtocolVersion)
-    {
-        LOG_SERVER_ERROR("Protocol mismatch (client={}, server={})", msgHello.protocolVersion, kProtocolVersion);
-        return;
-    }
-
-    const std::string_view playerName(msgHello.name, boundedStrLen(msgHello.name, kPlayerNameMax));
-    LOG_SERVER_INFO("Hello from \"{}\"", playerName);
-
-    // Build and send Welcome response
-    MsgWelcome welcome{};
-    welcome.protocolVersion = kProtocolVersion;
-    welcome.clientId = ctx.peer->incomingPeerID;
-    welcome.serverTickRate = kServerTickRate;
-
-    if (sendReliable(ctx.state.host, ctx.peer, makeWelcomePacket(welcome, 0, 0)))
-    {
-        LOG_SERVER_INFO("Sent Welcome to clientId={}", welcome.clientId);
-    }
-}
-
-/**
- *  @brief Handles an Input message - stores the latest input state for the sending client.
- *
- *  Movement inputs arrive every tick unreliably. The server keeps only the most recent
- *  state per client; older inputs are implicitly superseded.
- */
-void onInput(ServerContext& ctx, const PacketHeader& header, const uint8_t* payload, std::size_t size)
-{
-    MsgInput msgInput{};
-    if (!deserializeMsgInput(payload, size, msgInput))
-    {
-        LOG_SERVER_WARN("Failed to parse Input payload");
-        return;
-    }
-
-    const uint32_t clientId = ctx.peer->incomingPeerID;
-
-    // Detect new bomb command by comparing to last seen value.
-    auto& lastCmd = ctx.state.lastBombCommandId[clientId];
-    if (msgInput.bombCommandId != lastCmd)
-    {
-        lastCmd = msgInput.bombCommandId;
-
-        LOG_SERVER_DEBUG("Bomb request: clientId={} bombCmdId={}",
-                         clientId, msgInput.bombCommandId);
-        // TODO: Validate & spawn bomb (cooldown, max bombs, position check)
-    }
-
-    ctx.state.inputs[clientId] = msgInput;
-
-    if (header.sequence % kInputLogEveryN == 0)
-    {
-        LOG_SERVER_DEBUG("Input clientId={} seq={} tick={} move=({},{}) bombCmdId={}",
-                         clientId, header.sequence, header.tick,
-                         static_cast<int>(msgInput.moveX), static_cast<int>(msgInput.moveY),
-                         msgInput.bombCommandId);
-    }
-}
-
-// =====================================================================================================================
-// ==== Packet Dispatcher ==============================================================================================
-// =====================================================================================================================
-
-/** @brief Creates the server dispatcher and binds all message handlers. */
-PacketDispatcher<ServerContext> makeServerDispatcher()
-{
-    PacketDispatcher<ServerContext> d{};
-    d.bind(EMsgType::Hello, &onHello);
-    d.bind(EMsgType::Input, &onInput);
-    return d;
-}
-
-/// Global dispatcher instance - initialized once, immutable thereafter.
-static const PacketDispatcher<ServerContext> gDispatcher = makeServerDispatcher();
-
-/** @brief Parses and dispatches a received ENet packet through the server dispatcher. */
-void handleEventReceive(const ENetEvent& event, ServerState& state)
-{
-    LOG_SERVER_TRACE("Received {} bytes on channel {}", event.packet->dataLength, channelName(event.channelID));
-
-    ServerContext ctx{state, event.peer};
-    dispatchPacket(gDispatcher, ctx, event.packet->data, event.packet->dataLength);
-}
-
 // =====================================================================================================================
 // ==== Main Loop ======================================================================================================
 // =====================================================================================================================
@@ -279,14 +160,42 @@ int main(int argc, char** argv)
         return EXIT_FAILURE;
     }
 
-    LOG_SERVER_INFO("Listening on port {} (max {} peers)", cli.port, kMaxPeers);
+    LOG_SERVER_INFO("==== BOMBERMAN DEDICATED SERVER ===================================================================");
+    LOG_SERVER_INFO("Listening on port {} with max {} peers", cli.port, kMaxPeers);
 
-    ServerState state{};
+    bomberman::server::ServerState state{};
     state.host = server;
+
+    auto lastTickTime = ServerClock::now();
+    uint32_t accumulatorMs = 0;
 
     // Main event loop - drain all pending events each iteration.
     while (gRunning)
     {
+        const auto currentTickTime = ServerClock::now();
+        uint32_t frameDeltaMs = static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(currentTickTime - lastTickTime).count());
+        lastTickTime = currentTickTime;
+
+        if (frameDeltaMs > kMaxFrameClampMs)
+        {
+            frameDeltaMs = kMaxFrameClampMs;
+        }
+        accumulatorMs += frameDeltaMs;
+
+        int stepCount = 0;
+        while (accumulatorMs >= kSimStepMs && stepCount < kMaxStepsPerFrame)
+        {
+            bomberman::server::simulateServerTick(state);
+
+            accumulatorMs -= kSimStepMs;
+            ++stepCount;
+        }
+
+        if (stepCount >= kMaxStepsPerFrame)
+        {
+            LOG_SERVER_WARN("Exceeded max server tick steps ({}), accumulator={}ms", kMaxStepsPerFrame, accumulatorMs);
+        }
+        
         ENetEvent event{};
         int result = enet_host_service(server, &event, kServiceTimeoutMs);
 
@@ -299,7 +208,7 @@ int main(int argc, char** argv)
                     break;
 
                 case ENET_EVENT_TYPE_RECEIVE:
-                    handleEventReceive(event, state);
+                    bomberman::server::handleEventReceive(event, state);
                     enet_packet_destroy(event.packet);
                     break;
 

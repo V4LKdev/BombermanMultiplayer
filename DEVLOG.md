@@ -495,3 +495,26 @@ Hook the connect form into `NetClient` async connect flow and reflect state chan
 
 ### Result
 - The connect screen now drives async connection attempts and shows real-time status feedback end-to-end.
+
+## 2026-03-08 – Extract Server Session/Handlers Modules + Integrate Server Tick Loop
+
+### Goal
+Reduce `server_main.cpp` complexity by moving networking and server-state responsibilities into dedicated server modules while keeping behavior unchanged.
+
+### Changes
+- Added server module stubs and integration:
+  - `Server/ServerSession.h/.cpp`
+  - `Server/ServerHandlers.h/.cpp`
+  - `Server/ServerSnapshot.h/.cpp` (placeholder)
+- Moved server-owned state (`ServerState`, `ServerContext`) into `ServerSession`.
+- Moved packet handling and dispatch path (`onHello`, `onInput`, dispatcher, `handleEventReceive`) into `ServerHandlers`.
+- Kept `server_main.cpp` focused on process orchestration:
+  - CLI parsing
+  - ENet host lifecycle
+  - fixed-step server tick loop + event pump
+- Wired new server source files into `Bomberman_Server` target in `CMakeLists.txt`.
+- Consolidated server tick rate constant in server module and derived sim step from it in `server_main.cpp`.
+
+### Result
+- Server code is split by responsibility and easier to extend.
+- `Bomberman_Server` and `Bomberman` both build cleanly after extraction.
