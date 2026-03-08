@@ -543,3 +543,59 @@ Extend the protocol with explicit handshake failure reporting and a first author
 ### Result
 - Protocol now supports explicit handshake rejection signaling and a baseline full-state snapshot payload.
 - Wire parsing for the new messages is deterministic and validated.
+
+## 2026-03-08 (248e5cf) – Add Packet Builders + State Wire Validation Cleanup
+
+### Goal
+Finish packet-construction helpers for the new message types and tighten state payload validation behavior.
+
+### Changes
+- Added packet builders in `NetCommon`:
+  - `makeRejectPacket(...)`
+  - `makeInputPacket(...)`
+  - `makeStatePacket(...)`
+- Moved player-flag mask to `MsgState::PlayerState::kKnownFlags` near the enum declaration.
+- Added explicit cast when serializing signed fixed-point state coords (`xQ`, `yQ`) to little-endian `u16`.
+- Reduced unbound-message log noise by downgrading dispatcher miss logs from `WARN` to `TRACE`.
+
+### Result
+- Packet creation is now symmetric across control/input/state messages.
+- State serialization and validation rules are clearer and more maintainable.
+
+## 2026-03-08 (5a05bce) – Add Broadcast Send Helpers + Client Send Cleanup
+
+### Goal
+Centralize fanout send behavior and remove duplicated packet-header boilerplate on the client send path.
+
+### Changes
+- Added `broadcastReliable(...)` and `broadcastUnreliable(...)` to `NetSend`.
+- Broadcast helpers now queue per peer and flush once per call.
+- Updated `NetClient::sendInput(...)` to use `makeInputPacket(...)`.
+- Added debug trace for duplicate `beginConnect(...)` calls.
+- Capped disconnect drain loop iterations in `NetClient::disconnect()` to avoid unbounded wait.
+
+### Result
+- Send paths are cleaner, and broadcast fanout now lives in one transport helper layer.
+
+## 2026-03-08 (ef87a72) – Harden Server Handshake + Broadcast Tick Snapshots
+
+### Goal
+Wire first server snapshot broadcast flow and harden server-side handshake/input gating.
+
+### Changes
+- Server handlers:
+  - Added reject helper and reject-on-failure handshake flow (`ServerFull`, `VersionMismatch`).
+  - Added duplicate-`Hello` guard and non-handshaked input guard via `peer->data` state.
+  - Initialized per-client maps on successful handshake.
+- Server session:
+  - Added `nextStateSequence` to `ServerState`.
+  - Added `buildStateSnapshot(...)` with compact fill and sorted client IDs.
+  - Added per-tick `MsgState` packet build + `broadcastUnreliable(...)` send.
+- Server main loop:
+  - Bound max peers to protocol `kMaxPlayers`.
+  - Reordered event drain before simulation step to reduce one-tick input delay.
+  - Tightened service timeout and improved disconnect cleanup/logging semantics.
+
+### Result
+- Server now produces and broadcasts authoritative state snapshots each tick.
+- Handshake and input handling are stricter and more predictable.
