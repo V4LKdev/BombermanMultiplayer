@@ -518,3 +518,28 @@ Reduce `server_main.cpp` complexity by moving networking and server-state respon
 ### Result
 - Server code is split by responsibility and easier to extend.
 - `Bomberman_Server` and `Bomberman` both build cleanly after extraction.
+
+## 2026-03-08 – Add MsgReject + Initial MsgState Wire Format
+
+### Goal
+Extend the protocol with explicit handshake failure reporting and a first authoritative server-state snapshot payload.
+
+### Changes
+- Added `MsgReject` and `EMsgType::Reject` to the protocol.
+- Added `MsgState` and `EMsgType::State` with fixed-size player array (`kMaxPlayers`).
+- Added payload size constants and minimum payload validation:
+  - `kMsgRejectSize`
+  - `kMsgStateSize`
+  - `minPayloadSize(...)` coverage for both new message types
+- Implemented serializers/deserializers:
+  - `serializeMsgReject(...)` / `deserializeMsgReject(...)`
+  - `serializeMsgState(...)` / `deserializeMsgState(...)`
+- Added defensive parsing checks:
+  - reject unknown `MsgReject` reason values
+  - reject `MsgState` packets with `playerCount > kMaxPlayers`
+  - reject `MsgState` packets with unknown player-flag bits
+- Fixed `MsgState` wire packing stride to avoid player-entry overlap.
+
+### Result
+- Protocol now supports explicit handshake rejection signaling and a baseline full-state snapshot payload.
+- Wire parsing for the new messages is deterministic and validated.

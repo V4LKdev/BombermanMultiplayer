@@ -25,10 +25,14 @@ namespace bomberman::net
     // =================================================================================================================
 
     constexpr uint16_t kProtocolVersion = 1;
+
     constexpr uint16_t kDefaultServerPort = 12345; ///< Default server port used by both client and server.
-    constexpr std::size_t kPlayerNameMax = 16;
     constexpr std::size_t kMaxPacketSize = 1400; ///< Upper packet size bound (below typical 1500-byte MTU).
     constexpr uint32_t kInputLogEveryN = 30;     ///< Input log sampling interval on client and server. (TODO: replace with proper telemetry)
+
+    /** @note Changing these values will affect wire layout and require protocol version bump. */
+    constexpr std::size_t kPlayerNameMax = 16;
+    constexpr uint8_t kMaxPlayers = 4;          ///< Maximum supported player count in a game instance.
 
     /** @brief ENet channel identifiers. */
     enum class EChannel : uint8_t
@@ -50,7 +54,6 @@ namespace bomberman::net
     }
 
 
-    /** @brief Header wire size in bytes. */
     constexpr std::size_t kPacketHeaderSize =
         sizeof(uint8_t) +  // type
         sizeof(uint16_t) + // payloadSize
@@ -58,30 +61,41 @@ namespace bomberman::net
         sizeof(uint32_t) + // tick
         sizeof(uint8_t);   // flags
 
-    /** @brief Hello payload wire size in bytes. */
     constexpr std::size_t kMsgHelloSize =
         sizeof(uint16_t) + // protocolVersion
         kPlayerNameMax;    // name (fixed-size field)
 
-    /** @brief Welcome payload wire size in bytes. */
     constexpr std::size_t kMsgWelcomeSize =
         sizeof(uint16_t) + // protocolVersion
         sizeof(uint32_t) + // clientId
         sizeof(uint16_t);  // serverTickRate
 
-    /** @brief Input payload wire size in bytes. */
+    constexpr std::size_t kMsgRejectSize =
+        sizeof(uint8_t) +  // reason
+        sizeof(uint16_t);  // expectedProtocolVersion
+
     constexpr std::size_t kMsgInputSize =
         sizeof(int8_t) +   // moveX
         sizeof(int8_t) +   // moveY
         sizeof(uint16_t);  // bombCommandId
 
+    constexpr std::size_t kMsgStateSize =
+        sizeof(uint8_t) +  // playerCount
+        kMaxPlayers *
+            (sizeof(uint8_t) +   // clientId
+             sizeof(int16_t) +   // xQ
+             sizeof(int16_t) +   // yQ
+             sizeof(uint8_t));   // flags
+
     /** @brief Compile-time checks for expected wire sizes. */
     static_assert(sizeof(char) == 1, "Unexpected char size");
 
-    static_assert(kPacketHeaderSize == 12, "PacketHeader size mismatch");
-    static_assert(kMsgHelloSize == 18, "MsgHello size mismatch");
-    static_assert(kMsgWelcomeSize == 8, "MsgWelcome size mismatch");
-    static_assert(kMsgInputSize == 4, "MsgInput size mismatch");
+    static_assert(kPacketHeaderSize == 12,  "PacketHeader size mismatch");
+    static_assert(kMsgHelloSize     == 18,  "MsgHello size mismatch");
+    static_assert(kMsgWelcomeSize   == 8,   "MsgWelcome size mismatch");
+    static_assert(kMsgRejectSize    == 3,   "MsgReject size mismatch");
+    static_assert(kMsgInputSize     == 4,   "MsgInput size mismatch");
+    static_assert(kMsgStateSize     == 25,  "MsgState size mismatch");
 
     // =================================================================================================================
     // ===== Message Types =============================================================================================
@@ -92,15 +106,19 @@ namespace bomberman::net
     {
         Hello = 0x01,
         Welcome = 0x02,
-        // TODO: Add Reject = 0x03: server sends this on handshake failure
-        Input = 0x10
+        Reject = 0x03,
+
+        Input = 0x10,
+        State = 0x11
     };
 
     /** @brief Checks if a raw byte value corresponds to a valid EMsgType. */
     inline bool isValidMsgType(uint8_t raw) {
-        return raw == static_cast<uint8_t>(EMsgType::Hello) ||
-               raw == static_cast<uint8_t>(EMsgType::Welcome) ||
-               raw == static_cast<uint8_t>(EMsgType::Input);
+        return raw == static_cast<uint8_t>(EMsgType::Hello)     ||
+               raw == static_cast<uint8_t>(EMsgType::Welcome)   ||
+               raw == static_cast<uint8_t>(EMsgType::Reject)    ||
+               raw == static_cast<uint8_t>(EMsgType::Input)     ||
+               raw == static_cast<uint8_t>(EMsgType::State);
     }
 
     /** @brief Returns minimum payload size for a message type/version. */
@@ -110,7 +128,9 @@ namespace bomberman::net
         {
             case EMsgType::Hello:   return kMsgHelloSize;     // v1: 18 bytes
             case EMsgType::Welcome: return kMsgWelcomeSize;   // v1: 8 bytes
+            case EMsgType::Reject:  return kMsgRejectSize;    // v1: 3 bytes
             case EMsgType::Input:   return kMsgInputSize;     // v1: 4 bytes
+            case EMsgType::State:   return kMsgStateSize;     // v1: 25 bytes
             default:                return 0;
         }
     }
@@ -148,15 +168,31 @@ namespace bomberman::net
     struct MsgWelcome
     {
         uint16_t protocolVersion; ///< Server protocol version.
-        uint32_t clientId;        ///< Server-assigned client identifier.
+        uint32_t clientId;        ///< Server-assigned client identifier. // TODO: consider switching to uint8_t and research how enet hands client IDs
         uint16_t serverTickRate;  ///< Authoritative server simulation tick rate.
+    };
+
+    /** @brief Reject payload sent by server in response to Hello on failure. */
+    struct MsgReject
+    {
+        enum class EReason : uint8_t
+        {
+            VersionMismatch = 0x01,
+            ServerFull = 0x02,
+            Banned = 0x03,
+            Other = 0xFF
+        };
+
+        EReason reason = EReason::Other; ///< Rejection reason code.
+
+        uint16_t expectedProtocolVersion = 0; ///< Expected protocol version.
     };
 
     /** @brief Input payload sent by client each simulation tick. */
     struct MsgInput
     {
-        int8_t moveX; ///< Horizontal movement in {-1, 0, 1}.
-        int8_t moveY; ///< Vertical movement in {-1, 0, 1}.
+        int8_t moveX = 0; ///< Horizontal movement in {-1, 0, 1}.
+        int8_t moveY = 0; ///< Vertical movement in {-1, 0, 1}.
 
         /**
          * @brief Monotonically increasing bomb-placement command identifier.
@@ -165,6 +201,31 @@ namespace bomberman::net
          * The server applies a new request when this value changes.
          */
         uint16_t bombCommandId = 0;
+    };
+
+    /** @brief State payload sent by server to clients each simulation tick. */
+    // TODO: State uses full snapshots rn. Switch to delta snapshots later.
+    struct MsgState
+    {
+        uint8_t playerCount; ///< Number of active players in the game.
+
+        struct PlayerState
+        {
+            uint8_t clientId; ///< Player identifier.
+            int16_t xQ;         ///< Player X position in fixed-point scale format.
+            int16_t yQ;         ///< Player Y position in fixed-point scale format.
+
+            enum class EPlayerFlags : uint8_t
+            {
+                Alive = 0x01, ///< Player is alive if set, dead if unset.
+                Invulnerable = 0x02  ///< Player is invulnerable if set (e.g. spawn protection).
+            };
+
+            EPlayerFlags flags;     ///< Player alive status and other state flags.
+        };
+
+        // TODO: Consider switching to a variable-length array of PlayerState with playerCount.
+        PlayerState players[kMaxPlayers]; ///< State of each player.
     };
 
     // =================================================================================================================
@@ -351,6 +412,41 @@ namespace bomberman::net
         return true;
     }
 
+    /** @brief Serializes `MsgReject` to fixed-size wire payload. */
+    inline void serializeMsgReject(const MsgReject& reject, uint8_t* out) noexcept
+    {
+        out[0] = static_cast<uint8_t>(reject.reason);
+        writeU16LE(out + 1, reject.expectedProtocolVersion);
+    }
+
+    /** @brief Deserializes `MsgReject` from fixed-size wire payload. */
+    [[nodiscard]]
+    inline bool deserializeMsgReject(const uint8_t* in, std::size_t inSize, MsgReject& outReject)
+    {
+        if (inSize < kMsgRejectSize)
+        {
+            return false;
+        }
+
+        outReject.reason = static_cast<MsgReject::EReason>(in[0]);
+
+        switch (outReject.reason)
+        {
+            case MsgReject::EReason::VersionMismatch:
+                outReject.expectedProtocolVersion = readU16LE(in + 1);
+                break;
+            case MsgReject::EReason::ServerFull:
+            case MsgReject::EReason::Banned:
+            case MsgReject::EReason::Other:
+                outReject.expectedProtocolVersion = 0;
+                break;
+            default:
+                return false;
+        }
+
+        return true;
+    }
+
     /** @brief Serializes `MsgInput` to fixed-size wire payload. */
     inline void serializeMsgInput(const MsgInput& input, uint8_t* out) noexcept
     {
@@ -380,6 +476,59 @@ namespace bomberman::net
         outInput.moveX = rawMoveX;
         outInput.moveY = rawMoveY;
         outInput.bombCommandId = readU16LE(in + 2);
+        return true;
+    }
+
+    /** @brief Serializes `MsgState` to fixed-size wire payload. */
+    inline void serializeMsgState(const MsgState& state, uint8_t* out) noexcept
+    {
+        const uint8_t playerCount = (state.playerCount <= kMaxPlayers) ? state.playerCount : kMaxPlayers;
+        out[0] = playerCount;
+
+        for (std::size_t i = 0; i < kMaxPlayers; ++i)
+        {
+            const auto& player = state.players[i];
+            const std::size_t offset = 1 + i * 6;
+            out[offset] = player.clientId;
+            writeU16LE(out + offset + 1, player.xQ);
+            writeU16LE(out + offset + 3, player.yQ);
+            out[offset + 5] = static_cast<uint8_t>(player.flags);
+        }
+    }
+
+    /** @brief Deserializes `MsgState` from fixed-size wire payload. */
+    [[nodiscard]]
+    inline bool deserializeMsgState(const uint8_t* in, std::size_t inSize, MsgState& outState)
+    {
+        if (inSize < kMsgStateSize)
+        {
+            return false;
+        }
+
+        outState.playerCount = in[0];
+        if (outState.playerCount > kMaxPlayers)
+        {
+            return false;
+        }
+
+        for (std::size_t i = 0; i < kMaxPlayers; ++i)
+        {
+            const std::size_t offset = 1 + i * 6;
+            auto& player = outState.players[i];
+            player.clientId = in[offset];
+            player.xQ = static_cast<int16_t>(readU16LE(in + offset + 1));
+            player.yQ = static_cast<int16_t>(readU16LE(in + offset + 3));
+            const uint8_t rawFlags = in[offset + 5];
+            constexpr uint8_t kKnownPlayerFlags =
+                static_cast<uint8_t>(MsgState::PlayerState::EPlayerFlags::Alive) |
+                static_cast<uint8_t>(MsgState::PlayerState::EPlayerFlags::Invulnerable);
+            if ((rawFlags & ~kKnownPlayerFlags) != 0)
+            {
+                return false;
+            }
+            player.flags = static_cast<MsgState::PlayerState::EPlayerFlags>(rawFlags);
+        }
+
         return true;
     }
 
