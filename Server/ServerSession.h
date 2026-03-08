@@ -17,6 +17,7 @@ namespace bomberman::server
     {
         ENetHost* host = nullptr;
         uint32_t serverTick = 0;
+        uint32_t nextStateSequence = 0; ///< Monotonically increasing sequence number for state packets.
 
         std::unordered_map<uint32_t, net::MsgInput> inputs;            ///< Latest input state per connected client
         std::unordered_map<uint32_t, uint16_t> lastBombCommandId;      ///< Last seen bombCommandId per client (for dedup)
@@ -31,6 +32,9 @@ namespace bomberman::server
 
     /** @brief Advances the server simulation by one tick - processes inputs, updates game state, etc. */
     void simulateServerTick(ServerState& state);
+
+    /** @brief Builds a `MsgState` snapshot from the current `ServerState` for broadcasting to clients. */
+    net::MsgState buildStateSnapshot(const ServerState& state);
 
 } // namespace bomberman::server
 

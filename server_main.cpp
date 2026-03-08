@@ -19,8 +19,8 @@ namespace
 {
     using ServerClock = std::chrono::steady_clock;
 
-    constexpr std::size_t kMaxPeers = 2;
-    constexpr int kServiceTimeoutMs = 16;
+    constexpr std::size_t kMaxPeers = kMaxPlayers;
+    constexpr int kServiceTimeoutMs = 1; ///< ENet service timeout in milliseconds - controls event loop responsiveness and CPU usage.
     constexpr uint32_t kSimStepMs = 1000u / bomberman::server::kServerTickRate;
     constexpr uint32_t kMaxFrameClampMs = 250u;
     constexpr uint32_t kMaxStepsPerFrame = 8;
@@ -182,20 +182,8 @@ int main(int argc, char** argv)
         }
         accumulatorMs += frameDeltaMs;
 
-        int stepCount = 0;
-        while (accumulatorMs >= kSimStepMs && stepCount < kMaxStepsPerFrame)
-        {
-            bomberman::server::simulateServerTick(state);
-
-            accumulatorMs -= kSimStepMs;
-            ++stepCount;
-        }
-
-        if (stepCount >= kMaxStepsPerFrame)
-        {
-            LOG_SERVER_WARN("Exceeded max server tick steps ({}), accumulator={}ms", kMaxStepsPerFrame, accumulatorMs);
-        }
-        
+        // Drain all pending ENet events FIRST so inputs from this frame
+        // are available to simulateServerTick() below (avoids one tick of input latency).
         ENetEvent event{};
         int result = enet_host_service(server, &event, kServiceTimeoutMs);
 
@@ -213,11 +201,18 @@ int main(int argc, char** argv)
                     break;
 
                 case ENET_EVENT_TYPE_DISCONNECT:
-                    LOG_SERVER_INFO("Peer disconnected (id={})", event.peer->incomingPeerID);
-                    state.inputs.erase(event.peer->incomingPeerID);
-                    state.lastBombCommandId.erase(event.peer->incomingPeerID);
+                {
+                    const uint32_t peerId = event.peer->incomingPeerID;
+                    const bool wasHandshaked = (event.peer->data != nullptr);
+                    LOG_SERVER_INFO("Peer disconnected (id={}, handshaked={})", peerId, wasHandshaked);
+                    if (wasHandshaked)
+                    {
+                        state.inputs.erase(peerId);
+                        state.lastBombCommandId.erase(peerId);
+                    }
                     event.peer->data = nullptr;
                     break;
+                }
 
                 case ENET_EVENT_TYPE_NONE:
                     break;
@@ -231,6 +226,21 @@ int main(int argc, char** argv)
         {
             LOG_SERVER_ERROR("enet_host_service failed, shutting down");
             break;
+        }
+
+        // Now advance the simulation with the freshly received inputs.
+        int stepCount = 0;
+        while (accumulatorMs >= kSimStepMs && stepCount < kMaxStepsPerFrame)
+        {
+            bomberman::server::simulateServerTick(state);
+
+            accumulatorMs -= kSimStepMs;
+            ++stepCount;
+        }
+
+        if (stepCount >= kMaxStepsPerFrame)
+        {
+            LOG_SERVER_WARN("Exceeded max server tick steps ({}), accumulator={}ms", kMaxStepsPerFrame, accumulatorMs);
         }
     }
 
