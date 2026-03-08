@@ -124,7 +124,7 @@ namespace bomberman::net
 
         if (!dispatcher.dispatch(context, header, payload, payloadSize))
         {
-            LOG_PROTO_WARN("No handler for message type {}", static_cast<int>(header.type));
+            LOG_PROTO_TRACE("No handler for message type 0x{:02x}", static_cast<int>(header.type));
             return false;
         }
 

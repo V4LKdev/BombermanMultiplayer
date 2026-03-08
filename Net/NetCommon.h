@@ -221,6 +221,10 @@ namespace bomberman::net
                 Invulnerable = 0x02  ///< Player is invulnerable if set (e.g. spawn protection).
             };
 
+            static constexpr uint8_t kKnownFlags =
+                static_cast<uint8_t>(EPlayerFlags::Alive) |
+                static_cast<uint8_t>(EPlayerFlags::Invulnerable);
+
             EPlayerFlags flags;     ///< Player alive status and other state flags.
         };
 
@@ -490,8 +494,8 @@ namespace bomberman::net
             const auto& player = state.players[i];
             const std::size_t offset = 1 + i * 6;
             out[offset] = player.clientId;
-            writeU16LE(out + offset + 1, player.xQ);
-            writeU16LE(out + offset + 3, player.yQ);
+            writeU16LE(out + offset + 1, static_cast<uint16_t>(player.xQ));
+            writeU16LE(out + offset + 3, static_cast<uint16_t>(player.yQ));
             out[offset + 5] = static_cast<uint8_t>(player.flags);
         }
     }
@@ -519,10 +523,7 @@ namespace bomberman::net
             player.xQ = static_cast<int16_t>(readU16LE(in + offset + 1));
             player.yQ = static_cast<int16_t>(readU16LE(in + offset + 3));
             const uint8_t rawFlags = in[offset + 5];
-            constexpr uint8_t kKnownPlayerFlags =
-                static_cast<uint8_t>(MsgState::PlayerState::EPlayerFlags::Alive) |
-                static_cast<uint8_t>(MsgState::PlayerState::EPlayerFlags::Invulnerable);
-            if ((rawFlags & ~kKnownPlayerFlags) != 0)
+            if ((rawFlags & ~MsgState::PlayerState::kKnownFlags) != 0)
             {
                 return false;
             }
@@ -574,6 +575,57 @@ namespace bomberman::net
         std::array<uint8_t, kPacketHeaderSize + kMsgWelcomeSize> bytes{};
         serializeHeader(header, bytes.data());
         serializeMsgWelcome(welcome, bytes.data() + kPacketHeaderSize);
+
+        return bytes;
+    }
+
+    /** @brief Builds a full Reject packet (header + payload). */
+    inline std::array<uint8_t, kPacketHeaderSize + kMsgRejectSize> makeRejectPacket(const MsgReject& reject, uint32_t sequence, uint32_t tick)
+    {
+        PacketHeader header{};
+        header.type = EMsgType::Reject;
+        header.payloadSize = static_cast<uint16_t>(kMsgRejectSize);
+        header.sequence = sequence;
+        header.tick = tick;
+        header.flags = 0;
+
+        std::array<uint8_t, kPacketHeaderSize + kMsgRejectSize> bytes{};
+        serializeHeader(header, bytes.data());
+        serializeMsgReject(reject, bytes.data() + kPacketHeaderSize);
+
+        return bytes;
+    }
+
+    /** @brief Builds a full Input packet (header + payload). */
+    inline std::array<uint8_t, kPacketHeaderSize + kMsgInputSize> makeInputPacket(const MsgInput& input, uint32_t sequence, uint32_t tick)
+    {
+        PacketHeader header{};
+        header.type = EMsgType::Input;
+        header.payloadSize = static_cast<uint16_t>(kMsgInputSize);
+        header.sequence = sequence;
+        header.tick = tick;
+        header.flags = 0;
+
+        std::array<uint8_t, kPacketHeaderSize + kMsgInputSize> bytes{};
+        serializeHeader(header, bytes.data());
+        serializeMsgInput(input, bytes.data() + kPacketHeaderSize);
+
+        return bytes;
+    }
+
+    /** @brief Builds a full State packet (header + payload). */
+    inline std::array<uint8_t, kPacketHeaderSize + kMsgStateSize> makeStatePacket(const MsgState& state, uint32_t sequence, uint32_t tick)
+    {
+        PacketHeader header{};
+        header.type = EMsgType::State;
+        header.payloadSize = static_cast<uint16_t>(kMsgStateSize);
+        header.sequence = sequence;
+        header.tick = tick;
+        header.flags = 0;
+
+        std::array<uint8_t, kPacketHeaderSize + kMsgStateSize> bytes{};
+        serializeHeader(header, bytes.data());
+        serializeMsgState(state, bytes.data() + kPacketHeaderSize);
 
         return bytes;
     }
