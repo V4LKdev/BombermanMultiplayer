@@ -1,10 +1,15 @@
-#ifndef _BOMBERMAN_CONST_H_
-#define _BOMBERMAN_CONST_H_
+#ifndef BOMBERMAN_CONST_H
+#define BOMBERMAN_CONST_H
+
+#include <cstdint>
+
 /**
- * @brief Tiles class for tile map creation
- *
+ * @file Const.h
+ * @brief Game-world configuration constants.
  */
-enum class Tile
+
+/// @brief Tile type identifiers used in the tile map.
+enum class Tile : uint8_t
 {
     Stone,
     Grass,
@@ -14,78 +19,79 @@ enum class Tile
     Bang
 };
 
-const int playerStartX = 1; // player start position X on tilemap
-const int playerStartY = 1; // player start position Y on tilemap
+namespace bomberman
+{
+    constexpr int playerStartX = 1; ///< Player spawn tile column.
+    constexpr int playerStartY = 1; ///< Player spawn tile row.
 
-const unsigned int brickSpawnRandomize = 10; // less value => more bricks
-const unsigned int doorSpawnRandomize = 10;  // less value => door is far
-const unsigned int bangSpawnCells = 5;       // bang spawn number of cells
-const unsigned int minEnemiesOnLevel = 2;    // minimum enemies count on level
-const unsigned int maxEnemiesOnLevel = 10;   // maximum enemies count on level
-const int bangSpawnPositions[bangSpawnCells][2] = {{0, 0},
-                                                   {0, 1},
-                                                   {1, 0},
-                                                   {0, -1},
-                                                   {-1, 0}}; // cell's position of bang
+    constexpr unsigned int brickSpawnRandomize = 10; ///< Brick density — lower value means more bricks.
+    constexpr unsigned int doorSpawnRandomize  = 10; ///< Door placement — lower value means door spawns further in.
+    constexpr unsigned int bangSpawnCells      = 5;  ///< Number of cells in the bang spread pattern.
+    constexpr unsigned int minEnemiesOnLevel   = 2;
+    constexpr unsigned int maxEnemiesOnLevel   = 10;
 
-const unsigned int tileArrayWidth = 31;                   // tile array width
-const unsigned int tileArrayHeight = 13;                  // tile array height
-const unsigned int tileSize = 16;                         // size in pixels of tile
-const Tile baseTiles[tileArrayHeight][tileArrayWidth] = { // base tilemap
-    {Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone,
-     Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone,
-     Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone,
-     Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone},
-    {Tile::Stone, Tile::EmptyGrass, Tile::EmptyGrass, Tile::EmptyGrass, Tile::Grass, Tile::Grass, Tile::Grass,
-     Tile::Grass, Tile::Grass,      Tile::Grass,      Tile::Grass,      Tile::Grass, Tile::Grass, Tile::Grass,
-     Tile::Grass, Tile::Grass,      Tile::Grass,      Tile::Grass,      Tile::Grass, Tile::Grass, Tile::Grass,
-     Tile::Grass, Tile::Grass,      Tile::Grass,      Tile::Grass,      Tile::Grass, Tile::Grass, Tile::Grass,
-     Tile::Grass, Tile::Grass,      Tile::Stone},
-    {Tile::Stone, Tile::EmptyGrass, Tile::Stone, Tile::EmptyGrass, Tile::Stone, Tile::Grass, Tile::Stone,
-     Tile::Grass, Tile::Stone,      Tile::Grass, Tile::Stone,      Tile::Grass, Tile::Stone, Tile::Grass,
-     Tile::Stone, Tile::Grass,      Tile::Stone, Tile::Grass,      Tile::Stone, Tile::Grass, Tile::Stone,
-     Tile::Grass, Tile::Stone,      Tile::Grass, Tile::Stone,      Tile::Grass, Tile::Stone, Tile::Grass,
-     Tile::Stone, Tile::Grass,      Tile::Stone},
-    {Tile::Stone, Tile::EmptyGrass, Tile::EmptyGrass, Tile::EmptyGrass, Tile::Grass, Tile::Grass, Tile::Grass,
-     Tile::Grass, Tile::Grass,      Tile::Grass,      Tile::Grass,      Tile::Grass, Tile::Grass, Tile::Grass,
-     Tile::Grass, Tile::Grass,      Tile::Grass,      Tile::Grass,      Tile::Grass, Tile::Grass, Tile::Grass,
-     Tile::Grass, Tile::Grass,      Tile::Grass,      Tile::Grass,      Tile::Grass, Tile::Grass, Tile::Grass,
-     Tile::Grass, Tile::Grass,      Tile::Stone},
-    {Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass,
-     Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass,
-     Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass,
-     Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone},
-    {Tile::Stone, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass,
-     Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass,
-     Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Brick, Tile::Grass, Tile::Grass, Tile::Grass,
-     Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Stone},
-    {Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass,
-     Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass,
-     Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass,
-     Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone},
-    {Tile::Stone, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass,
-     Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass,
-     Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass,
-     Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Stone},
-    {Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass,
-     Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass,
-     Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass,
-     Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone},
-    {Tile::Stone, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass,
-     Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass,
-     Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass,
-     Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Stone},
-    {Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass,
-     Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass,
-     Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass,
-     Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone},
-    {Tile::Stone, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass,
-     Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass,
-     Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass,
-     Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Stone},
-    {Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone,
-     Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone,
-     Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone,
-     Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone}};
+    constexpr int bangSpawnPositions[bangSpawnCells][2] = {
+        { 0,  0},
+        { 0,  1},
+        { 1,  0},
+        { 0, -1},
+        {-1,  0}
+    };
+    static_assert(bangSpawnCells == 5, "bangSpawnPositions row count must match bangSpawnCells");
 
-#endif // _BOMBERMAN_CONST_H_
+    constexpr unsigned int tileArrayWidth  = 31; ///< Tile map width in tiles.
+    constexpr unsigned int tileArrayHeight = 13; ///< Tile map height in tiles.
+    constexpr unsigned int tileSize        = 16; ///< Source sprite size in pixels (not scaled render size).
+
+    constexpr Tile baseTiles[tileArrayHeight][tileArrayWidth] = {
+        {Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone,
+            Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone,
+            Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone,
+            Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone},
+        {Tile::Stone, Tile::EmptyGrass, Tile::EmptyGrass, Tile::EmptyGrass, Tile::Grass, Tile::Grass, Tile::Grass,
+            Tile::Grass, Tile::Grass,      Tile::Grass,      Tile::Grass,      Tile::Grass, Tile::Grass, Tile::Grass,
+            Tile::Grass, Tile::Grass,      Tile::Grass,      Tile::Grass,      Tile::Grass, Tile::Grass, Tile::Grass,
+            Tile::Grass, Tile::Grass,      Tile::Grass,      Tile::Grass,      Tile::Grass, Tile::Grass, Tile::Grass,
+            Tile::Grass, Tile::Grass,      Tile::Stone},
+        {Tile::Stone, Tile::EmptyGrass, Tile::Stone, Tile::EmptyGrass, Tile::Stone, Tile::Grass, Tile::Stone,
+            Tile::Grass, Tile::Stone,      Tile::Grass, Tile::Stone,      Tile::Grass, Tile::Stone, Tile::Grass,
+            Tile::Stone, Tile::Grass,      Tile::Stone, Tile::Grass,      Tile::Stone, Tile::Grass, Tile::Stone,
+            Tile::Grass, Tile::Stone,      Tile::Grass, Tile::Stone,      Tile::Grass, Tile::Stone, Tile::Grass,
+            Tile::Stone, Tile::Grass,      Tile::Stone},
+        {Tile::Stone, Tile::EmptyGrass, Tile::EmptyGrass, Tile::EmptyGrass, Tile::Grass, Tile::Grass, Tile::Grass,
+            Tile::Grass, Tile::Grass,      Tile::Grass,      Tile::Grass,      Tile::Grass, Tile::Grass, Tile::Grass,
+            Tile::Grass, Tile::Grass,      Tile::Grass,      Tile::Grass,      Tile::Grass, Tile::Grass, Tile::Grass,
+            Tile::Grass, Tile::Grass,      Tile::Grass,      Tile::Grass,      Tile::Grass, Tile::Grass, Tile::Grass,
+            Tile::Grass, Tile::Grass,      Tile::Stone},
+        {Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass,
+            Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass,
+            Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass,
+            Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone},
+        {Tile::Stone, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass,
+            Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass,
+            Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Brick, Tile::Grass, Tile::Grass, Tile::Grass,
+            Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Stone},
+        {Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass,
+            Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass,
+            Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass,
+            Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone},
+        {Tile::Stone, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass,
+            Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass,
+            Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass,
+            Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Stone},
+        {Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass,
+            Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass,
+            Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass,
+            Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone, Tile::Grass, Tile::Stone},
+        {Tile::Stone, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass,
+            Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass,
+            Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass,
+            Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Grass, Tile::Stone},
+        {Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone,
+            Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone,
+            Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone,
+            Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone, Tile::Stone}
+    };
+} // namespace bomberman
+
+#endif // BOMBERMAN_CONST_H
