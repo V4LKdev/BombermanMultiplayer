@@ -2,6 +2,7 @@
 
 #include <string_view>
 
+#include "Const.h"
 #include "Net/NetSend.h"
 #include "Net/PacketDispatch.h"
 #include "ServerSession.h"
@@ -22,8 +23,7 @@ namespace bomberman::server
         {
             MsgReject reject{};
             reject.reason = reason;
-            reject.expectedProtocolVersion =
-                (reason == MsgReject::EReason::VersionMismatch) ? kProtocolVersion : 0;
+            reject.expectedProtocolVersion = (reason == MsgReject::EReason::VersionMismatch) ? kProtocolVersion : 0;
 
             if (sendReliable(ctx.state.host, ctx.peer, makeRejectPacket(reject, 0, 0)))
             {
@@ -53,19 +53,18 @@ namespace bomberman::server
 
     void onHello(ServerContext& ctx, const PacketHeader& /*header*/, const uint8_t* payload, std::size_t payloadSize)
     {
-        // Guard: ignore duplicate Hello from an already-handshaked peer.
+        // Ignore duplicate Hello from an already-handshaked peer.
         if (isHandshaked(ctx.peer))
         {
-            LOG_SERVER_WARN("Duplicate Hello from already-handshaked peer {} – ignoring",
-                            ctx.peer->incomingPeerID);
+            LOG_SERVER_WARN("Duplicate Hello from already-handshaked peer {} - ignoring", ctx.peer->incomingPeerID);
             return;
         }
 
-        // Guard: reject if the session is full (all input slots taken).
-        if (ctx.state.inputs.size() >= kMaxPlayers)
+        // Reject if the session is full (all client slots taken).
+        if (ctx.state.clients.size() >= kMaxPlayers)
         {
             LOG_SERVER_WARN("Server full ({}/{}) – rejecting peer {}",
-                            ctx.state.inputs.size(), static_cast<int>(kMaxPlayers),
+                            ctx.state.clients.size(), static_cast<int>(kMaxPlayers),
                             ctx.peer->incomingPeerID);
             sendReject(ctx, MsgReject::EReason::ServerFull);
             return;
@@ -94,18 +93,39 @@ namespace bomberman::server
         MsgWelcome welcome{};
         welcome.protocolVersion = kProtocolVersion;
         welcome.clientId        = ctx.peer->incomingPeerID;
-        welcome.serverTickRate  = kServerTickRate;
+        welcome.serverTickRate  = sim::kTickRate;
 
-        if (sendReliable(ctx.state.host, ctx.peer, makeWelcomePacket(welcome, 0, 0)))
+        if (!sendReliable(ctx.state.host, ctx.peer, makeWelcomePacket(welcome, 0, 0)))
         {
-            LOG_SERVER_INFO("Sent Welcome to clientId={}", welcome.clientId);
+            LOG_SERVER_ERROR("Failed to send Welcome to peer {} - rejecting", ctx.peer->incomingPeerID);
+            sendReject(ctx, MsgReject::EReason::Other);
+            return;
         }
+        LOG_SERVER_INFO("Sent Welcome to clientId={}", welcome.clientId);
 
-        // Mark handshake complete and initialize per-client input state.
+
+        // Temporarily, the level info packet is considered part of the handshake, will be separated later
+        MsgLevelInfo levelInfo{};
+        levelInfo.mapSeed = ctx.state.mapSeed;
+        if (!sendReliable(ctx.state.host, ctx.peer, makeLevelInfoPacket(levelInfo, 0, 0)))
+        {
+            LOG_SERVER_ERROR("Failed to send LevelInfo to peer {} - rejecting", ctx.peer->incomingPeerID);
+            sendReject(ctx, MsgReject::EReason::Other);
+            return;
+        }
+        LOG_SERVER_INFO("Sent LevelInfo seed={} to clientId={}", levelInfo.mapSeed, welcome.clientId);
+
+
+        // Mark handshake complete and initialize per-client state.
         markHandshaked(ctx.peer);
+
+        // TODO: consider moving client state initialization out of the handler and into a more explicit session management flow.
         const uint32_t clientId = ctx.peer->incomingPeerID;
-        ctx.state.inputs[clientId] = MsgInput{};
-        ctx.state.lastBombCommandId[clientId] = 0; // Client's first real bombCommandId is always >= 1.
+        ClientState& cs = ctx.state.clients[clientId];
+        cs = ClientState{};
+        // Spawn at the center of the start tile in Q8 (center convention: col*256+128, row*256+128).
+        // TODO: individual spawn points per player.
+        cs.pos = { playerStartX * 256 + 128, playerStartY * 256 + 128 };
     }
 
     void onInput(ServerContext& ctx, const PacketHeader& header, const uint8_t* payload, std::size_t size)
@@ -113,7 +133,7 @@ namespace bomberman::server
         // Ignore input from peers that haven't completed the handshake yet.
         if (!isHandshaked(ctx.peer))
         {
-            LOG_SERVER_WARN("Input from non-handshaked peer {} – ignoring", ctx.peer->incomingPeerID);
+            LOG_SERVER_WARN("Input from non-handshaked peer {} - ignoring", ctx.peer->incomingPeerID);
             return;
         }
 
@@ -125,18 +145,25 @@ namespace bomberman::server
         }
 
         const uint32_t clientId = ctx.peer->incomingPeerID;
+        //  Iterate through clients to find the matching clientId.
+        auto it = ctx.state.clients.find(clientId);
+        if (it == ctx.state.clients.end())
+        {
+            LOG_SERVER_WARN("Input from unknown clientId={} - ignoring", clientId);
+            return;
+        }
+        auto& client = it->second;
 
         // Detect new bomb command by comparing to last seen value.
-        auto& lastCmd = ctx.state.lastBombCommandId[clientId];
-        if (msgInput.bombCommandId != lastCmd)
+        if (msgInput.bombCommandId != client.lastBombCommandId)
         {
-            lastCmd = msgInput.bombCommandId;
+            client.lastBombCommandId = msgInput.bombCommandId;
             LOG_SERVER_DEBUG("Bomb request: clientId={} bombCmdId={}",
                              clientId, msgInput.bombCommandId);
             // TODO: Validate & spawn bomb (cooldown, max bombs, position check)
         }
 
-        ctx.state.inputs[clientId] = msgInput;
+        client.input = msgInput;
 
         if (header.sequence % kInputLogEveryN == 0)
         {

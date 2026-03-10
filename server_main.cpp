@@ -11,6 +11,7 @@
 #include "Server/ServerSession.h"
 #include "Util/CliCommon.h"
 #include "Util/Log.h"
+#include "Sim/SimConfig.h"
 
 using namespace bomberman::net;
 
@@ -19,11 +20,9 @@ namespace
 {
     using ServerClock = std::chrono::steady_clock;
 
-    constexpr std::size_t kMaxPeers = kMaxPlayers;
-    constexpr int kServiceTimeoutMs = 1; ///< ENet service timeout in milliseconds - controls event loop responsiveness and CPU usage.
-    constexpr uint32_t kSimStepMs = 1000u / bomberman::server::kServerTickRate;
-    constexpr uint32_t kMaxFrameClampMs = 250u;
-    constexpr uint32_t kMaxStepsPerFrame = 8;
+    constexpr std::size_t kMaxPeers         = kMaxPlayers;
+    constexpr int         kServiceTimeoutMs = 1;
+    constexpr uint32_t    kSimStepMs        = 1000u / static_cast<uint32_t>(bomberman::sim::kTickRate);
 
     /// Global flag for graceful shutdown
     volatile std::sig_atomic_t gRunning = 1;
@@ -34,13 +33,15 @@ namespace
         spdlog::level::level_enum logLevel = static_cast<spdlog::level::level_enum>(BOMBERMAN_DEFAULT_LOG_LEVEL);
         std::string logFile;
         uint16_t port = kDefaultServerPort;
+        uint32_t seed = 0;
+        bool seedOverride = false;
     };
 
     void printUsage(const char* exeName)
     {
         std::cout
             << "Usage: " << exeName
-            << " [--log-level <trace|debug|info|warn|error|critical>] [--log-file <path>] [--port <port override>]\n";
+            << " [--log-level <trace|debug|info|warn|error|critical>] [--log-file <path>] [--port <port override>] [--seed <seed override>]\n";
     }
 
     bool parseCli(int argc, char** argv, CliOptions& outOptions)
@@ -106,6 +107,21 @@ namespace
                 continue;
             }
 
+            if (arg == "--seed")
+            {
+                if (i + 1 >= argc)
+                {
+                    std::cerr << "Missing value for --seed\n";
+                    printUsage(argv[0]);
+                    return false;
+                }
+
+                const uint32_t seed = static_cast<uint32_t>(std::stoi(argv[++i]));
+                outOptions.seed = seed;
+                outOptions.seedOverride = true;
+                continue;
+            }
+
             std::cerr << "Unknown argument: " << arg << '\n';
             printUsage(argv[0]);
             return false;
@@ -136,7 +152,7 @@ int main(int argc, char** argv)
     // Initialize project-wide named loggers.
     bomberman::log::init(cli.logLevel, cli.logFile);
 
-    // Register signal handlers for graceful shutdown.
+    // Register signal handlers.
     std::signal(SIGINT,  onSignal);
     std::signal(SIGTERM, onSignal);
 
@@ -164,26 +180,28 @@ int main(int argc, char** argv)
     LOG_SERVER_INFO("Listening on port {} with max {} peers", cli.port, kMaxPeers);
 
     bomberman::server::ServerState state{};
-    state.host = server;
+    bomberman::server::initServerState(state, server, cli.seedOverride, cli.seed);
 
     auto lastTickTime = ServerClock::now();
     uint32_t accumulatorMs = 0;
 
-    // Main event loop - drain all pending events each iteration.
+
+    // ----- Main Event Loop -----
     while (gRunning)
     {
         const auto currentTickTime = ServerClock::now();
-        uint32_t frameDeltaMs = static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(currentTickTime - lastTickTime).count());
+        uint32_t frameDeltaMs =
+            static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(currentTickTime - lastTickTime).count());
         lastTickTime = currentTickTime;
 
-        if (frameDeltaMs > kMaxFrameClampMs)
+        // Clamp large frame deltas to avoid spiral of death after long stalls.
+        if (frameDeltaMs > bomberman::sim::kMaxFrameClampMs)
         {
-            frameDeltaMs = kMaxFrameClampMs;
+            frameDeltaMs = bomberman::sim::kMaxFrameClampMs;
         }
         accumulatorMs += frameDeltaMs;
 
-        // Drain all pending ENet events FIRST so inputs from this frame
-        // are available to simulateServerTick() below (avoids one tick of input latency).
+        // Drain all pending ENet events first before advancing the simulation.
         ENetEvent event{};
         int result = enet_host_service(server, &event, kServiceTimeoutMs);
 
@@ -207,8 +225,7 @@ int main(int argc, char** argv)
                     LOG_SERVER_INFO("Peer disconnected (id={}, handshaked={})", peerId, wasHandshaked);
                     if (wasHandshaked)
                     {
-                        state.inputs.erase(peerId);
-                        state.lastBombCommandId.erase(peerId);
+                        state.clients.erase(peerId);
                     }
                     event.peer->data = nullptr;
                     break;
@@ -228,9 +245,9 @@ int main(int argc, char** argv)
             break;
         }
 
-        // Now advance the simulation with the freshly received inputs.
+        // ----- Advance Simulation -----
         int stepCount = 0;
-        while (accumulatorMs >= kSimStepMs && stepCount < kMaxStepsPerFrame)
+        while (accumulatorMs >= kSimStepMs && stepCount < bomberman::sim::kMaxStepsPerFrame)
         {
             bomberman::server::simulateServerTick(state);
 
@@ -238,9 +255,9 @@ int main(int argc, char** argv)
             ++stepCount;
         }
 
-        if (stepCount >= kMaxStepsPerFrame)
+        if (stepCount >= bomberman::sim::kMaxStepsPerFrame)
         {
-            LOG_SERVER_WARN("Exceeded max server tick steps ({}), accumulator={}ms", kMaxStepsPerFrame, accumulatorMs);
+            LOG_SERVER_WARN("Exceeded max server tick steps ({}), accumulator={}ms", bomberman::sim::kMaxStepsPerFrame, accumulatorMs);
         }
     }
 

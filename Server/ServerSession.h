@@ -4,13 +4,20 @@
 #include <unordered_map>
 #include <enet/enet.h>
 
+#include "Const.h"
 #include "Net/NetCommon.h"
+#include "Sim/Movement.h"
 
 namespace bomberman::server
 {
-    constexpr uint16_t kServerTickRate = 60;
 
-    // TODO: Evolve into a better ClientState with input history, ack tracking, etc.
+    /** @brief Authoritative per-client state on the server. */
+    struct ClientState
+    {
+        net::MsgInput input{};          ///< Latest received input.
+        uint16_t lastBombCommandId = 0; ///< Last seen bombCommandId.
+        sim::TilePos pos{};             ///< Authoritative position in tile-Q8.
+    };
 
     /** @brief Long-lived server state shared across all dispatch calls. */
     struct ServerState
@@ -19,18 +26,23 @@ namespace bomberman::server
         uint32_t serverTick = 0;
         uint32_t nextStateSequence = 0; ///< Monotonically increasing sequence number for state packets.
 
-        std::unordered_map<uint32_t, net::MsgInput> inputs;            ///< Latest input state per connected client
-        std::unordered_map<uint32_t, uint16_t> lastBombCommandId;      ///< Last seen bombCommandId per client (for dedup)
+        std::unordered_map<uint32_t, ClientState> clients; ///< Per-client authoritative state.
+
+        uint32_t mapSeed = 0;
+        sim::TileMap tiles;
     };
 
-    /** @brief Per-dispatch context passed to handlers - bundles shared state with the sending peer. */
+    /** @brief Initialises a ServerState to a clean pre-game state. */
+    void initServerState(ServerState& state, ENetHost* host, bool overrideMapSeed = false, uint32_t mapSeed = 0);
+
+    /** @brief Per-dispatch context passed to handlers. */
     struct ServerContext
     {
         ServerState& state;
         ENetPeer*    peer;
     };
 
-    /** @brief Advances the server simulation by one tick - processes inputs, updates game state, etc. */
+    /** @brief Advances the server simulation by one tick. */
     void simulateServerTick(ServerState& state);
 
     /** @brief Builds a `MsgState` snapshot from the current `ServerState` for broadcasting to clients. */
