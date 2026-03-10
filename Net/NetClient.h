@@ -10,7 +10,7 @@
 namespace bomberman::net
 {
     // =================================================================================================================
-    // Connection State
+    // ===== Client Connection State ===================================================================================
     // =================================================================================================================
 
     /**
@@ -76,7 +76,7 @@ namespace bomberman::net
         NetClient& operator=(NetClient&&) noexcept;
 
         // =============================================================================================================
-        // Connection Lifecycle
+        // ===== Connection Lifecycle and Management ===================================================================
         // =============================================================================================================
 
         /**
@@ -105,7 +105,7 @@ namespace bomberman::net
         void cancelConnect();
 
         // =============================================================================================================
-        // Runtime I/O
+        // ===== Runtime Gameplay Interface ============================================================================
         // =============================================================================================================
 
         /**
@@ -151,9 +151,25 @@ namespace bomberman::net
         [[nodiscard]]
         uint16_t serverTickRate() const { return serverTickRate_; }
 
+        /** @brief Returns the most recently received state snapshot from the server, if any. */
+        [[nodiscard]]
+        bool tryGetLatestState(MsgState& out) const;
+
+        /** @brief Returns the last state tick */
+        [[nodiscard]]
+        uint32_t lastStateTick() const;
+
+        /**
+         * @brief Returns true and populates `outSeed` if a LevelInfo has been received from the server.
+         *
+         * Valid once the server has sent LevelInfo.
+         */
+        [[nodiscard]]
+        bool tryGetMapSeed(uint32_t& outSeed) const;
+
     private:
         // =============================================================================================================
-        // Internals
+        // ===== Internal State and Helpers ============================================================================
         // =============================================================================================================
 
         /**
@@ -174,8 +190,10 @@ namespace bomberman::net
         bool initializeENet();
         void shutdownENet();
 
-        /** @brief Handles a validated Welcome payload from the dispatcher. */
         void handleWelcome(const uint8_t* payload, std::size_t payloadSize);
+        void handleReject(const uint8_t* payload, std::size_t payloadSize);
+        void handleLevelInfo(const uint8_t* payload, std::size_t payloadSize);
+        void handleState(const PacketHeader& header, const uint8_t* payload, std::size_t payloadSize);
 
         /** @brief Handles remote disconnect without sending local disconnect request. */
         void handleRemoteDisconnect();

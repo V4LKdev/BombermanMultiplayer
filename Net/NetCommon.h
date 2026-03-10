@@ -12,9 +12,9 @@
  *
  * The protocol requires strict version match during handshake.
  * When changing wire layout, update:
- * 1. `kProtocolVersion`
- * 2. Size constants and `static_assert` checks
- * 3. `minPayloadSize()`
+ * 1. kProtocolVersion
+ * 2. Size constants and static_assert checks
+ * 3. minPayloadSize()
  * 4. Affected serializers and deserializers
  */
 
@@ -24,11 +24,14 @@ namespace bomberman::net
     // ===== Protocol Constants ========================================================================================
     // =================================================================================================================
 
+    // -----------------------------------------------
     constexpr uint16_t kProtocolVersion = 1;
+    // -----------------------------------------------
 
     constexpr uint16_t kDefaultServerPort = 12345; ///< Default server port used by both client and server.
     constexpr std::size_t kMaxPacketSize = 1400; ///< Upper packet size bound (below typical 1500-byte MTU).
     constexpr uint32_t kInputLogEveryN = 30;     ///< Input log sampling interval on client and server. (TODO: replace with proper telemetry)
+    constexpr uint32_t kStateLogEveryN = 30;     ///< State log sampling interval on server. (TODO: replace with proper telemetry)
 
     /** @note Changing these values will affect wire layout and require protocol version bump. */
     constexpr std::size_t kPlayerNameMax = 16;
@@ -79,6 +82,9 @@ namespace bomberman::net
         sizeof(int8_t) +   // moveY
         sizeof(uint16_t);  // bombCommandId
 
+    constexpr std::size_t kMsgLevelInfoSize =
+        sizeof(uint32_t);  // mapSeed
+
     constexpr std::size_t kMsgStateSize =
         sizeof(uint8_t) +  // playerCount
         kMaxPlayers *
@@ -95,6 +101,7 @@ namespace bomberman::net
     static_assert(kMsgWelcomeSize   == 8,   "MsgWelcome size mismatch");
     static_assert(kMsgRejectSize    == 3,   "MsgReject size mismatch");
     static_assert(kMsgInputSize     == 4,   "MsgInput size mismatch");
+    static_assert(kMsgLevelInfoSize == 4,   "MsgLevelInfo size mismatch");
     static_assert(kMsgStateSize     == 25,  "MsgState size mismatch");
 
     // =================================================================================================================
@@ -107,6 +114,7 @@ namespace bomberman::net
         Hello = 0x01,
         Welcome = 0x02,
         Reject = 0x03,
+        LevelInfo = 0x04,
 
         Input = 0x10,
         State = 0x11
@@ -114,25 +122,41 @@ namespace bomberman::net
 
     /** @brief Checks if a raw byte value corresponds to a valid EMsgType. */
     inline bool isValidMsgType(uint8_t raw) {
-        return raw == static_cast<uint8_t>(EMsgType::Hello)     ||
-               raw == static_cast<uint8_t>(EMsgType::Welcome)   ||
-               raw == static_cast<uint8_t>(EMsgType::Reject)    ||
-               raw == static_cast<uint8_t>(EMsgType::Input)     ||
+        return raw == static_cast<uint8_t>(EMsgType::Hello)      ||
+               raw == static_cast<uint8_t>(EMsgType::Welcome)    ||
+               raw == static_cast<uint8_t>(EMsgType::Reject)     ||
+               raw == static_cast<uint8_t>(EMsgType::LevelInfo)  ||
+               raw == static_cast<uint8_t>(EMsgType::Input)      ||
                raw == static_cast<uint8_t>(EMsgType::State);
     }
 
     /** @brief Returns minimum payload size for a message type/version. */
-    constexpr std::size_t minPayloadSize(EMsgType type, [[maybe_unused]] uint16_t version = kProtocolVersion)
+    constexpr std::size_t minPayloadSize(EMsgType type, uint16_t version = kProtocolVersion)
     {
         switch (type)
         {
-            case EMsgType::Hello:   return kMsgHelloSize;     // v1: 18 bytes
-            case EMsgType::Welcome: return kMsgWelcomeSize;   // v1: 8 bytes
-            case EMsgType::Reject:  return kMsgRejectSize;    // v1: 3 bytes
-            case EMsgType::Input:   return kMsgInputSize;     // v1: 4 bytes
-            case EMsgType::State:   return kMsgStateSize;     // v1: 25 bytes
-            default:                return 0;
+            case EMsgType::Hello:
+                if (version == 1) return kMsgHelloSize;      // v1: 18 bytes
+                break;
+            case EMsgType::Welcome:
+                if (version == 1) return kMsgWelcomeSize;    // v1: 8 bytes
+                break;
+            case EMsgType::Reject:
+                if (version == 1) return kMsgRejectSize;     // v1: 3 bytes
+                break;
+            case EMsgType::LevelInfo:
+                if (version == 1) return kMsgLevelInfoSize;  // v1: 4 bytes
+                break;
+            case EMsgType::Input:
+                if (version == 1) return kMsgInputSize;      // v1: 4 bytes
+                break;
+            case EMsgType::State:
+                if (version == 1) return kMsgStateSize;      // v1: 25 bytes
+                break;
+            default:
+                break;
         }
+        return 0; // Unknown type or unsupported version
     }
 
     // =================================================================================================================
@@ -159,7 +183,7 @@ namespace bomberman::net
          *
          * The field is always @ref kPlayerNameMax bytes. The value must be
          * NUL-terminated and zero-padded. Maximum visible length is
-         * `kPlayerNameMax - 1`.
+         * kPlayerNameMax - 1.
          */
         char name[kPlayerNameMax];
     };
@@ -168,7 +192,7 @@ namespace bomberman::net
     struct MsgWelcome
     {
         uint16_t protocolVersion; ///< Server protocol version.
-        uint32_t clientId;        ///< Server-assigned client identifier. // TODO: consider switching to uint8_t and research how enet hands client IDs
+        uint32_t clientId;        ///< Server-assigned client identifier. // TODO: consider switching to uint8_t for size?
         uint16_t serverTickRate;  ///< Authoritative server simulation tick rate.
     };
 
@@ -186,6 +210,14 @@ namespace bomberman::net
         EReason reason = EReason::Other; ///< Rejection reason code.
 
         uint16_t expectedProtocolVersion = 0; ///< Expected protocol version.
+    };
+
+    /**
+    * @brief Level setup payload sent reliably by server after Welcome.
+    */
+    struct MsgLevelInfo
+    {
+        uint32_t mapSeed = 0; ///< 32-bit seed for the shared tile-map generator.
     };
 
     /** @brief Input payload sent by client each simulation tick. */
@@ -212,8 +244,8 @@ namespace bomberman::net
         struct PlayerState
         {
             uint8_t clientId; ///< Player identifier.
-            int16_t xQ;         ///< Player X position in fixed-point scale format.
-            int16_t yQ;         ///< Player Y position in fixed-point scale format.
+            int16_t xQ; ///< Player X position in tile-space Q8 (xQ = tileColumn * 256).
+            int16_t yQ; ///< Player Y position in tile-space Q8 (yQ = tileRow    * 256).
 
             enum class EPlayerFlags : uint8_t
             {
@@ -483,6 +515,24 @@ namespace bomberman::net
         return true;
     }
 
+    /** @brief Serializes `MsgLevelInfo` to fixed-size wire payload. */
+    inline void serializeMsgLevelInfo(const MsgLevelInfo& info, uint8_t* out) noexcept
+    {
+        writeU32LE(out, info.mapSeed);
+    }
+
+    /** @brief Deserializes `MsgLevelInfo` from fixed-size wire payload. */
+    [[nodiscard]]
+    inline bool deserializeMsgLevelInfo(const uint8_t* in, std::size_t inSize, MsgLevelInfo& outInfo)
+    {
+        if (inSize < kMsgLevelInfoSize)
+        {
+            return false;
+        }
+        outInfo.mapSeed = readU32LE(in);
+        return true;
+    }
+
     /** @brief Serializes `MsgState` to fixed-size wire payload. */
     inline void serializeMsgState(const MsgState& state, uint8_t* out) noexcept
     {
@@ -554,7 +604,7 @@ namespace bomberman::net
         return bytes;
     }
     /** @brief Convenience overload building Hello from name and version. */
-    inline std::array<uint8_t, kPacketHeaderSize + kMsgHelloSize> makeHelloPacket(std::string_view name, uint16_t protocolVersion, uint32_t sequence, uint32_t tick)
+    inline std::array<uint8_t, kPacketHeaderSize + kMsgHelloSize> makeHelloPacket(std::string_view name, uint16_t protocolVersion, uint32_t sequence = 0, uint32_t tick = 0)
     {
         MsgHello hello{};
         hello.protocolVersion = protocolVersion;
@@ -563,7 +613,7 @@ namespace bomberman::net
     }
 
     /** @brief Builds a full Welcome packet (header + payload). */
-    inline std::array<uint8_t, kPacketHeaderSize + kMsgWelcomeSize> makeWelcomePacket(const MsgWelcome& welcome, uint32_t sequence, uint32_t tick)
+    inline std::array<uint8_t, kPacketHeaderSize + kMsgWelcomeSize> makeWelcomePacket(const MsgWelcome& welcome, uint32_t sequence = 0, uint32_t tick = 0)
     {
         PacketHeader header{};
         header.type = EMsgType::Welcome;
@@ -580,7 +630,7 @@ namespace bomberman::net
     }
 
     /** @brief Builds a full Reject packet (header + payload). */
-    inline std::array<uint8_t, kPacketHeaderSize + kMsgRejectSize> makeRejectPacket(const MsgReject& reject, uint32_t sequence, uint32_t tick)
+    inline std::array<uint8_t, kPacketHeaderSize + kMsgRejectSize> makeRejectPacket(const MsgReject& reject, uint32_t sequence = 0, uint32_t tick = 0)
     {
         PacketHeader header{};
         header.type = EMsgType::Reject;
@@ -609,6 +659,23 @@ namespace bomberman::net
         std::array<uint8_t, kPacketHeaderSize + kMsgInputSize> bytes{};
         serializeHeader(header, bytes.data());
         serializeMsgInput(input, bytes.data() + kPacketHeaderSize);
+
+        return bytes;
+    }
+
+    /** @brief Builds a full LevelInfo packet (header + payload). Sent reliably by server after Welcome. */
+    inline std::array<uint8_t, kPacketHeaderSize + kMsgLevelInfoSize> makeLevelInfoPacket(const MsgLevelInfo& info, uint32_t sequence = 0, uint32_t tick = 0)
+    {
+        PacketHeader header{};
+        header.type = EMsgType::LevelInfo;
+        header.payloadSize = static_cast<uint16_t>(kMsgLevelInfoSize);
+        header.sequence = sequence;
+        header.tick = tick;
+        header.flags = 0;
+
+        std::array<uint8_t, kPacketHeaderSize + kMsgLevelInfoSize> bytes{};
+        serializeHeader(header, bytes.data());
+        serializeMsgLevelInfo(info, bytes.data() + kPacketHeaderSize);
 
         return bytes;
     }
