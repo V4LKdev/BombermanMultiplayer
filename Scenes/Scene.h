@@ -81,6 +81,12 @@ namespace bomberman
          */
         void draw() const;
 
+        /**
+         * @brief Returns the current camera position.
+         */
+        [[nodiscard]]
+        SDL_Rect getCamera() const { return camera; }
+
       protected:
         Game* game = nullptr; // pointer to game for use in all scenes
 

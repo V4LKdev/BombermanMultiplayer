@@ -15,12 +15,13 @@ namespace
         spdlog::level::level_enum logLevel = static_cast<spdlog::level::level_enum>(BOMBERMAN_DEFAULT_LOG_LEVEL);
         std::string logFile;
         uint16_t port = bomberman::net::kDefaultServerPort;
+        bool mute = false;
     };
 
     void printUsage(const char* exeName)
     {
         std::cout
-            << "Usage: " << exeName << " [--log-level <trace|debug|info|warn|error|critical>] [--log-file <path>] [--port <port override>]\n";
+            << "Usage: " << exeName << " [--log-level <trace|debug|info|warn|error|critical>] [--log-file <path>] [--port <port override>] [--mute]\n";
     }
 
     bool parseCli(int argc, char** argv, CliOptions& outOptions)
@@ -86,6 +87,12 @@ namespace
                 continue;
             }
 
+            if (arg == "--mute")
+            {
+                outOptions.mute = true;
+                continue;
+            }
+
             std::cerr << "Unknown argument: " << arg << '\n';
             printUsage(argv[0]);
             return false;
@@ -121,7 +128,8 @@ int main(int argc, char** argv)
         800,
         600,
         &client,
-        cli.port);
+        cli.port,
+        cli.mute);
 
     game.run();
 

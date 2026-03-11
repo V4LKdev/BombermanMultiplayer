@@ -24,7 +24,7 @@ namespace bomberman
          * @param inNetClient Optional multiplayer client (not owned).
          */
         Game(const std::string& windowName, int windowWidth, int windowHeight,
-             net::NetClient* inNetClient = nullptr, uint16_t serverPort = net::kDefaultServerPort);
+             net::NetClient* inNetClient = nullptr, uint16_t serverPort = net::kDefaultServerPort, bool mute = false);
 
         /** @brief Releases runtime resources and shuts down SDL subsystems. */
         ~Game();
@@ -72,6 +72,14 @@ namespace bomberman
         net::NetClient* getNetClient() const;
 
         /**
+         * @brief Fills `out` with the most recent server state snapshot and returns true.
+         *
+         * Returns false if not in multiplayer mode, or not yet connected.
+         */
+        [[nodiscard]]
+        bool tryGetLatestState(net::MsgState& out) const;
+
+        /**
          * @brief Returns the server port to connect to (from CLI or default).
          */
         [[nodiscard]]
@@ -94,10 +102,17 @@ namespace bomberman
         Uint32 lastTickTime = 0;
         Uint32 accumulatorMs = 0;
 
-        net::NetClient* netClient_ = nullptr; ///< Optional network client for multiplayer (not owned)
+        net::NetClient* netClient_ = nullptr;           ///< Optional network client for multiplayer (not owned)
         uint16_t serverPort_ = net::kDefaultServerPort; ///< Server port from CLI or default.
-        bool previousBombHeld_ = false;        ///< Previous bomb key state for edge detection.
-        uint16_t bombCommandId_ = 0;           ///< Monotonically increasing bomb command id.
+        bool mute_ = false;                             ///< When true, all audio output is silenced at startup.
+        bool previousBombHeld_ = false;                 ///< Previous bomb key state for edge detection.
+        uint16_t bombCommandId_ = 0;                    ///< Monotonically increasing bomb command id.
+
+        net::MsgState debugState_{};     ///< Latest server state snapshot, refreshed each tick for the debug overlay.
+        bool debugStateValid_ = false;   ///< True once at least one state snapshot has been received.
+
+        /** @brief Draws server-authoritative position dots as a debug overlay. */
+        void drawNetDebugOverlay();
 
         /** @brief Samples keyboard state, builds a MsgInput, and sends it to the server. */
         void pollNetInput(uint32_t clientTick);

@@ -7,22 +7,21 @@
 #include "Game.h"
 
 #include "Net/NetClient.h"
+#include "Scenes/LevelScene.h"
 #include "Scenes/MenuScene.h"
+#include "Sim/Movement.h"
 #include "Util/Log.h"
 
 namespace bomberman
 {
     namespace
     {
-        constexpr int kTargetSimHz = 60;
-        constexpr Uint32 kSimStepMs = 1000u / static_cast<Uint32>(kTargetSimHz);
-        constexpr Uint32 kMaxFrameClampMs = 250u;
-        constexpr int kMaxStepsPerFrame = 8;
+        constexpr Uint32 kSimStepMs      = 1000u / static_cast<Uint32>(sim::kTickRate);
     }
 
     Game::Game(const std::string& windowName, const int width, const int height,
-               net::NetClient* inNetClient, const uint16_t serverPort)
-        : windowWidth(width), windowHeight(height), netClient_(inNetClient), serverPort_(serverPort)
+               net::NetClient* inNetClient, const uint16_t serverPort, const bool mute)
+        : windowWidth(width), windowHeight(height), netClient_(inNetClient), serverPort_(serverPort), mute_(mute)
     {
         // Initialize SDL.
         if(SDL_Init(SDL_INIT_VIDEO) != 0)
@@ -50,6 +49,12 @@ namespace bomberman
         {
             LOG_GAME_ERROR("Mix_OpenAudio failed: {}", Mix_GetError());
             return;
+        }
+
+        if (mute_)
+        {
+            Mix_VolumeMusic(0);
+            Mix_Volume(-1, 0); // -1 applies to all channels
         }
 
         // Create window.
@@ -144,9 +149,9 @@ namespace bomberman
             Uint32 frameDeltaMs = currentTickTime - lastTickTime;
             lastTickTime = currentTickTime;
 
-            if(frameDeltaMs > kMaxFrameClampMs)
+            if(frameDeltaMs > sim::kMaxFrameClampMs)
             {
-                frameDeltaMs = kMaxFrameClampMs;
+                frameDeltaMs = sim::kMaxFrameClampMs;
             }
 
             // Accumulate frame time.
@@ -160,7 +165,7 @@ namespace bomberman
 
             // Process fixed simulation steps.
             int stepCount = 0;
-            while(accumulatorMs >= kSimStepMs && stepCount < kMaxStepsPerFrame)
+            while(accumulatorMs >= kSimStepMs && stepCount < sim::kMaxStepsPerFrame)
             {
                 sceneManager->update(kSimStepMs);
                 accumulatorMs -= kSimStepMs;
@@ -171,20 +176,73 @@ namespace bomberman
                 if (netClient_ != nullptr && netClient_->isConnected())
                 {
                     pollNetInput(clientTick);
+
+                    // Refresh debug overlay state unconditionally - the overlay just
+                    // wants the latest snapshot it can get.  Gameplay application and
+                    // freshness tracking are owned by LevelScene.
+                    net::MsgState latestState{};
+                    if (netClient_->tryGetLatestState(latestState))
+                    {
+                        debugState_ = latestState;
+                        debugStateValid_ = true;
+                    }
                 }
             }
 
             // Log if the safety cap is hit.
-            if(stepCount >= kMaxStepsPerFrame)
+            if(stepCount >= sim::kMaxStepsPerFrame)
             {
-                LOG_GAME_WARN("Exceeded max update steps ({}), accumulator={}ms", kMaxStepsPerFrame, accumulatorMs);
+                LOG_GAME_WARN("Exceeded max update steps ({}), accumulator={}ms", sim::kMaxStepsPerFrame, accumulatorMs);
             }
 
             // Render current frame.
             SDL_SetRenderDrawColor(renderer, 0x00, 0x00, 0x00, 0x00);
             SDL_RenderClear(renderer);
             sceneManager->draw();
+            drawNetDebugOverlay();
             SDL_RenderPresent(renderer);
+        }
+    }
+
+    void Game::drawNetDebugOverlay()
+    {
+        if (!debugStateValid_ || !netClient_)
+            return;
+
+        // Only draw when a LevelScene is active.
+        auto* levelScene = dynamic_cast<LevelScene*>(sceneManager->getCurrentScene());
+        if (!levelScene)
+            return;
+
+        const LevelScene::FieldTransform ft = levelScene->getFieldTransform();
+        const SDL_Rect camera = levelScene->getCamera();
+
+        // Color palette per clientId.
+        static constexpr struct { uint8_t r, g, b; } kPlayerColors[] = {
+            {0xFF, 0x22, 0x22},  // Red
+            {0x22, 0xFF, 0x22},  // Green
+            {0x22, 0x88, 0xFF},  // Blue
+            {0xFF, 0xFF, 0x22},  // Yellow
+        };
+
+        constexpr int kDotSize = 8;
+
+        for (uint8_t i = 0; i < debugState_.playerCount; ++i)
+        {
+            const auto& p = debugState_.players[i];
+
+            // Convert tile-Q8 → screen pixels using the same transform the renderer uses.
+            const int screenX = sim::tileQToScreen(p.xQ, ft.fieldX, ft.scaledTile, camera.x);
+            const int screenY = sim::tileQToScreen(p.yQ, ft.fieldY, ft.scaledTile, camera.y);
+
+            const int colorIdx = p.clientId % 4;
+            SDL_SetRenderDrawColor(renderer,
+                                   kPlayerColors[colorIdx].r,
+                                   kPlayerColors[colorIdx].g,
+                                   kPlayerColors[colorIdx].b, 0xFF);
+
+            const SDL_Rect dot = { screenX - kDotSize / 2, screenY - kDotSize / 2, kDotSize, kDotSize };
+            SDL_RenderFillRect(renderer, &dot);
         }
     }
 
@@ -252,6 +310,13 @@ namespace bomberman
     net::NetClient* Game::getNetClient() const
     {
         return netClient_;
+    }
+
+    bool Game::tryGetLatestState(net::MsgState& out) const
+    {
+        if (!netClient_ || !netClient_->isConnected())
+            return false;
+        return netClient_->tryGetLatestState(out);
     }
 
     uint16_t Game::getServerPort() const

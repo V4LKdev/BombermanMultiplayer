@@ -2,14 +2,18 @@
 #include <cmath>
 #include <chrono>
 #include <functional>
+#include <optional>
 #include <random>
 #include <string>
 
 #include "Entities/Sprite.h"
 #include "Game.h"
+#include "Net/NetClient.h"
 #include "Scenes/GameOverScene.h"
 #include "Scenes/LevelScene.h"
 #include "Scenes/StageScene.h"
+#include "Sim/Movement.h"
+#include "Sim/TileMapGen.h"
 #include "Util/Collision.h"
 #include "Util/Pathfinding.h"
 
@@ -17,13 +21,14 @@ namespace bomberman
 {
     namespace
     {
-        constexpr float kPlayerHitboxScale = 0.5f;
-        constexpr float kDamageHitboxScale = 0.2f;
+        constexpr float kDamageHitboxScale = 0.2f; ///< Bang/damage hitbox shrink
     } // namespace
 
-    LevelScene::LevelScene(Game* _game, const unsigned int _stage, const unsigned int prevScore)
+    LevelScene::LevelScene(Game* _game, const unsigned int _stage, const unsigned int prevScore,
+                           std::optional<uint32_t> mapSeed)
         : Scene(_game), score(prevScore), stage(_stage)
     {
+
         // common field parameters
         fieldPositionX = 0;
         fieldPositionY = game->getWindowHeight() / 15;
@@ -39,11 +44,16 @@ namespace bomberman
         explosionSound = std::make_shared<Sound>(game->getAssetManager()->getSound(SoundEnum::Explosion));
         // draw text
         spawnTextObjects();
-        // generate tile map
-        generateTileMap();
-        // prepare player
+
+        // generate tile map - use server-provided seed if available, otherwise pick one locally
+        generateTileMap(mapSeed);
+
+        // prepare player - spawn at the fixed start tile
         spawnPlayer(fieldPositionX + playerStartX * scaledTileSize,
                     fieldPositionY + playerStartY * scaledTileSize);
+
+        playerPos_ = { playerStartX * 256 + 128, playerStartY * 256 + 128 };
+
         // generate enemies
         generateEnemies();
         // set timer
@@ -96,27 +106,20 @@ namespace bomberman
         backgroundObjectLastNumber++;
     }
 
-    void LevelScene::generateTileMap()
+    void LevelScene::generateTileMap(std::optional<uint32_t> mapSeed)
     {
-        // we need random bricks
-        const auto seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
-        auto randBrick = std::bind(std::uniform_int_distribution<int>(0, brickSpawnRandomize),
-                                   std::mt19937(static_cast<unsigned int>(seed)));
 
-        // iterate every tile
+        const uint32_t seed = mapSeed.has_value()
+            ? mapSeed.value()
+            : static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count());
+
+        sim::generateTileMap(seed, tiles);
+
+        // Spawn visual tile objects from the generated tile array.
         for(int i = 0; i < static_cast<int>(tileArrayHeight); i++)
         {
             for(int j = 0; j < static_cast<int>(tileArrayWidth); j++)
             {
-                tiles[i][j] = baseTiles[i][j];
-                // generate random bricks
-                if(tiles[i][j] == Tile::Grass)
-                {
-                    if(randBrick() == 0)
-                    {
-                        tiles[i][j] = Tile::Brick;
-                    }
-                }
                 // spawn brick and grass
                 if(tiles[i][j] == Tile::Brick)
                 {
@@ -192,6 +195,10 @@ namespace bomberman
 
     void LevelScene::generateEnemies()
     {
+        // TODO: currently enemies are generated randomly on client, but in networked game they should be generated on server and transmitted to client.
+        if (isNetworked())
+            return;
+
         // we need enemy in random tile
         const auto seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
         auto randCount = std::bind(std::uniform_int_distribution<int>(minEnemiesOnLevel, maxEnemiesOnLevel),
@@ -371,7 +378,7 @@ namespace bomberman
             // we can spawn a bomb by space press
             else if(event.key.keysym.scancode == SDL_SCANCODE_SPACE)
             {
-                if(!isGameOver)
+                if(!isNetworked() && !isGameOver)
                 {
                     spawnBomb(player.get());
                 }
@@ -402,22 +409,39 @@ namespace bomberman
 
     void LevelScene::update(const unsigned int delta)
     {
-        // pause
         if(isPaused)
-        {
             return;
+
+        if (isNetworked())
+        {
+            // --- Networked mode ---
+            // Server is the authority for all gameplay state.
+            // We only apply the latest authoritative position snapshot and run
+            // animations; local gameplay logic (enemies, bombs, timers) is
+            // suppressed until the server drives those events explicitly.
+            net::MsgState serverState{};
+            uint32_t stateTick = 0;
+            if (game->tryGetLatestState(serverState))
+            {
+                stateTick = game->getNetClient()->lastStateTick();
+                applyServerState(serverState, stateTick);
+            }
+            Scene::update(delta);
+            updateCamera();
         }
-        Scene::update(delta);
-        // update collision of player
-        updatePlayerCollision();
-        // update collision of enemies
-        updateEnemiesCollision();
-        // update collision of bricks
-        updateBangsCollision();
-        // update camera
-        updateCamera();
-        // update timers
-        updateTimers(delta);
+        else
+        {
+            // --- Singleplayer mode ---
+            // Advance player position via the shared sim primitive, then run all
+            // local gameplay systems.
+            stepLocalPlayerMovement();
+            Scene::update(delta);
+            updatePlayerCollision();
+            updateEnemiesCollision();
+            updateBangsCollision();
+            updateCamera();
+            updateTimers(delta);
+        }
     }
 
     void LevelScene::updateTimers(const unsigned int delta)
@@ -644,30 +668,17 @@ namespace bomberman
     void LevelScene::updatePlayerCollision()
     {
         if(player == nullptr)
-        {
             return;
-        }
-        // there is no reason to check collision if player is idle
-        if(!player->isMoving())
-        {
-            return;
-        }
-        // set width to smaller size for easer path
-        SDL_FRect playerRect = collision::scaleCentered(player->getRectF(), kPlayerHitboxScale);
-        // iterate objects for collision
-        for(const auto& collisionObject : collisions)
-        {
-            if(isCollisionDetected(playerRect, collisionObject.second->getRectF()))
-            {
-                player->revertLastMove();
-            }
-        }
-        // door collision
+
+        // Wall collision is now guaranteed by sim::stepMovementWithCollision in
+        // stepLocalPlayerMovement() — no revert needed here.
+
+        // Door win-condition check.
         if(door != nullptr)
         {
+            SDL_FRect playerRect = collision::scaleCentered(player->getRectF(), sim::kPlayerHitboxScale);
             if(isCollisionDetected(playerRect, door->getRectF()))
             {
-                // check win condition
                 if(!isGameOver && enemies.size() == 0)
                 {
                     gameOver();
@@ -858,4 +869,69 @@ namespace bomberman
             enemy->generateNewPath();
         }
     }
+
+    bool LevelScene::isNetworked() const
+    {
+        const net::NetClient* netClient = game->getNetClient();
+        return netClient != nullptr && netClient->isConnected();
+    }
+
+    void LevelScene::stepLocalPlayerMovement()
+    {
+        if (!player)
+            return;
+
+        // Clamp direction components to {-1, 0, 1}.
+        const auto clampDir = [](int d) -> int8_t {
+            return static_cast<int8_t>(d > 0 ? 1 : (d < 0 ? -1 : 0));
+        };
+        const int8_t moveX = clampDir(playerDirectionX);
+        const int8_t moveY = clampDir(playerDirectionY);
+
+        // Run the shared authoritative movement primitive — same function the server uses.
+        playerPos_ = sim::stepMovementWithCollision(playerPos_, moveX, moveY, tiles);
+
+        // Write the updated Q8 center position to the sprite as a screen top-left.
+        // Camera offset is not subtracted here — updateCamera() applies it via setCamera().
+        const int screenX = sim::tileQToScreenTopLeft(playerPos_.xQ, fieldPositionX, scaledTileSize, 0);
+        const int screenY = sim::tileQToScreenTopLeft(playerPos_.yQ, fieldPositionY, scaledTileSize, 0);
+        player->setPosition(screenX, screenY);
+    }
+
+    void LevelScene::applyServerState(const net::MsgState& state, uint32_t stateTick)
+    {
+        if (!player)
+            return;
+
+        // Freshness guard: skip if this snapshot has already been applied.
+        if (stateTick <= lastAppliedStateTick_)
+            return;
+
+        const net::NetClient* netClient = game->getNetClient();
+        if (!netClient)
+            return;
+
+        const uint32_t localId = netClient->clientId();
+
+        for (uint8_t i = 0; i < state.playerCount; ++i)
+        {
+            if (state.players[i].clientId != static_cast<uint8_t>(localId))
+                continue;
+
+            // Keep playerPos_ in sync so camera and any future Q8 queries are correct.
+            playerPos_.xQ = state.players[i].xQ;
+            playerPos_.yQ = state.players[i].yQ;
+
+            // Convert tile-Q8 center position to screen top-left for sprite rendering.
+            // Camera offset is not subtracted here — updateCamera() reads getPositionX/Y()
+            // to compute the scene camera, which the renderer applies during draw.
+            const int screenX = sim::tileQToScreenTopLeft(playerPos_.xQ, fieldPositionX, scaledTileSize, 0);
+            const int screenY = sim::tileQToScreenTopLeft(playerPos_.yQ, fieldPositionY, scaledTileSize, 0);
+            player->setPosition(screenX, screenY);
+
+            lastAppliedStateTick_ = stateTick;
+            break;
+        }
+    }
+
 } // namespace bomberman

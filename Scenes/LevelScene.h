@@ -3,6 +3,7 @@
 
 #include <SDL.h>
 #include <memory>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -12,7 +13,9 @@
 #include "Entities/Player.h"
 #include "Entities/Sound.h"
 #include "Entities/Text.h"
+#include "Net/NetCommon.h"
 #include "Scenes/Scene.h"
+#include "Sim/Movement.h"
 
 namespace bomberman
 {
@@ -23,13 +26,32 @@ namespace bomberman
     class LevelScene : public Scene
     {
       public:
+        /** @brief Parameters needed to convert tile-Q8 world coords to screen pixels. */
+        struct FieldTransform
+        {
+            int fieldX      = 0; ///< Screen X of tile column 0.
+            int fieldY      = 0; ///< Screen Y of tile row 0.
+            int scaledTile  = 0; ///< Rendered tile size in pixels.
+        };
+
         /**
          * @brief Construct a new Level Scene
          *
-         * @param game - game pointer
-         * @param stage - stage number
+         * @param game      - game pointer
+         * @param stage     - stage number
+         * @param prevScore - score carried over from previous stage
+         * @param mapSeed   - optional authoritative map seed from server.
          */
-        LevelScene(Game* game, const unsigned int stage, const unsigned int prevScore);
+        LevelScene(Game* game, const unsigned int stage, const unsigned int prevScore,
+                   std::optional<uint32_t> mapSeed = std::nullopt);
+
+        /** @brief Returns the field transform needed to map tile-Q8 world coords to screen pixels. */
+        [[nodiscard]]
+        FieldTransform getFieldTransform() const
+        {
+            return { fieldPositionX, fieldPositionY, scaledTileSize };
+        }
+
         /**
          * @brief Catch SDL2 events
          *
@@ -46,7 +68,7 @@ namespace bomberman
       private:
         // spawn and generation of map objects
         void spawnTextObjects();
-        void generateTileMap();
+        void generateTileMap(std::optional<uint32_t> mapSeed);
         void generateEnemies();
         void spawnGrass(const int positionX, const int positionY);
         void spawnBrick(const int positionX, const int positionY);
@@ -94,6 +116,25 @@ namespace bomberman
         void destroyBrick(std::shared_ptr<Object> brick);
         // enemy follow to player if in attack radius
         void followToPlayer(Enemy* enemy);
+
+        /**
+         * @brief Returns true when the game is running in networked (multiplayer) mode.
+         */
+        [[nodiscard]]
+        bool isNetworked() const;
+
+        /**
+         * @brief Steps the local player position by one simulation tick (singleplayer only).
+         */
+        void stepLocalPlayerMovement();
+
+        /**
+         * @brief Applies the server-authoritative player position from a snapshot.
+         *
+         * @param state Most recent server state snapshot.
+         * @param stateTick Server tick the snapshot was produced at.
+         */
+        void applyServerState(const net::MsgState& state, uint32_t stateTick);
 
         // timers in ms const
         const int levelTimerStart = 200500;
@@ -143,6 +184,13 @@ namespace bomberman
         int scaledTileSize = 0;
         // last object that used as background (grass)
         int backgroundObjectLastNumber = 0;
+
+        /// Canonical player position in tile-Q8, owned by LevelScene.
+        sim::TilePos playerPos_{};
+
+        /// Last server snapshot tick that was applied to the player sprite.
+        /// Guards against re-applying the same snapshot on consecutive scene ticks.
+        uint32_t lastAppliedStateTick_ = 0;
     };
 } // namespace bomberman
 

@@ -59,6 +59,10 @@ namespace bomberman
          */
         void draw() const;
 
+        /** @brief Returns the currently active scene, or nullptr if none. */
+        [[nodiscard]]
+        Scene* getCurrentScene() const { return currentScene.get(); }
+
       private:
         std::unordered_map<std::string, std::shared_ptr<Scene>> scenes; // scenes
         std::queue<std::shared_ptr<Scene>> removedScenes;               // removed scenes, for clean up
