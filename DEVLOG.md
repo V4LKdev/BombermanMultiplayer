@@ -599,3 +599,68 @@ Wire first server snapshot broadcast flow and harden server-side handshake/input
 ### Result
 - Server now produces and broadcasts authoritative state snapshots each tick.
 - Handshake and input handling are stricter and more predictable.
+
+## 2026-03-09 (10b63bc) – Extract Shared Simulation Config + Deterministic Map Generation
+
+### Goal
+Centralize simulation constants and make movement/map generation shared between client and server.
+
+### Changes
+- Added `Sim/SimConfig.h` as a single source of truth for tick-rate and sim limits.
+- Added `Sim/Movement.h` with shared tile-Q8 movement, collision, and coordinate conversion helpers.
+- Added `Sim/TileMapGen.h` for deterministic tile-map generation from a seed.
+- Cleaned up `Const.h` into a more explicit configuration header with typed tile definitions and namespaced constants.
+
+### Result
+- Simulation config, movement math, and map generation now live in shared code instead of being duplicated across gameplay and server code.
+
+## 2026-03-10 (7a92f8f) – Extend Protocol + NetClient For LevelInfo And State
+
+### Goal
+Grow the runtime protocol beyond connect-only handshake and let the client receive seeded level setup plus authoritative state snapshots.
+
+### Changes
+- Added `MsgLevelInfo` and `EMsgType::LevelInfo` to the protocol.
+- Added state snapshot helpers and receive-side validation paths in `NetCommon`.
+- Extended `NetClient` to:
+  - cache latest `MsgState`
+  - cache `MsgLevelInfo`
+  - expose `tryGetLatestState(...)`, `lastStateTick()`, and `tryGetMapSeed(...)`
+  - handle `Reject`, `LevelInfo`, and `State` through the dispatcher
+- Kept `LevelInfo` as part of the temporary connect-ready flow for now.
+
+### Result
+- The client can now receive both authoritative state and authoritative level seed information over the same validated runtime path.
+
+## 2026-03-10 (3d6125b) – Make Server Authoritative Over Map Seed And Movement
+
+### Goal
+Move the server from “input logger + placeholder snapshot sender” to a real authority over map state and player movement.
+
+### Changes
+- Replaced separate per-client maps with a unified `ClientState`.
+- Added server-side authoritative tile map + `mapSeed` to `ServerState`.
+- Added `initServerState(...)` to generate or override a session seed and build the authoritative map.
+- Updated `onHello(...)` to send `Welcome` plus `LevelInfo`, then initialize per-client authoritative state.
+- Updated `simulateServerTick(...)` to advance player positions via the shared movement primitive and broadcast actual positions in snapshots.
+- Updated `server_main.cpp` to initialize and clean up the unified server state.
+
+### Result
+- The server now owns the tile layout and authoritative player movement state for the session.
+
+## 2026-03-11 (fd8e40c) – Unify Gameplay Movement Ownership Under Shared Sim
+
+### Goal
+Stop local player movement from diverging across singleplayer, multiplayer, and server code paths.
+
+### Changes
+- Removed local position integration from `Player`; it now only owns direction and animation.
+- Moved canonical player position ownership into `LevelScene` as tile-Q8 state.
+- Updated singleplayer movement to run through `sim::stepMovementWithCollision(...)`.
+- Updated multiplayer `LevelScene` flow to apply authoritative server snapshots to the local player.
+- Added seed-aware `LevelScene` construction and stage-to-level map-seed handoff.
+- Added temporary in-game authoritative state debug overlay plus small scene/camera accessors to support it.
+- Added a `--mute` client option to simplify testing.
+
+### Result
+- Client gameplay now uses the same shared movement primitive as the server, and multiplayer position application no longer depends on legacy local float movement.
