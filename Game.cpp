@@ -3,6 +3,7 @@
 #include <SDL_ttf.h>
 
 #include <algorithm>
+#include <chrono>
 
 #include "Game.h"
 
@@ -16,7 +17,12 @@ namespace bomberman
 {
     namespace
     {
-        constexpr Uint32 kSimStepMs      = 1000u / static_cast<Uint32>(sim::kTickRate);
+        using GameClock = std::chrono::steady_clock;
+        using SimDuration = std::chrono::duration<double>;
+
+        constexpr SimDuration kSimStep = SimDuration{1.0 / static_cast<double>(sim::kTickRate)};
+        constexpr auto kMaxFrameClamp = std::chrono::milliseconds(sim::kMaxFrameClampMs);
+        constexpr Uint32 kSceneStepMs = 1000u / static_cast<Uint32>(sim::kTickRate);
     }
 
     Game::Game(const std::string& windowName, const int width, const int height,
@@ -120,10 +126,8 @@ namespace bomberman
 
         isRunning = true;
         // Initialize frame timing state for fixed-step simulation.
-        lastTickTime = SDL_GetTicks();
-        accumulatorMs = 0;
-
-        uint32_t clientTick = 0;
+        lastTickTime = GameClock::now();
+        accumulator = SimDuration{};
 
         // Load initial resources and scene.
         assetManager->load(renderer);
@@ -145,17 +149,17 @@ namespace bomberman
             }
 
             // Calculate frame delta with clamping.
-            Uint32 currentTickTime = SDL_GetTicks();
-            Uint32 frameDeltaMs = currentTickTime - lastTickTime;
+            const auto currentTickTime = GameClock::now();
+            auto frameDelta = currentTickTime - lastTickTime;
             lastTickTime = currentTickTime;
 
-            if(frameDeltaMs > sim::kMaxFrameClampMs)
+            if(frameDelta > kMaxFrameClamp)
             {
-                frameDeltaMs = sim::kMaxFrameClampMs;
+                frameDelta = kMaxFrameClamp;
             }
 
             // Accumulate frame time.
-            accumulatorMs += frameDeltaMs;
+            accumulator += std::chrono::duration_cast<SimDuration>(frameDelta);
 
             // Drain incoming network events.
             if (netClient_ != nullptr)
@@ -165,26 +169,23 @@ namespace bomberman
 
             // Process fixed simulation steps.
             int stepCount = 0;
-            while(accumulatorMs >= kSimStepMs && stepCount < sim::kMaxStepsPerFrame)
+            while(accumulator >= kSimStep && stepCount < sim::kMaxStepsPerFrame)
             {
-                sceneManager->update(kSimStepMs);
-                accumulatorMs -= kSimStepMs;
+                sceneManager->update(kSceneStepMs);
+                accumulator -= kSimStep;
                 ++stepCount;
-                ++clientTick;
 
                 // Send input once per simulation tick.
                 if (netClient_ != nullptr && netClient_->isConnected())
                 {
-                    pollNetInput(clientTick);
+                    pollNetInput();
 
-                    // Refresh debug overlay state unconditionally - the overlay just
-                    // wants the latest snapshot it can get.  Gameplay application and
-                    // freshness tracking are owned by LevelScene.
-                    net::MsgState latestState{};
-                    if (netClient_->tryGetLatestState(latestState))
+                    // Refresh debug overlay snapshot unconditionally.
+                    net::MsgSnapshot latestSnapshot{};
+                    if (netClient_->tryGetLatestSnapshot(latestSnapshot))
                     {
-                        debugState_ = latestState;
-                        debugStateValid_ = true;
+                        debugSnapshot_ = latestSnapshot;
+                        debugSnapshotValid_ = true;
                     }
                 }
             }
@@ -192,7 +193,8 @@ namespace bomberman
             // Log if the safety cap is hit.
             if(stepCount >= sim::kMaxStepsPerFrame)
             {
-                LOG_GAME_WARN("Exceeded max update steps ({}), accumulator={}ms", sim::kMaxStepsPerFrame, accumulatorMs);
+                const auto accumulatorMs = std::chrono::duration<double, std::milli>(accumulator).count();
+                LOG_GAME_WARN("Exceeded max update steps ({}), accumulator={:.3f}ms", sim::kMaxStepsPerFrame, accumulatorMs);
             }
 
             // Render current frame.
@@ -206,7 +208,7 @@ namespace bomberman
 
     void Game::drawNetDebugOverlay()
     {
-        if (!debugStateValid_ || !netClient_)
+        if (!debugSnapshotValid_ || !netClient_)
             return;
 
         // Only draw when a LevelScene is active.
@@ -217,7 +219,7 @@ namespace bomberman
         const LevelScene::FieldTransform ft = levelScene->getFieldTransform();
         const SDL_Rect camera = levelScene->getCamera();
 
-        // Color palette per clientId.
+        // Color palette per playerId.
         static constexpr struct { uint8_t r, g, b; } kPlayerColors[] = {
             {0xFF, 0x22, 0x22},  // Red
             {0x22, 0xFF, 0x22},  // Green
@@ -227,15 +229,15 @@ namespace bomberman
 
         constexpr int kDotSize = 8;
 
-        for (uint8_t i = 0; i < debugState_.playerCount; ++i)
+        for (uint8_t i = 0; i < debugSnapshot_.playerCount; ++i)
         {
-            const auto& p = debugState_.players[i];
+            const auto& p = debugSnapshot_.players[i];
 
             // Convert tile-Q8 → screen pixels using the same transform the renderer uses.
             const int screenX = sim::tileQToScreen(p.xQ, ft.fieldX, ft.scaledTile, camera.x);
             const int screenY = sim::tileQToScreen(p.yQ, ft.fieldY, ft.scaledTile, camera.y);
 
-            const int colorIdx = p.clientId % 4;
+            const int colorIdx = p.playerId % 4;
             SDL_SetRenderDrawColor(renderer,
                                    kPlayerColors[colorIdx].r,
                                    kPlayerColors[colorIdx].g,
@@ -246,35 +248,25 @@ namespace bomberman
         }
     }
 
-    void Game::pollNetInput(uint32_t clientTick)
+    void Game::pollNetInput()
     {
-        net::MsgInput msgInput{};
         const Uint8* keys = SDL_GetKeyboardState(nullptr);
 
         const bool left  = keys[SDL_SCANCODE_LEFT]  || keys[SDL_SCANCODE_A];
         const bool right = keys[SDL_SCANCODE_RIGHT] || keys[SDL_SCANCODE_D];
         const bool up    = keys[SDL_SCANCODE_UP]    || keys[SDL_SCANCODE_W];
         const bool down  = keys[SDL_SCANCODE_DOWN]  || keys[SDL_SCANCODE_S];
+        const bool bomb  = keys[SDL_SCANCODE_SPACE] != 0;
 
-        msgInput.moveX = static_cast<int8_t>((right ? 1 : 0) + (left ? -1 : 0));
-        msgInput.moveY = static_cast<int8_t>((down  ? 1 : 0) + (up   ? -1 : 0));
+        // Build button bitmask with opposing-direction cancellation.
+        uint8_t buttons = 0;
+        if (up    && !down)  buttons |= net::kInputUp;
+        if (down  && !up)    buttons |= net::kInputDown;
+        if (left  && !right) buttons |= net::kInputLeft;
+        if (right && !left)  buttons |= net::kInputRight;
+        if (bomb)            buttons |= net::kInputBomb;
 
-        // Clamp to valid range for protocol validation.
-        msgInput.moveX = std::max<int8_t>(-1, std::min<int8_t>(1, msgInput.moveX));
-        msgInput.moveY = std::max<int8_t>(-1, std::min<int8_t>(1, msgInput.moveY));
-
-        // Edge-detect bomb placement: increment persistent command id.
-        const bool bombHeld = keys[SDL_SCANCODE_SPACE] != 0;
-        if (bombHeld && !previousBombHeld_)
-        {
-            if (++bombCommandId_ == 0) bombCommandId_ = 1; // skip 0
-        }
-        previousBombHeld_ = bombHeld;
-
-        // Always send current bombCommandId
-        msgInput.bombCommandId = bombCommandId_;
-
-        netClient_->sendInput(msgInput, clientTick);
+        netClient_->sendInput(buttons);
     }
 
     void Game::stop()
@@ -312,11 +304,11 @@ namespace bomberman
         return netClient_;
     }
 
-    bool Game::tryGetLatestState(net::MsgState& out) const
+    bool Game::tryGetLatestSnapshot(net::MsgSnapshot& out) const
     {
         if (!netClient_ || !netClient_->isConnected())
             return false;
-        return netClient_->tryGetLatestState(out);
+        return netClient_->tryGetLatestSnapshot(out);
     }
 
     uint16_t Game::getServerPort() const

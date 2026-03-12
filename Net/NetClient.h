@@ -15,20 +15,18 @@ namespace bomberman::net
 
     /**
      * @brief Represents the current state of the client connection lifecycle.
-     *
-     * Used as internal state and as external status for callers.
      */
     enum class EConnectState : uint8_t
     {
-        Disconnected,       ///< Not connected, no resources held
-        Connecting,         ///< ENet connect in progress, waiting for CONNECT event
-        Handshaking,        ///< TCP-level connected, waiting for Welcome
-        Connected,          ///< Fully connected and handshake complete
-        FailedResolve,      ///< Could not resolve host address
-        FailedConnect,      ///< ENet connect attempt timed out
-        FailedHandshake,    ///< Handshake timed out or was rejected
-        FailedProtocol,     ///< Protocol version mismatch
-        FailedInit,         ///< ENet or host creation failure
+        Disconnected,       ///< Not connected, no resources held.
+        Connecting,         ///< ENet connect in progress, waiting for CONNECT event.
+        Handshaking,        ///< Transport connected, Hello sent.
+        Connected,          ///< Fully handshake-complete, session ready.
+        FailedResolve,      ///< Could not resolve host address.
+        FailedConnect,      ///< ENet connect attempt timed out.
+        FailedHandshake,    ///< Handshake timed out or was rejected.
+        FailedProtocol,     ///< Protocol version mismatch.
+        FailedInit,         ///< ENet or host creation failure.
     };
 
     /** @brief Returns true if the state represents a terminal failure. */
@@ -90,17 +88,14 @@ namespace bomberman::net
          */
         void beginConnect(const std::string& host, uint16_t port, std::string_view playerName);
 
-        /**
-         * @brief Disconnects from the server and releases connection resources.
-         */
+        /** @brief Disconnects from the server and releases connection resources. */
         void disconnect();
 
         /**
          * @brief Aborts an in-progress beginConnect() attempt.
          *
-         * Safe to call in any state. If called while Connecting or Handshaking,
-         * releases resources and transitions to Disconnected.
-         * Has no effect when already Connected or Disconnected.
+         * Safe to call in any state. Releases resources and transitions to Disconnected
+         * if Connecting or Handshaking; no-op otherwise.
          */
         void cancelConnect();
 
@@ -116,54 +111,40 @@ namespace bomberman::net
         void pump(uint16_t timeoutMs = 0);
 
         /**
-         * @brief Sends one gameplay input packet to the server.
+         * @brief Records a button bitmask for the current tick and sends a batched input packet.
          *
-         * @param input Input state payload.
-         * @param clientTick Client tick written to packet header.
+         * @param buttons Button bitmask (kInput* flags).
          */
-        void sendInput(const MsgInput& input, uint32_t clientTick);
+        void sendInput(uint8_t buttons);
 
-        /**
-         * @brief Returns true when an active session is connected.
-         */
+        /** @brief Returns true when an active session is connected. */
         [[nodiscard]]
         bool isConnected() const { return state_ == EConnectState::Connected; }
 
-        /**
-         * @brief Returns the current connection state.
-         */
+        /** @brief Returns the current connection state. */
         [[nodiscard]]
         EConnectState connectState() const { return state_; }
 
-        /**
-         * @brief Returns server-assigned client id from Welcome.
-         *
-         * Valid only after successful connect.
-         */
+        /** @brief Returns server-assigned player id, or kInvalidPlayerId before connect. */
         [[nodiscard]]
-        uint32_t clientId() const { return clientId_; }
+        uint8_t playerId() const { return playerId_; }
 
-        /**
-         * @brief Returns negotiated server tick rate from Welcome.
-         *
-         * Valid only after successful connect.
-         */
+        /** @brief Sentinel value indicating no player id has been assigned yet. */
+        static constexpr uint8_t kInvalidPlayerId = 0xFF;
+
+        /** @brief Returns negotiated server tick rate. Valid only after successful connect. */
         [[nodiscard]]
         uint16_t serverTickRate() const { return serverTickRate_; }
 
-        /** @brief Returns the most recently received state snapshot from the server, if any. */
+        /** @brief Returns the most recently received snapshot from the server, if any. */
         [[nodiscard]]
-        bool tryGetLatestState(MsgState& out) const;
+        bool tryGetLatestSnapshot(MsgSnapshot& out) const;
 
-        /** @brief Returns the last state tick */
+        /** @brief Returns the server tick of the last received snapshot. */
         [[nodiscard]]
-        uint32_t lastStateTick() const;
+        uint32_t lastSnapshotTick() const;
 
-        /**
-         * @brief Returns true and populates `outSeed` if a LevelInfo has been received from the server.
-         *
-         * Valid once the server has sent LevelInfo.
-         */
+        /** @brief Populates `outSeed` and returns true if a LevelInfo has been received. */
         [[nodiscard]]
         bool tryGetMapSeed(uint32_t& outSeed) const;
 
@@ -184,27 +165,35 @@ namespace bomberman::net
         bool initialized_ = false;
         EConnectState state_ = EConnectState::Disconnected;
 
-        uint32_t clientId_ = 0;         ///< Assigned by server during handshake
-        uint16_t serverTickRate_ = 0;   ///< Received from server during handshake
+        uint8_t playerId_ = kInvalidPlayerId; ///< Assigned by server during handshake [0, kMaxPlayers).
+        uint16_t serverTickRate_ = 0;   ///< Received from server during handshake.
 
         bool initializeENet();
         void shutdownENet();
 
+        // ---- Protocol handlers ----
         void handleWelcome(const uint8_t* payload, std::size_t payloadSize);
         void handleReject(const uint8_t* payload, std::size_t payloadSize);
         void handleLevelInfo(const uint8_t* payload, std::size_t payloadSize);
-        void handleState(const PacketHeader& header, const uint8_t* payload, std::size_t payloadSize);
+        void handleSnapshot(const uint8_t* payload, std::size_t payloadSize);
 
-        /** @brief Handles remote disconnect without sending local disconnect request. */
-        void handleRemoteDisconnect();
+        // ---- pump() sub-helpers ----
 
-        /**
-         * @brief Tears down ENet peer/host resources without touching logical state.
-         *
-         * Used by connection failure paths so state_ retains the failure reason.
-         * Does NOT send a disconnect request to the remote peer.
-         */
-        void releaseResources();
+        bool checkConnectTimeouts();
+        /** @brief Handles an ENet CONNECT event (sends Hello, transitions to Handshaking). Returns true if pump should return early. */
+        bool handleEnetConnect();
+        /** @brief Handles an ENet RECEIVE event. Returns true if pump should return early (failure state). */
+        bool handleEnetReceive(const uint8_t* data, std::size_t dataLength, uint8_t channelID);
+        /** @brief Handles remote disconnect (ENet DISCONNECT event or server-initiated). */
+        void handleEnetDisconnect();
+
+        // ---- Resource teardown ----
+
+        /** @brief Sends a polite disconnect request and drains events until server ack or iteration cap. */
+        void drainGracefulDisconnect();
+
+        /** @brief Destroys ENet peer/host transport resources without modifying logical state. */
+        void destroyTransport();
 
         /** @brief Resets connection state shared by disconnect paths. */
         void resetState();

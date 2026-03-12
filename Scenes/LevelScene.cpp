@@ -419,12 +419,10 @@ namespace bomberman
             // We only apply the latest authoritative position snapshot and run
             // animations; local gameplay logic (enemies, bombs, timers) is
             // suppressed until the server drives those events explicitly.
-            net::MsgState serverState{};
-            uint32_t stateTick = 0;
-            if (game->tryGetLatestState(serverState))
+            net::MsgSnapshot snapshot{};
+            if (game->tryGetLatestSnapshot(snapshot))
             {
-                stateTick = game->getNetClient()->lastStateTick();
-                applyServerState(serverState, stateTick);
+                applySnapshot(snapshot);
             }
             Scene::update(delta);
             updateCamera();
@@ -898,29 +896,29 @@ namespace bomberman
         player->setPosition(screenX, screenY);
     }
 
-    void LevelScene::applyServerState(const net::MsgState& state, uint32_t stateTick)
+    void LevelScene::applySnapshot(const net::MsgSnapshot& snapshot)
     {
         if (!player)
             return;
 
         // Freshness guard: skip if this snapshot has already been applied.
-        if (stateTick <= lastAppliedStateTick_)
+        if (snapshot.serverTick <= lastAppliedSnapshotTick_)
             return;
 
         const net::NetClient* netClient = game->getNetClient();
         if (!netClient)
             return;
 
-        const uint32_t localId = netClient->clientId();
+        const uint8_t localId = netClient->playerId();
 
-        for (uint8_t i = 0; i < state.playerCount; ++i)
+        for (uint8_t i = 0; i < snapshot.playerCount; ++i)
         {
-            if (state.players[i].clientId != static_cast<uint8_t>(localId))
+            if (snapshot.players[i].playerId != localId)
                 continue;
 
             // Keep playerPos_ in sync so camera and any future Q8 queries are correct.
-            playerPos_.xQ = state.players[i].xQ;
-            playerPos_.yQ = state.players[i].yQ;
+            playerPos_.xQ = snapshot.players[i].xQ;
+            playerPos_.yQ = snapshot.players[i].yQ;
 
             // Convert tile-Q8 center position to screen top-left for sprite rendering.
             // Camera offset is not subtracted here — updateCamera() reads getPositionX/Y()
@@ -929,7 +927,7 @@ namespace bomberman
             const int screenY = sim::tileQToScreenTopLeft(playerPos_.yQ, fieldPositionY, scaledTileSize, 0);
             player->setPosition(screenX, screenY);
 
-            lastAppliedStateTick_ = stateTick;
+            lastAppliedSnapshotTick_ = snapshot.serverTick;
             break;
         }
     }

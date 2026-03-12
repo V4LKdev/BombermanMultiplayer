@@ -131,10 +131,9 @@ namespace bomberman
         /**
          * @brief Applies the server-authoritative player position from a snapshot.
          *
-         * @param state Most recent server state snapshot.
-         * @param stateTick Server tick the snapshot was produced at.
+         * @param snapshot Most recent server snapshot.
          */
-        void applyServerState(const net::MsgState& state, uint32_t stateTick);
+        void applySnapshot(const net::MsgSnapshot& snapshot);
 
         // timers in ms const
         const int levelTimerStart = 200500;
@@ -190,7 +189,7 @@ namespace bomberman
 
         /// Last server snapshot tick that was applied to the player sprite.
         /// Guards against re-applying the same snapshot on consecutive scene ticks.
-        uint32_t lastAppliedStateTick_ = 0;
+        uint32_t lastAppliedSnapshotTick_ = 0;
     };
 } // namespace bomberman
 

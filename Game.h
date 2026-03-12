@@ -2,6 +2,7 @@
 #define _BOMBERMAN_GAME_H_
 
 #include <SDL.h>
+#include <chrono>
 #include <memory>
 
 #include "Managers/AssetManager.h"
@@ -35,53 +36,39 @@ namespace bomberman
         /** @brief Requests the main loop to stop. */
         void stop();
 
-        /**
-         * @brief Returns current window width in pixels.
-         */
+        /** @brief Returns current window width in pixels. */
         [[nodiscard]]
         int getWindowWidth() const;
 
-        /**
-         * @brief Returns current window height in pixels.
-         */
+        /** @brief Returns current window height in pixels. */
         [[nodiscard]]
         int getWindowHeight() const;
 
-        /**
-         * @brief Returns SDL renderer pointer.
-         */
+        /** @brief Returns the SDL renderer. */
         [[nodiscard]]
         SDL_Renderer* getRenderer() const;
 
-        /**
-         * @brief Returns scene manager pointer.
-         */
+        /** @brief Returns the scene manager. */
         [[nodiscard]]
         SceneManager* getSceneManager() const;
 
-        /**
-         * @brief Returns asset manager pointer.
-         */
+        /** @brief Returns the asset manager. */
         [[nodiscard]]
         AssetManager* getAssetManager() const;
 
-        /**
-         * @brief Returns pointer to optional network client (may be nullptr if not in multiplayer mode).
-         */
+        /** @brief Returns the network client, or nullptr if not in multiplayer mode. */
         [[nodiscard]]
         net::NetClient* getNetClient() const;
 
         /**
-         * @brief Fills `out` with the most recent server state snapshot and returns true.
+         * @brief Fills `out` with the most recent server snapshot and returns true.
          *
          * Returns false if not in multiplayer mode, or not yet connected.
          */
         [[nodiscard]]
-        bool tryGetLatestState(net::MsgState& out) const;
+        bool tryGetLatestSnapshot(net::MsgSnapshot& out) const;
 
-        /**
-         * @brief Returns the server port to connect to (from CLI or default).
-         */
+        /** @brief Returns the server port (from CLI or default). */
         [[nodiscard]]
         uint16_t getServerPort() const;
 
@@ -99,23 +86,21 @@ namespace bomberman
 
         bool isRunning = false;
         bool isInitialized = false;
-        Uint32 lastTickTime = 0;
-        Uint32 accumulatorMs = 0;
+        std::chrono::steady_clock::time_point lastTickTime{};
+        std::chrono::duration<double> accumulator{};
 
         net::NetClient* netClient_ = nullptr;           ///< Optional network client for multiplayer (not owned)
         uint16_t serverPort_ = net::kDefaultServerPort; ///< Server port from CLI or default.
         bool mute_ = false;                             ///< When true, all audio output is silenced at startup.
-        bool previousBombHeld_ = false;                 ///< Previous bomb key state for edge detection.
-        uint16_t bombCommandId_ = 0;                    ///< Monotonically increasing bomb command id.
 
-        net::MsgState debugState_{};     ///< Latest server state snapshot, refreshed each tick for the debug overlay.
-        bool debugStateValid_ = false;   ///< True once at least one state snapshot has been received.
+        net::MsgSnapshot debugSnapshot_{};   ///< Latest server snapshot, refreshed each tick for the debug overlay.
+        bool debugSnapshotValid_ = false;    ///< True once at least one snapshot has been received.
 
         /** @brief Draws server-authoritative position dots as a debug overlay. */
         void drawNetDebugOverlay();
 
-        /** @brief Samples keyboard state, builds a MsgInput, and sends it to the server. */
-        void pollNetInput(uint32_t clientTick);
+        /** @brief Samples keyboard state, builds a button bitmask, and sends it to the server. */
+        void pollNetInput();
     };
 } // namespace bomberman
 

@@ -10,155 +10,126 @@
 
 /**
  *  @brief NetSend.h - Thin wrappers around ENet packet creation and sending.
- *
- *  Provides `sendReliable()`, `sendUnreliable()`, `broadcastReliable()`, and
- *  `broadcastUnreliable()` so that the create → send → error-check → flush
- *  boilerplate lives in one place, shared by both client and server code.
- *
- *  Broadcast helpers iterate all connected peers and flush exactly once after
- *  the loop, avoiding the per-peer flush overhead of calling sendReliable in
- *  a loop.
  */
 
 namespace bomberman::net
 {
-    // TODO: Split "queue" and "flush" responsibilities; avoid implicit flush in generic send helpers.
-    // TODO: Add sendOnChannel(...) so callers can choose Control/GameState explicitly.
-    // TODO: Add lightweight telemetry hooks (queued bytes, send failures, flush count).
-    // NOTE: Reliable control packets flush immediately. Unreliable streams are batch-friendly.
-    // NOTE: This layer should stay transport-focused.
+    // NOTE: This layer is intentionally transport-focused: queue onto channels, flush explicitly.
 
     /**
-     *  @brief Sends a pre-serialized byte buffer reliably on the Control channel.
+     *  @brief Queues a pre-serialized byte buffer on an explicit channel with explicit ENet flags.
      *
      *  @return true if the packet was queued successfully.
      */
     template<std::size_t N>
-    bool sendReliable(ENetHost* host, ENetPeer* peer, const std::array<uint8_t, N>& bytes)
+    bool queueOnChannel(ENetPeer* peer, EChannel channel, uint32_t flags, const std::array<uint8_t, N>& bytes)
     {
-        ENetPacket* pkt = enet_packet_create(bytes.data(), bytes.size(), ENET_PACKET_FLAG_RELIABLE);
+        ENetPacket* pkt = enet_packet_create(bytes.data(), bytes.size(), flags);
         if (pkt == nullptr)
         {
-            LOG_PROTO_ERROR("Failed to allocate reliable packet ({} bytes)", N);
+            LOG_PROTO_ERROR("Failed to allocate packet ({} bytes) for channel {}",
+                            N, channelName(static_cast<uint8_t>(channel)));
             return false;
         }
 
-        if (enet_peer_send(peer, static_cast<uint8_t>(EChannel::Control), pkt) != 0)
+        if (enet_peer_send(peer, static_cast<uint8_t>(channel), pkt) != 0)
         {
-            LOG_PROTO_ERROR("Failed to queue reliable packet");
+            LOG_PROTO_ERROR("Failed to queue packet on channel {}",
+                            channelName(static_cast<uint8_t>(channel)));
             enet_packet_destroy(pkt);
             return false;
         }
+
+        return true;
+    }
+
+    /**
+     *  @brief Queues a pre-serialized byte buffer for all connected peers on an explicit channel.
+     *
+     *  Safe to call with zero connected peers (no-op).
+     *
+     *  @return Number of peers successfully queued.
+     */
+    template<std::size_t N>
+    int broadcastQueueOnChannel(ENetHost* host, EChannel channel, uint32_t flags, const std::array<uint8_t, N>& bytes)
+    {
+        if (host == nullptr) return 0;
+
+        int sent = 0;
+        for (std::size_t i = 0; i < host->peerCount; ++i)
+        {
+            ENetPeer* peer = &host->peers[i];
+            if (peer->state != ENET_PEER_STATE_CONNECTED)
+                continue;
+
+            ENetPacket* pkt = enet_packet_create(bytes.data(), bytes.size(), flags);
+            if (pkt == nullptr)
+            {
+                LOG_PROTO_ERROR("broadcastQueueOnChannel: failed to allocate packet for peer {} on channel {}",
+                                i, channelName(static_cast<uint8_t>(channel)));
+                continue;
+            }
+
+            if (enet_peer_send(peer, static_cast<uint8_t>(channel), pkt) != 0)
+            {
+                LOG_PROTO_ERROR("broadcastQueueOnChannel: failed to queue packet for peer {} on channel {}",
+                                i, channelName(static_cast<uint8_t>(channel)));
+                enet_packet_destroy(pkt);
+                continue;
+            }
+
+            ++sent;
+        }
+
+        return sent;
+    }
+
+    /**
+     * @brief Flushes all queued packets for this host.
+     */
+    inline void flush(ENetHost* host)
+    {
+        if (host == nullptr) return;
 
         enet_host_flush(host);
-        return true;
     }
 
-    /**
-     *  @brief Sends a pre-serialized byte buffer unreliably on the GameState channel.
-     *
-     *  @return true if the packet was queued successfully.
-     */
+
+
     template<std::size_t N>
-    bool sendUnreliable([[maybe_unused]] ENetHost* host, ENetPeer* peer, const std::array<uint8_t, N>& bytes)
+    bool queueReliableControl(ENetPeer* peer, const std::array<uint8_t, N>& bytes)
     {
-        ENetPacket* pkt = enet_packet_create(bytes.data(), bytes.size(), 0);
-        if (pkt == nullptr)
-        {
-            LOG_PROTO_ERROR("Failed to allocate unreliable packet ({} bytes)", N);
-            return false;
-        }
-
-        if (enet_peer_send(peer, static_cast<uint8_t>(EChannel::GameState), pkt) != 0)
-        {
-            LOG_PROTO_ERROR("Failed to queue unreliable packet");
-            enet_packet_destroy(pkt);
-            return false;
-        }
-
-        return true;
+        return queueOnChannel(peer, EChannel::ControlReliable, ENET_PACKET_FLAG_RELIABLE, bytes);
     }
 
-    /**
-     *  @brief Broadcasts a pre-serialized byte buffer reliably to all connected peers.
-     *
-     *  Queues one packet per connected peer then flushes once.
-     *  Safe to call with zero connected peers (no-op).
-     *
-     *  @return Number of peers successfully queued.
-     */
     template<std::size_t N>
-    int broadcastReliable(ENetHost* host, const std::array<uint8_t, N>& bytes)
+    bool queueReliableGame(ENetPeer* peer, const std::array<uint8_t, N>& bytes)
     {
-        int sent = 0;
-        for (std::size_t i = 0; i < host->peerCount; ++i)
-        {
-            ENetPeer* peer = &host->peers[i];
-            if (peer->state != ENET_PEER_STATE_CONNECTED)
-                continue;
-
-            ENetPacket* pkt = enet_packet_create(bytes.data(), bytes.size(), ENET_PACKET_FLAG_RELIABLE);
-            if (pkt == nullptr)
-            {
-                LOG_PROTO_ERROR("broadcastReliable: failed to allocate packet for peer {}", i);
-                continue;
-            }
-
-            if (enet_peer_send(peer, static_cast<uint8_t>(EChannel::Control), pkt) != 0)
-            {
-                LOG_PROTO_ERROR("broadcastReliable: failed to queue packet for peer {}", i);
-                enet_packet_destroy(pkt);
-                continue;
-            }
-
-            ++sent;
-        }
-
-        if (sent > 0)
-            enet_host_flush(host);
-
-        return sent;
+        return queueOnChannel(peer, EChannel::GameReliable, ENET_PACKET_FLAG_RELIABLE, bytes);
     }
 
-    /**
-     *  @brief Broadcasts a pre-serialized byte buffer unreliably to all connected peers.
-     *
-     *  Queues one packet per connected peer then flushes once.
-     *  Safe to call with zero connected peers (no-op).
-     *
-     *  @return Number of peers successfully queued.
-     */
     template<std::size_t N>
-    int broadcastUnreliable(ENetHost* host, const std::array<uint8_t, N>& bytes)
+    bool queueUnreliableGame(ENetPeer* peer, const std::array<uint8_t, N>& bytes)
     {
-        int sent = 0;
-        for (std::size_t i = 0; i < host->peerCount; ++i)
-        {
-            ENetPeer* peer = &host->peers[i];
-            if (peer->state != ENET_PEER_STATE_CONNECTED)
-                continue;
+        return queueOnChannel(peer, EChannel::GameUnreliable, 0, bytes);
+    }
 
-            ENetPacket* pkt = enet_packet_create(bytes.data(), bytes.size(), 0);
-            if (pkt == nullptr)
-            {
-                LOG_PROTO_ERROR("broadcastUnreliable: failed to allocate packet for peer {}", i);
-                continue;
-            }
+    template<std::size_t N>
+    int broadcastQueuedReliableControl(ENetHost* host, const std::array<uint8_t, N>& bytes)
+    {
+        return broadcastQueueOnChannel(host, EChannel::ControlReliable, ENET_PACKET_FLAG_RELIABLE, bytes);
+    }
 
-            if (enet_peer_send(peer, static_cast<uint8_t>(EChannel::GameState), pkt) != 0)
-            {
-                LOG_PROTO_ERROR("broadcastUnreliable: failed to queue packet for peer {}", i);
-                enet_packet_destroy(pkt);
-                continue;
-            }
+    template<std::size_t N>
+    int broadcastQueuedUnreliableGame(ENetHost* host, const std::array<uint8_t, N>& bytes)
+    {
+        return broadcastQueueOnChannel(host, EChannel::GameUnreliable, 0, bytes);
+    }
 
-            ++sent;
-        }
-
-        if (sent > 0)
-            enet_host_flush(host);
-
-        return sent;
+    template<std::size_t N>
+    int broadcastQueuedReliableGame(ENetHost* host, const std::array<uint8_t, N>& bytes)
+    {
+        return broadcastQueueOnChannel(host, EChannel::GameReliable, ENET_PACKET_FLAG_RELIABLE, bytes);
     }
 
 } // namespace bomberman::net

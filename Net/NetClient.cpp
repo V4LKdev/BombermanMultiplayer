@@ -4,13 +4,14 @@
 
 #include "Util/Log.h"
 
+#include <algorithm>
 #include <chrono>
 #include <enet/enet.h>
 
 namespace bomberman::net
 {
     // =================================================================================================================
-    // ==== Local Helpers ==============================================================================================
+    // ===== Local Helpers =============================================================================================
     // =================================================================================================================
 
     namespace
@@ -35,21 +36,24 @@ namespace bomberman::net
         ENetHost* host = nullptr;
         ENetPeer* peer = nullptr;
         PacketDispatcher<NetClient> dispatcher;
-        uint32_t nextInputSequence = 0;
 
-        // ---- Async connect state (cleared by resetState()) ----
+        // ---- Input batching state ----
+        uint32_t nextInputSeq = 0;                      ///< Monotonic input sequence counter.
+        uint8_t inputHistory[kMaxInputBatchSize]{};     ///< Recent button states for redundant resend batching.
+
+        // ---- Async connect/handshake state (cleared by resetState()) ----
         std::string pendingPlayerName;
         TimePoint connectStartTime{};
         TimePoint handshakeStartTime{};
 
-        struct ReceivedStateCache
+        // ---- Session caches (populated by protocol handlers, cleared on disconnect) ----
+
+        struct ReceivedSnapshotCache
         {
-            MsgState snapshot{};
-            uint32_t tick = 0;
-            uint32_t sequence = 0;
+            MsgSnapshot snapshot{};
             bool valid = false;
         };
-        ReceivedStateCache lastState{};
+        ReceivedSnapshotCache lastSnapshot{};
 
         struct ReceivedLevelInfoCache
         {
@@ -83,26 +87,25 @@ namespace bomberman::net
             client.handleLevelInfo(payload, payloadSize);
         }
 
-        static void onState(NetClient& client,
-                            const PacketHeader& header,
-                            const uint8_t* payload,
-                            std::size_t payloadSize)
+        static void onSnapshot(NetClient& client,
+                               const PacketHeader& /*header*/,
+                               const uint8_t* payload,
+                               std::size_t payloadSize)
         {
-            client.handleState(header, payload, payloadSize);
+            client.handleSnapshot(payload, payloadSize);
         }
     };
 
     // =================================================================================================================
-    // ==== Construction And Lifetime ==================================================================================
+    // ===== Construction And Lifetime =================================================================================
     // =================================================================================================================
 
-    /** @brief Constructs client and binds packet handlers. */
     NetClient::NetClient() : impl_(std::make_unique<Impl>())
     {
         impl_->dispatcher.bind(EMsgType::Welcome,   &Impl::onWelcome);
         impl_->dispatcher.bind(EMsgType::Reject,    &Impl::onReject);
         impl_->dispatcher.bind(EMsgType::LevelInfo, &Impl::onLevelInfo);
-        impl_->dispatcher.bind(EMsgType::State,     &Impl::onState);
+        impl_->dispatcher.bind(EMsgType::Snapshot,  &Impl::onSnapshot);
     }
 
     NetClient::~NetClient()
@@ -115,7 +118,7 @@ namespace bomberman::net
     NetClient& NetClient::operator=(NetClient&&) noexcept = default;
 
     // =================================================================================================================
-    // ==== Connection Lifecycle =======================================================================================
+    // ===== Connection Lifecycle ======================================================================================
     // =================================================================================================================
 
     void NetClient::beginConnect(const std::string& host, uint16_t port, std::string_view playerName)
@@ -145,7 +148,7 @@ namespace bomberman::net
         {
             LOG_CLIENT_ERROR("Failed to create ENet client host");
             state_ = EConnectState::FailedInit;
-            releaseResources();
+            destroyTransport();
             return;
         }
 
@@ -155,7 +158,7 @@ namespace bomberman::net
         {
             LOG_CLIENT_ERROR("Invalid host address: {}", host);
             state_ = EConnectState::FailedResolve;
-            releaseResources();
+            destroyTransport();
             return;
         }
 
@@ -167,7 +170,7 @@ namespace bomberman::net
         {
             LOG_CLIENT_ERROR("Failed to create ENet peer");
             state_ = EConnectState::FailedConnect;
-            releaseResources();
+            destroyTransport();
             return;
         }
 
@@ -179,75 +182,60 @@ namespace bomberman::net
         LOG_CLIENT_DEBUG("Async connect initiated to {}:{}", host, port);
     }
 
-    /** @brief Aborts an in-progress connect/handshake without sending a disconnect request. */
     void NetClient::cancelConnect()
     {
         if (state_ != EConnectState::Connecting && state_ != EConnectState::Handshaking)
             return;
 
         LOG_CLIENT_DEBUG("Connect attempt cancelled (was {})", connectStateName(state_));
-        releaseResources();
+        destroyTransport();
         resetState();
     }
 
-    /** @brief Disconnects and releases client host/peer resources. */
-    void NetClient::disconnect()
+
+    void NetClient::drainGracefulDisconnect()
     {
-        if (impl_ && impl_->peer)
-        {
-            enet_peer_disconnect(impl_->peer, 0);
-
-            // Wait for disconnect acknowledgement (capped to avoid unbounded spin).
-            constexpr int kDisconnectDrainMaxIter = 50;
-            ENetEvent event{};
-            bool disconnectAckReceived = false;
-            int iter = 0;
-            while (!disconnectAckReceived && iter < kDisconnectDrainMaxIter
-                   && enet_host_service(impl_->host, &event, 100) > 0)
-            {
-                ++iter;
-                switch (event.type)
-                {
-                    case ENET_EVENT_TYPE_RECEIVE:
-                        enet_packet_destroy(event.packet);
-                        break;
-                    case ENET_EVENT_TYPE_DISCONNECT:
-                        disconnectAckReceived = true;
-                        break;
-                    default:
-                        break;
-                }
-            }
-
-            // Force reset if acknowledgement was not received.
-            enet_peer_reset(impl_->peer);
-            impl_->peer = nullptr;
-        }
-
-        if (impl_ && impl_->host)
-        {
-            enet_host_destroy(impl_->host);
-            impl_->host = nullptr;
-        }
-
-        resetState();
-    }
-
-    /** @brief Pumps ENet events and dispatches received packets. */
-    void NetClient::pump(uint16_t timeoutMs)
-    {
-        if (!impl_ || !impl_->host)
+        if (!impl_ || !impl_->peer)
             return;
 
-        // ---- Async timeout checks (run once per pump, before event drain) ----
+        enet_peer_disconnect(impl_->peer, 0);
+
+        constexpr int kDisconnectDrainMaxIter = 50;
+        ENetEvent event{};
+        int iter = 0;
+
+        while (iter < kDisconnectDrainMaxIter
+               && enet_host_service(impl_->host, &event, 100) > 0)
+        {
+            ++iter;
+            if (event.type == ENET_EVENT_TYPE_RECEIVE)
+                enet_packet_destroy(event.packet);
+            else if (event.type == ENET_EVENT_TYPE_DISCONNECT)
+                return;
+        }
+    }
+
+    void NetClient::disconnect()
+    {
+        drainGracefulDisconnect();
+        destroyTransport();
+        resetState();
+    }
+
+    // =================================================================================================================
+    // ===== Event Pump and Sub-Helpers ================================================================================
+    // =================================================================================================================
+
+    bool NetClient::checkConnectTimeouts()
+    {
         if (state_ == EConnectState::Connecting)
         {
             if (elapsedMs(impl_->connectStartTime) >= kConnectTimeoutMs)
             {
                 LOG_CLIENT_WARN("Async connect timeout ({}ms)", kConnectTimeoutMs);
                 state_ = EConnectState::FailedConnect;
-                releaseResources();
-                return;
+                destroyTransport();
+                return true;
             }
         }
         else if (state_ == EConnectState::Handshaking)
@@ -256,10 +244,71 @@ namespace bomberman::net
             {
                 LOG_CLIENT_WARN("Async handshake timeout ({}ms)", kConnectTimeoutMs);
                 state_ = EConnectState::FailedHandshake;
-                releaseResources();
-                return;
+                destroyTransport();
+                return true;
             }
         }
+        return false;
+    }
+
+    bool NetClient::handleEnetConnect()
+    {
+        if (state_ != EConnectState::Connecting)
+        {
+            LOG_CLIENT_DEBUG("Ignoring unexpected CONNECT event in state {}", connectStateName(state_));
+            return false;
+        }
+
+        LOG_CLIENT_DEBUG("ENet connect event received, sending Hello");
+
+        const auto helloPacket =
+            makeHelloPacket(impl_->pendingPlayerName, kProtocolVersion);
+
+        if (!queueReliableControl(impl_->peer, helloPacket))
+        {
+            LOG_CLIENT_ERROR("Failed to send Hello packet");
+            state_ = EConnectState::FailedHandshake;
+            destroyTransport();
+            return true;
+        }
+        flush(impl_->host);
+
+        state_ = EConnectState::Handshaking;
+        impl_->handshakeStartTime = SteadyClock::now();
+        // handleWelcome() will receive the Welcome, then handleLevelInfo()
+        // will flip state_ to Connected once the full handshake completes.
+        return false;
+    }
+
+    bool NetClient::handleEnetReceive(const uint8_t* data, std::size_t dataLength, uint8_t channelID)
+    {
+        LOG_CLIENT_TRACE("Received {} bytes on channel {}", dataLength, channelName(channelID));
+
+        dispatchPacket(impl_->dispatcher, *this, data, dataLength);
+
+        // A handler may have moved us into a terminal failure state (e.g. protocol mismatch).
+        if (isFailedState(state_))
+        {
+            destroyTransport();
+            return true;
+        }
+
+        return false;
+    }
+
+    void NetClient::handleEnetDisconnect()
+    {
+        destroyTransport();
+        resetState();
+    }
+
+    void NetClient::pump(uint16_t timeoutMs)
+    {
+        if (!impl_ || !impl_->host)
+            return;
+
+        if (checkConnectTimeouts())
+            return;
 
         ENetEvent event{};
         bool shouldDisconnect = false;
@@ -270,19 +319,9 @@ namespace bomberman::net
             {
             case ENET_EVENT_TYPE_RECEIVE:
             {
-                LOG_CLIENT_TRACE("Received {} bytes on channel {}", event.packet->dataLength, channelName(event.channelID));
-
-                dispatchPacket(impl_->dispatcher, *this, event.packet->data, event.packet->dataLength);
-
+                const bool earlyOut = handleEnetReceive(event.packet->data, event.packet->dataLength, event.channelID);
                 enet_packet_destroy(event.packet);
-
-                // A handler may move us into a terminal failure state (for example protocol mismatch).
-                if (isFailedState(state_))
-                {
-                    releaseResources();
-                    return;
-                }
-
+                if (earlyOut) return;
                 break;
             }
 
@@ -292,33 +331,8 @@ namespace bomberman::net
                 break;
 
             case ENET_EVENT_TYPE_CONNECT:
-            {
-                if (state_ != EConnectState::Connecting)
-                {
-                    LOG_CLIENT_DEBUG("Ignoring unexpected CONNECT event in state {}", connectStateName(state_));
-                    break;
-                }
-
-                LOG_CLIENT_DEBUG("ENet connect event received, sending Hello");
-
-                // Phase A: send Hello once, transition to Handshaking.
-                const auto helloPacket =
-                    makeHelloPacket(impl_->pendingPlayerName, kProtocolVersion, 1, 0);
-
-                if (!sendReliable(impl_->host, impl_->peer, helloPacket))
-                {
-                    LOG_CLIENT_ERROR("Failed to send Hello packet");
-                    state_ = EConnectState::FailedHandshake;
-                    releaseResources();
-                    return;
-                }
-
-                state_ = EConnectState::Handshaking;
-                impl_->handshakeStartTime = SteadyClock::now();
-                // Phase B: handleWelcome() will flip state_ to Connected
-                // on subsequent pump() ticks when the Welcome arrives.
+                if (handleEnetConnect()) return;
                 break;
-            }
 
             case ENET_EVENT_TYPE_NONE:
                 break;
@@ -330,48 +344,64 @@ namespace bomberman::net
             if (shouldDisconnect) break;
         }
 
-        if (shouldDisconnect) handleRemoteDisconnect();
+        if (shouldDisconnect) handleEnetDisconnect();
     }
 
     // =================================================================================================================
-    // ==== Public Runtime I/O =========================================================================================
+    // ===== Public Runtime I/O ========================================================================================
     // =================================================================================================================
 
-    void NetClient::sendInput(const MsgInput& input, uint32_t clientTick)
+    void NetClient::sendInput(uint8_t buttons)
     {
         if (!impl_ || !isConnected())
             return;
 
-        const uint32_t seq = ++impl_->nextInputSequence;
-        const auto bytes = makeInputPacket(input, seq, clientTick);
+        // Advance the monotonic input sequence.
+        const uint32_t seq = ++impl_->nextInputSeq;
 
-        if (!sendUnreliable(impl_->host, impl_->peer, bytes))
+        // Store in the recent input history for redundant resend batching.
+        impl_->inputHistory[seq % kMaxInputBatchSize] = buttons;
+
+        // Build a batched input packet with up to kMaxInputBatchSize recent entries.
+        const uint8_t batchCount = static_cast<uint8_t>(
+            std::min<uint32_t>(seq, kMaxInputBatchSize));
+        const uint32_t baseSeq = seq - batchCount + 1;
+
+        MsgInput msg{};
+        msg.baseInputSeq = baseSeq;
+        msg.count = batchCount;
+        for (uint8_t i = 0; i < batchCount; ++i)
+        {
+            msg.inputs[i] = impl_->inputHistory[(baseSeq + i) % kMaxInputBatchSize];
+        }
+
+        const auto bytes = makeInputPacket(msg);
+
+        if (!queueUnreliableGame(impl_->peer, bytes))
             return;
 
         if ((seq % kInputLogEveryN) == 0)
         {
-            LOG_CLIENT_DEBUG("Sent Input seq={} tick={} move=({},{}) bombCmdId={}",
-                             seq, clientTick,
-                             static_cast<int>(input.moveX), static_cast<int>(input.moveY),
-                             input.bombCommandId);
+            LOG_CLIENT_DEBUG("Sent Input seq={} batch=[{}..{}] buttons=0x{:02x}",
+                             seq, baseSeq, seq, buttons);
         }
     }
 
-    bool NetClient::tryGetLatestState(MsgState& out) const
+    bool NetClient::tryGetLatestSnapshot(MsgSnapshot& out) const
     {
-        if (!impl_ || !isConnected() || !impl_->lastState.valid)
+        if (!impl_ || !isConnected() || !impl_->lastSnapshot.valid)
             return false;
 
-        out = impl_->lastState.snapshot;
+        out = impl_->lastSnapshot.snapshot;
         return true;
     }
 
-    uint32_t NetClient::lastStateTick() const
+    uint32_t NetClient::lastSnapshotTick() const
     {
-        if (!impl_ || !isConnected() || !impl_->lastState.valid)
+        if (!impl_ || !isConnected() || !impl_->lastSnapshot.valid)
             return 0;
 
-        return impl_->lastState.tick;
+        return impl_->lastSnapshot.snapshot.serverTick;
     }
 
     bool NetClient::tryGetMapSeed(uint32_t& outSeed) const
@@ -383,10 +413,9 @@ namespace bomberman::net
     }
 
     // =================================================================================================================
-    // ==== Private Protocol Handlers ==================================================================================
+    // ===== Private Protocol Handlers =================================================================================
     // =================================================================================================================
 
-    /** @brief Processes Welcome payload and updates negotiated client session data. */
     void NetClient::handleWelcome(const uint8_t* payload, std::size_t payloadSize)
     {
         MsgWelcome welcome{};
@@ -403,18 +432,47 @@ namespace bomberman::net
             return;
         }
 
-        clientId_ = welcome.clientId;
+        playerId_ = welcome.playerId;
         serverTickRate_ = welcome.serverTickRate;
 
-        LOG_CLIENT_INFO("Welcome: clientId={}, tickRate={} - awaiting LevelInfo", welcome.clientId, welcome.serverTickRate);
+        LOG_CLIENT_INFO("Welcome: playerId={}, tickRate={} - awaiting LevelInfo", welcome.playerId, welcome.serverTickRate);
     }
 
     void NetClient::handleReject(const uint8_t* payload, std::size_t payloadSize)
     {
-        // TODO: implement handling of reject properly
+        MsgReject reject{};
+        if (!deserializeMsgReject(payload, payloadSize, reject))
+        {
+            LOG_CLIENT_WARN("Failed to parse Reject payload - treating as generic handshake failure");
+            state_ = EConnectState::FailedHandshake;
+            return;
+        }
+
+        switch (reject.reason)
+        {
+            case MsgReject::EReason::VersionMismatch:
+                LOG_CLIENT_ERROR("Server rejected: version mismatch (server expects v{})", reject.expectedProtocolVersion);
+                state_ = EConnectState::FailedProtocol;
+                break;
+
+            case MsgReject::EReason::ServerFull:
+                LOG_CLIENT_WARN("Server rejected: server is full");
+                state_ = EConnectState::FailedHandshake;
+                break;
+
+            case MsgReject::EReason::Banned:
+                LOG_CLIENT_WARN("Server rejected: banned");
+                state_ = EConnectState::FailedHandshake;
+                break;
+
+            case MsgReject::EReason::Other:
+            default:
+                LOG_CLIENT_WARN("Server rejected: reason={}", static_cast<int>(reject.reason));
+                state_ = EConnectState::FailedHandshake;
+                break;
+        }
     }
 
-    /** @brief Processes LevelInfo payload, caches it, and completes the handshake. */
     void NetClient::handleLevelInfo(const uint8_t* payload, std::size_t payloadSize)
     {
         if (!impl_)
@@ -429,42 +487,44 @@ namespace bomberman::net
 
         impl_->lastLevelInfo = {msgLevelInfo, true};
 
-        // LevelInfo is the final handshake packet — the session is now fully ready.
+        // LevelInfo is the final handshake packet - the session is now fully ready.
         state_ = EConnectState::Connected;
 
-        LOG_CLIENT_INFO("Received LevelInfo seed={} — handshake complete, session ready", msgLevelInfo.mapSeed);
+        LOG_CLIENT_INFO("Received LevelInfo seed={} - handshake complete, session ready", msgLevelInfo.mapSeed);
     }
 
-    /** @brief Processes State payload and updates local game state accordingly. */
-    void NetClient::handleState(const PacketHeader& header, const uint8_t* payload, std::size_t payloadSize)
+    void NetClient::handleSnapshot(const uint8_t* payload, std::size_t payloadSize)
     {
         if (!impl_ || !isConnected())
         {
-            LOG_CLIENT_WARN("Received State payload while not connected - ignoring");
+            LOG_CLIENT_WARN("Received Snapshot payload while not connected - ignoring");
             return;
         }
 
-        MsgState state{};
-        if (!deserializeMsgState(payload, payloadSize, state))
+        MsgSnapshot snapshot{};
+        if (!deserializeMsgSnapshot(payload, payloadSize, snapshot))
         {
-            LOG_CLIENT_WARN("Failed to parse State payload");
+            LOG_CLIENT_WARN("Failed to parse Snapshot payload");
             return;
         }
 
-        impl_->lastState = {state, header.tick, header.sequence, true};
+        // Only accept if newer than current cached snapshot.
+        if (impl_->lastSnapshot.valid && snapshot.serverTick <= impl_->lastSnapshot.snapshot.serverTick)
+            return;
 
-        if (header.tick % kStateLogEveryN == 0)
+        impl_->lastSnapshot = {snapshot, true};
+
+        if (snapshot.serverTick % kSnapshotLogEveryN == 0)
         {
-            LOG_CLIENT_DEBUG("Received State seq={} tick={} playerCount={}",
-                             header.sequence, header.tick, state.playerCount);
+            LOG_CLIENT_DEBUG("Received Snapshot tick={} playerCount={}",
+                             snapshot.serverTick, snapshot.playerCount);
         }
     }
 
     // =================================================================================================================
-    // ==== Private ENet helpers =======================================================================================
+    // ===== Private ENet helpers ======================================================================================
     // =================================================================================================================
 
-    /** @brief Initializes ENet global state once for this client instance. */
     bool NetClient::initializeENet()
     {
         if (initialized_) return true;
@@ -480,7 +540,6 @@ namespace bomberman::net
         return true;
     }
 
-    /** @brief Shuts down ENet global state if previously initialized. */
     void NetClient::shutdownENet()
     {
         if (initialized_)
@@ -490,8 +549,7 @@ namespace bomberman::net
         }
     }
 
-    /** @brief Tears down ENet peer/host without modifying logical state. */
-    void NetClient::releaseResources()
+    void NetClient::destroyTransport()
     {
         if (!impl_) return;
 
@@ -508,42 +566,20 @@ namespace bomberman::net
         }
     }
 
-    /** @brief Cleans local state after server-initiated disconnect. */
-    void NetClient::handleRemoteDisconnect()
-    {
-        // Server already disconnected us. Only clean up local resources.
-        if (impl_)
-        {
-            if (impl_->peer)
-            {
-                enet_peer_reset(impl_->peer);
-                impl_->peer = nullptr;
-            }
-
-            if (impl_->host)
-            {
-                enet_host_destroy(impl_->host);
-                impl_->host = nullptr;
-            }
-        }
-
-        resetState();
-    }
-
-    /** @brief Resets client session fields to default values. */
     void NetClient::resetState()
     {
         state_ = EConnectState::Disconnected;
-        clientId_ = 0;
+        playerId_ = kInvalidPlayerId;
         serverTickRate_ = 0;
         if (impl_)
         {
-            impl_->nextInputSequence = 0;
+            impl_->nextInputSeq = 0;
+            std::memset(impl_->inputHistory, 0, sizeof(impl_->inputHistory));
             impl_->pendingPlayerName.clear();
             impl_->connectStartTime   = TimePoint{};
             impl_->handshakeStartTime = TimePoint{};
-            impl_->lastState     = {};
-            impl_->lastLevelInfo = {}; // Clear so a reconnect receives a fresh seed from the server.
+            impl_->lastSnapshot  = {};
+            impl_->lastLevelInfo = {};
         }
     }
 
