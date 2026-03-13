@@ -664,3 +664,68 @@ Stop local player movement from diverging across singleplayer, multiplayer, and 
 
 ### Result
 - Client gameplay now uses the same shared movement primitive as the server, and multiplayer position application no longer depends on legacy local float movement.
+
+## 2026-03-12 (38e6c86) – Reshape Protocol Around Batched Input, Snapshots, And Player IDs
+
+### Goal
+Move the multiplayer wire format from a prototype packet layout to a cleaner long-term foundation that can support authoritative simulation, future prediction, and cleaner session semantics.
+
+### Changes
+- Shrunk the common packet header to `type + payloadSize`.
+- Expanded ENet traffic to three channels:
+  - reliable control
+  - reliable gameplay (reserved)
+  - unreliable gameplay
+- Replaced transport-facing `clientId` usage with protocol/game-facing `playerId`.
+- Replaced the old single-input payload with a batched button-bitmask input message.
+- Renamed public replicated state to `MsgSnapshot` and added a forward-looking `MsgCorrection` type.
+- Updated `NetClient`, `Game`, and `LevelScene` call sites to use the new protocol shape.
+- Cleaned up `NetClient` structure:
+  - clearer helper ordering
+  - explicit invalid `playerId` sentinel
+  - proper reject handling
+  - centralized transport teardown
+
+### Result
+- The protocol now has a clearer separation between transport framing, command input, public snapshots, and future owner-only correction data.
+- Client/gameplay call sites match the new message model without relying on transport identity leakage.
+
+## 2026-03-13 (4d9c1a2) – Fix Input Starvation With High-Resolution Timing And Server Diagnostics
+
+### Goal
+Resolve a runtime bug where multiplayer input would work briefly, then stop responding after the client drifted too far ahead of the server consume window.
+
+### Symptoms
+- Movement initially worked, then became unresponsive.
+- Server logs showed `lastConsumedInputSeq` advancing while `lastReceivedInputSeq` eventually froze.
+- Repeated ahead-drop and gap patterns appeared in the input pipeline.
+
+### Diagnosis
+- The protocol refactor itself was not the root failure.
+- The real issue was timing drift caused by coarse fixed-step timing:
+  - integer-millisecond accumulators
+  - `1000 / 60 == 16` ms truncation
+  - long-term cadence mismatch between client input generation and server input consumption
+- Once the client moved too far ahead, whole batched input packets fell outside the server's acceptable ahead window and were dropped.
+
+### Fix
+- Switched both client and server fixed-step loops to `std::chrono::steady_clock`.
+- Changed accumulators to high-resolution duration values instead of integer milliseconds.
+- Increased input transport tolerance:
+  - `kMaxInputBatchSize: 8 -> 16`
+  - `kServerInputBufferSize: 16 -> 32`
+- Reworked server-side input diagnostics:
+  - aggregated late-drop counts
+  - aggregated ahead-drop counts
+  - input-gap counts
+  - average receive-vs-consume lead
+  - periodic summaries and repeated-problem warnings
+- Updated server snapshot sending to use the queued-send helpers consistently.
+
+### Validation
+- Ran a 5-minute session with one client, then with two clients.
+- No repeat of input starvation, freeze, or disconnect issues.
+- Movement still shows expected server-authoritative latency because prediction is not implemented yet, but the catastrophic failure mode is gone.
+
+### Result
+- The multiplayer foundation is now stable enough to continue with prediction, reconciliation, and richer replicated gameplay.
