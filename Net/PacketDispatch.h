@@ -117,14 +117,14 @@ namespace bomberman::net
 
         if (!tryParsePacket(data, dataLength, header, payload, payloadSize))
         {
-            LOG_PROTO_WARN("Failed to deserialize PacketHeader (malformed or truncated, {} bytes)",
-                           dataLength);
+            LOG_NET_PACKET_WARN("Failed to deserialize PacketHeader (malformed or truncated, {} bytes)",
+                                dataLength);
             return false;
         }
 
         if (!dispatcher.dispatch(context, header, payload, payloadSize))
         {
-            LOG_PROTO_TRACE("No handler for message type 0x{:02x}", static_cast<int>(header.type));
+            LOG_NET_PACKET_TRACE("No handler for message type 0x{:02x}", static_cast<int>(header.type));
             return false;
         }
 

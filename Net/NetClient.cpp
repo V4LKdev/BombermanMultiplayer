@@ -132,7 +132,7 @@ namespace bomberman::net
         // Already connected or in-progress: ignore duplicate calls.
         if (isConnected() || state_ == EConnectState::Connecting || state_ == EConnectState::Handshaking)
         {
-            LOG_CLIENT_DEBUG("beginConnect() called while already in state {} – ignoring", connectStateName(state_));
+            LOG_NET_CONN_DEBUG("beginConnect() called while already in state {} - ignoring", connectStateName(state_));
             return;
         }
 
@@ -179,7 +179,7 @@ namespace bomberman::net
         impl_->connectStartTime = SteadyClock::now();
 
         state_ = EConnectState::Connecting;
-        LOG_CLIENT_DEBUG("Async connect initiated to {}:{}", host, port);
+        LOG_NET_CONN_DEBUG("Async connect initiated to {}:{}", host, port);
     }
 
     void NetClient::cancelConnect()
@@ -187,7 +187,7 @@ namespace bomberman::net
         if (state_ != EConnectState::Connecting && state_ != EConnectState::Handshaking)
             return;
 
-        LOG_CLIENT_DEBUG("Connect attempt cancelled (was {})", connectStateName(state_));
+        LOG_NET_CONN_DEBUG("Connect attempt cancelled (was {})", connectStateName(state_));
         destroyTransport();
         resetState();
     }
@@ -232,7 +232,7 @@ namespace bomberman::net
         {
             if (elapsedMs(impl_->connectStartTime) >= kConnectTimeoutMs)
             {
-                LOG_CLIENT_WARN("Async connect timeout ({}ms)", kConnectTimeoutMs);
+                LOG_NET_CONN_WARN("Async connect timeout ({}ms)", kConnectTimeoutMs);
                 state_ = EConnectState::FailedConnect;
                 destroyTransport();
                 return true;
@@ -242,7 +242,7 @@ namespace bomberman::net
         {
             if (elapsedMs(impl_->handshakeStartTime) >= kConnectTimeoutMs)
             {
-                LOG_CLIENT_WARN("Async handshake timeout ({}ms)", kConnectTimeoutMs);
+                LOG_NET_CONN_WARN("Async handshake timeout ({}ms)", kConnectTimeoutMs);
                 state_ = EConnectState::FailedHandshake;
                 destroyTransport();
                 return true;
@@ -255,18 +255,18 @@ namespace bomberman::net
     {
         if (state_ != EConnectState::Connecting)
         {
-            LOG_CLIENT_DEBUG("Ignoring unexpected CONNECT event in state {}", connectStateName(state_));
+            LOG_NET_CONN_DEBUG("Ignoring unexpected CONNECT event in state {}", connectStateName(state_));
             return false;
         }
 
-        LOG_CLIENT_DEBUG("ENet connect event received, sending Hello");
+        LOG_NET_CONN_DEBUG("ENet connect event received, sending Hello");
 
         const auto helloPacket =
             makeHelloPacket(impl_->pendingPlayerName, kProtocolVersion);
 
         if (!queueReliableControl(impl_->peer, helloPacket))
         {
-            LOG_CLIENT_ERROR("Failed to send Hello packet");
+            LOG_NET_CONN_ERROR("Failed to send Hello packet");
             state_ = EConnectState::FailedHandshake;
             destroyTransport();
             return true;
@@ -282,7 +282,8 @@ namespace bomberman::net
 
     bool NetClient::handleEnetReceive(const uint8_t* data, std::size_t dataLength, uint8_t channelID)
     {
-        LOG_CLIENT_TRACE("Received {} bytes on channel {}", dataLength, channelName(channelID));
+        static_cast<void>(channelID);
+        LOG_NET_PACKET_TRACE("Received {} bytes on channel {}", dataLength, channelName(channelID));
 
         dispatchPacket(impl_->dispatcher, *this, data, dataLength);
 
@@ -326,7 +327,7 @@ namespace bomberman::net
             }
 
             case ENET_EVENT_TYPE_DISCONNECT:
-                LOG_CLIENT_INFO("Disconnected from server");
+                LOG_NET_CONN_INFO("Disconnected from server");
                 shouldDisconnect = true;
                 break;
 
@@ -382,8 +383,8 @@ namespace bomberman::net
 
         if ((seq % kInputLogEveryN) == 0)
         {
-            LOG_CLIENT_DEBUG("Sent Input seq={} batch=[{}..{}] buttons=0x{:02x}",
-                             seq, baseSeq, seq, buttons);
+            LOG_NET_INPUT_DEBUG("Sent Input seq={} batch=[{}..{}] buttons=0x{:02x}",
+                                seq, baseSeq, seq, buttons);
         }
     }
 
@@ -421,13 +422,13 @@ namespace bomberman::net
         MsgWelcome welcome{};
         if (!deserializeMsgWelcome(payload, payloadSize, welcome))
         {
-            LOG_CLIENT_WARN("Failed to parse Welcome payload");
+            LOG_NET_PROTO_WARN("Failed to parse Welcome payload");
             return;
         }
 
         if (welcome.protocolVersion != kProtocolVersion)
         {
-            LOG_CLIENT_ERROR("Protocol mismatch (server={}, client={})", welcome.protocolVersion, kProtocolVersion);
+            LOG_NET_PROTO_ERROR("Protocol mismatch (server={}, client={})", welcome.protocolVersion, kProtocolVersion);
             state_ = EConnectState::FailedProtocol;
             return;
         }
@@ -435,7 +436,7 @@ namespace bomberman::net
         playerId_ = welcome.playerId;
         serverTickRate_ = welcome.serverTickRate;
 
-        LOG_CLIENT_INFO("Welcome: playerId={}, tickRate={} - awaiting LevelInfo", welcome.playerId, welcome.serverTickRate);
+        LOG_NET_CONN_INFO("Welcome: playerId={}, tickRate={} - awaiting LevelInfo", welcome.playerId, welcome.serverTickRate);
     }
 
     void NetClient::handleReject(const uint8_t* payload, std::size_t payloadSize)
@@ -443,7 +444,7 @@ namespace bomberman::net
         MsgReject reject{};
         if (!deserializeMsgReject(payload, payloadSize, reject))
         {
-            LOG_CLIENT_WARN("Failed to parse Reject payload - treating as generic handshake failure");
+            LOG_NET_PROTO_WARN("Failed to parse Reject payload - treating as generic handshake failure");
             state_ = EConnectState::FailedHandshake;
             return;
         }
@@ -451,23 +452,23 @@ namespace bomberman::net
         switch (reject.reason)
         {
             case MsgReject::EReason::VersionMismatch:
-                LOG_CLIENT_ERROR("Server rejected: version mismatch (server expects v{})", reject.expectedProtocolVersion);
+                LOG_NET_CONN_ERROR("Server rejected: version mismatch (server expects v{})", reject.expectedProtocolVersion);
                 state_ = EConnectState::FailedProtocol;
                 break;
 
             case MsgReject::EReason::ServerFull:
-                LOG_CLIENT_WARN("Server rejected: server is full");
+                LOG_NET_CONN_WARN("Server rejected: server is full");
                 state_ = EConnectState::FailedHandshake;
                 break;
 
             case MsgReject::EReason::Banned:
-                LOG_CLIENT_WARN("Server rejected: banned");
+                LOG_NET_CONN_WARN("Server rejected: banned");
                 state_ = EConnectState::FailedHandshake;
                 break;
 
             case MsgReject::EReason::Other:
             default:
-                LOG_CLIENT_WARN("Server rejected: reason={}", static_cast<int>(reject.reason));
+                LOG_NET_CONN_WARN("Server rejected: reason={}", static_cast<int>(reject.reason));
                 state_ = EConnectState::FailedHandshake;
                 break;
         }
@@ -481,7 +482,7 @@ namespace bomberman::net
         MsgLevelInfo msgLevelInfo{};
         if (!deserializeMsgLevelInfo(payload, payloadSize, msgLevelInfo))
         {
-            LOG_CLIENT_WARN("Failed to parse LevelInfo payload");
+            LOG_NET_PROTO_WARN("Failed to parse LevelInfo payload");
             return;
         }
 
@@ -490,21 +491,21 @@ namespace bomberman::net
         // LevelInfo is the final handshake packet - the session is now fully ready.
         state_ = EConnectState::Connected;
 
-        LOG_CLIENT_INFO("Received LevelInfo seed={} - handshake complete, session ready", msgLevelInfo.mapSeed);
+        LOG_NET_CONN_INFO("Received LevelInfo seed={} - handshake complete, session ready", msgLevelInfo.mapSeed);
     }
 
     void NetClient::handleSnapshot(const uint8_t* payload, std::size_t payloadSize)
     {
         if (!impl_ || !isConnected())
         {
-            LOG_CLIENT_WARN("Received Snapshot payload while not connected - ignoring");
+            LOG_NET_SNAPSHOT_DEBUG("Received Snapshot payload while not connected - ignoring");
             return;
         }
 
         MsgSnapshot snapshot{};
         if (!deserializeMsgSnapshot(payload, payloadSize, snapshot))
         {
-            LOG_CLIENT_WARN("Failed to parse Snapshot payload");
+            LOG_NET_PROTO_WARN("Failed to parse Snapshot payload");
             return;
         }
 
@@ -516,8 +517,8 @@ namespace bomberman::net
 
         if (snapshot.serverTick % kSnapshotLogEveryN == 0)
         {
-            LOG_CLIENT_DEBUG("Received Snapshot tick={} playerCount={}",
-                             snapshot.serverTick, snapshot.playerCount);
+            LOG_NET_SNAPSHOT_DEBUG("Received Snapshot tick={} playerCount={}",
+                                   snapshot.serverTick, snapshot.playerCount);
         }
     }
 

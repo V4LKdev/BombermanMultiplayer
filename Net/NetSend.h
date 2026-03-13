@@ -27,15 +27,15 @@ namespace bomberman::net
         ENetPacket* pkt = enet_packet_create(bytes.data(), bytes.size(), flags);
         if (pkt == nullptr)
         {
-            LOG_PROTO_ERROR("Failed to allocate packet ({} bytes) for channel {}",
-                            N, channelName(static_cast<uint8_t>(channel)));
+            LOG_NET_PACKET_ERROR("Failed to allocate packet ({} bytes) for channel {}",
+                                 N, channelName(static_cast<uint8_t>(channel)));
             return false;
         }
 
         if (enet_peer_send(peer, static_cast<uint8_t>(channel), pkt) != 0)
         {
-            LOG_PROTO_ERROR("Failed to queue packet on channel {}",
-                            channelName(static_cast<uint8_t>(channel)));
+            LOG_NET_PACKET_ERROR("Failed to queue packet on channel {}",
+                                 channelName(static_cast<uint8_t>(channel)));
             enet_packet_destroy(pkt);
             return false;
         }
@@ -65,15 +65,15 @@ namespace bomberman::net
             ENetPacket* pkt = enet_packet_create(bytes.data(), bytes.size(), flags);
             if (pkt == nullptr)
             {
-                LOG_PROTO_ERROR("broadcastQueueOnChannel: failed to allocate packet for peer {} on channel {}",
-                                i, channelName(static_cast<uint8_t>(channel)));
+                LOG_NET_PACKET_ERROR("broadcastQueueOnChannel: failed to allocate packet for peer {} on channel {}",
+                                     i, channelName(static_cast<uint8_t>(channel)));
                 continue;
             }
 
             if (enet_peer_send(peer, static_cast<uint8_t>(channel), pkt) != 0)
             {
-                LOG_PROTO_ERROR("broadcastQueueOnChannel: failed to queue packet for peer {} on channel {}",
-                                i, channelName(static_cast<uint8_t>(channel)));
+                LOG_NET_PACKET_ERROR("broadcastQueueOnChannel: failed to queue packet for peer {} on channel {}",
+                                     i, channelName(static_cast<uint8_t>(channel)));
                 enet_packet_destroy(pkt);
                 continue;
             }

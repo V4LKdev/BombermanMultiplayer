@@ -30,8 +30,8 @@ namespace bomberman::server
             if (queueReliableControl(ctx.peer, makeRejectPacket(reject)))
             {
                 flush(ctx.state.host);
-                LOG_SERVER_INFO("Sent Reject (reason={}) to peer {}",
-                                static_cast<int>(reason), ctx.peer->incomingPeerID);
+                LOG_NET_CONN_INFO("Sent Reject (reason={}) to peer {}",
+                                  static_cast<int>(reason), ctx.peer->incomingPeerID);
             }
 
             enet_peer_disconnect_later(ctx.peer, 0);
@@ -58,16 +58,16 @@ namespace bomberman::server
         // Ignore duplicate Hello from an already-handshaked peer.
         if (hasClientState(ctx.peer))
         {
-            LOG_SERVER_WARN("Duplicate Hello from already-handshaked peer {} - ignoring", ctx.peer->incomingPeerID);
+            LOG_NET_CONN_DEBUG("Duplicate Hello from already-handshaked peer {} - ignoring", ctx.peer->incomingPeerID);
             return;
         }
 
         // Reject if the session is full (no player IDs available).
         if (ctx.state.playerIdPoolSize == 0)
         {
-            LOG_SERVER_WARN("Server full ({}/{}) – rejecting peer {}",
-                            static_cast<int>(kMaxPlayers), static_cast<int>(kMaxPlayers),
-                            ctx.peer->incomingPeerID);
+            LOG_NET_CONN_WARN("Server full ({}/{}) – rejecting peer {}",
+                              static_cast<int>(kMaxPlayers), static_cast<int>(kMaxPlayers),
+                              ctx.peer->incomingPeerID);
             sendReject(ctx, MsgReject::EReason::ServerFull);
             return;
         }
@@ -75,21 +75,21 @@ namespace bomberman::server
         MsgHello msgHello{};
         if (!deserializeMsgHello(payload, payloadSize, msgHello))
         {
-            LOG_SERVER_WARN("Failed to parse Hello payload from peer {}", ctx.peer->incomingPeerID);
+            LOG_NET_PROTO_WARN("Failed to parse Hello payload from peer {}", ctx.peer->incomingPeerID);
             return;
         }
 
         // Reject on protocol version mismatch.
         if (msgHello.protocolVersion != kProtocolVersion)
         {
-            LOG_SERVER_ERROR("Protocol mismatch: peer {} sent version {}, expected {}",
-                             ctx.peer->incomingPeerID, msgHello.protocolVersion, kProtocolVersion);
+            LOG_NET_PROTO_ERROR("Protocol mismatch: peer {} sent version {}, expected {}",
+                                ctx.peer->incomingPeerID, msgHello.protocolVersion, kProtocolVersion);
             sendReject(ctx, MsgReject::EReason::VersionMismatch);
             return;
         }
 
         const std::string_view playerName(msgHello.name, boundedStrLen(msgHello.name, kPlayerNameMax));
-        LOG_SERVER_INFO("Hello from \"{}\" (peer {})", playerName, ctx.peer->incomingPeerID);
+        LOG_NET_CONN_INFO("Hello from \"{}\" (peer {})", playerName, ctx.peer->incomingPeerID);
 
         // Allocate a player ID from the pool.
         const uint8_t playerId = ctx.state.playerIdPool[--ctx.state.playerIdPoolSize];
@@ -102,28 +102,28 @@ namespace bomberman::server
 
         if (!queueReliableControl(ctx.peer, makeWelcomePacket(welcome)))
         {
-            LOG_SERVER_ERROR("Failed to send Welcome to peer {} - rejecting", ctx.peer->incomingPeerID);
+            LOG_NET_CONN_ERROR("Failed to send Welcome to peer {} - rejecting", ctx.peer->incomingPeerID);
             // Return playerId to pool on failure.
             ctx.state.playerIdPool[ctx.state.playerIdPoolSize++] = playerId;
             sendReject(ctx, MsgReject::EReason::Other);
             return;
         }
-        LOG_SERVER_INFO("Queued Welcome to playerId={}", playerId);
+        LOG_NET_CONN_INFO("Queued Welcome to playerId={}", playerId);
 
         // Temporarily, the level info packet is considered part of the handshake, will be separated later.
         MsgLevelInfo levelInfo{};
         levelInfo.mapSeed = ctx.state.mapSeed;
         if (!queueReliableControl(ctx.peer, makeLevelInfoPacket(levelInfo)))
         {
-            LOG_SERVER_ERROR("Failed to send LevelInfo to peer {} - rejecting", ctx.peer->incomingPeerID);
+            LOG_NET_CONN_ERROR("Failed to send LevelInfo to peer {} - rejecting", ctx.peer->incomingPeerID);
             ctx.state.playerIdPool[ctx.state.playerIdPoolSize++] = playerId;
             sendReject(ctx, MsgReject::EReason::Other);
             return;
         }
 
         flush(ctx.state.host);
-        LOG_SERVER_INFO("Sent handshake bundle (Welcome + LevelInfo seed={}) to playerId={}",
-                        levelInfo.mapSeed, playerId);
+        LOG_NET_CONN_INFO("Sent handshake bundle (Welcome + LevelInfo seed={}) to playerId={}",
+                          levelInfo.mapSeed, playerId);
 
         // Initialize per-client state in the stable-address array slot.
         auto& slot = ctx.state.clients[playerId];
@@ -146,14 +146,14 @@ namespace bomberman::server
         // Ignore input from peers that haven't completed the handshake yet.
         if (!hasClientState(ctx.peer))
         {
-            LOG_SERVER_WARN("Input from non-handshaked peer {} - ignoring", ctx.peer->incomingPeerID);
+            LOG_NET_INPUT_WARN("Input from non-handshaked peer {} - ignoring", ctx.peer->incomingPeerID);
             return;
         }
 
         MsgInput msgInput{};
         if (!deserializeMsgInput(payload, size, msgInput))
         {
-            LOG_SERVER_WARN("Failed to parse Input payload from peer {}", ctx.peer->incomingPeerID);
+            LOG_NET_PROTO_WARN("Failed to parse Input payload from peer {}", ctx.peer->incomingPeerID);
             return;
         }
 
@@ -162,7 +162,7 @@ namespace bomberman::server
         auto* client = getClientState(ctx.peer);
         if (client == nullptr)
         {
-            LOG_SERVER_WARN("Input peer {} has no client state after guard - ignoring", ctx.peer->incomingPeerID);
+            LOG_NET_INPUT_ERROR("Input peer {} has no client state after guard - ignoring", ctx.peer->incomingPeerID);
             return;
         }
 
@@ -213,7 +213,7 @@ namespace bomberman::server
             if (streak >= kRepeatedInputWarnThreshold
                 && ctx.state.serverTick >= client->nextAheadWarnTick)
             {
-                LOG_SERVER_WARN(
+                LOG_NET_INPUT_WARN(
                     "Repeated ahead drops playerId={} streak={} latestAheadSeqs=[{}..{}] count={} batch=[{}..{}] maxAcceptable={} lastRecv={} lastConsumed={}",
                     client->playerId, streak,
                     firstAheadSeq, lastAheadSeq, aheadDropCount,
@@ -231,9 +231,9 @@ namespace bomberman::server
         // Periodic logging.
         if (highestSeq % kServerInputLogEveryN == 0)
         {
-            LOG_SERVER_DEBUG("Input playerId={} batch=[{}..{}] lastRecv={} lastConsumed={}",
-                             client->playerId, msgInput.baseInputSeq, highestSeq,
-                             client->lastReceivedInputSeq, client->lastConsumedInputSeq);
+            LOG_NET_INPUT_DEBUG("Input playerId={} batch=[{}..{}] lastRecv={} lastConsumed={}",
+                                client->playerId, msgInput.baseInputSeq, highestSeq,
+                                client->lastReceivedInputSeq, client->lastConsumedInputSeq);
         }
     }
 
@@ -256,7 +256,7 @@ namespace bomberman::server
 
     void handleEventReceive(const ENetEvent& event, ServerState& state)
     {
-        LOG_SERVER_TRACE("Received {} bytes on channel {}", event.packet->dataLength, channelName(event.channelID));
+        LOG_NET_PACKET_TRACE("Received {} bytes on channel {}", event.packet->dataLength, channelName(event.channelID));
 
         ServerContext ctx{state, event.peer};
         dispatchPacket(gDispatcher, ctx, event.packet->data, event.packet->dataLength);

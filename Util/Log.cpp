@@ -13,10 +13,17 @@ namespace bomberman::log
     {
         std::once_flag gInitFlag;
 
-        constexpr const char* kClientName   = "client";
-        constexpr const char* kServerName   = "server";
-        constexpr const char* kGameName     = "game";
-        constexpr const char* kProtocolName = "net.proto";
+        constexpr const char* kClientName      = "client";
+        constexpr const char* kServerName      = "server";
+        constexpr const char* kGameName        = "game";
+        constexpr const char* kNetConnName     = "net.conn";
+        constexpr const char* kNetPacketName   = "net.packet";
+        constexpr const char* kNetProtoName    = "net.proto";
+        constexpr const char* kNetInputName    = "net.input";
+        constexpr const char* kNetSnapshotName = "net.snapshot";
+        constexpr const char* kNetDiagName     = "net.diag";
+        constexpr const char* kPerfName        = "perf";
+        constexpr const char* kTestName        = "test";
 
         /**
          * @brief Creates and registers a named logger if missing.
@@ -84,17 +91,32 @@ namespace bomberman::log
                 sinks.push_back(fileSink);
             }
 
-            makeLogger(kClientName,   sinks);
-            makeLogger(kServerName,   sinks);
-            makeLogger(kGameName,     sinks);
-            makeLogger(kProtocolName, sinks);
+            makeLogger(kClientName,      sinks);
+            makeLogger(kServerName,      sinks);
+            makeLogger(kGameName,        sinks);
+            makeLogger(kNetConnName,     sinks);
+            makeLogger(kNetPacketName,   sinks);
+            makeLogger(kNetProtoName,    sinks);
+            makeLogger(kNetInputName,    sinks);
+            makeLogger(kNetSnapshotName, sinks);
+            makeLogger(kNetDiagName,     sinks);
+            makeLogger(kPerfName,        sinks);
+            makeLogger(kTestName,        sinks);
         });
     }
 
-    spdlog::logger* client()   { return getLogger(kClientName); }
-    spdlog::logger* server()   { return getLogger(kServerName); }
-    spdlog::logger* game()     { return getLogger(kGameName); }
-    spdlog::logger* protocol() { return getLogger(kProtocolName); }
+    spdlog::logger* client()      { return getLogger(kClientName); }
+    spdlog::logger* server()      { return getLogger(kServerName); }
+    spdlog::logger* game()        { return getLogger(kGameName); }
+    spdlog::logger* netConn()     { return getLogger(kNetConnName); }
+    spdlog::logger* netPacket()   { return getLogger(kNetPacketName); }
+    spdlog::logger* netProto()    { return getLogger(kNetProtoName); }
+    spdlog::logger* netInput()    { return getLogger(kNetInputName); }
+    spdlog::logger* netSnapshot() { return getLogger(kNetSnapshotName); }
+    spdlog::logger* netDiag()     { return getLogger(kNetDiagName); }
+    spdlog::logger* perf()        { return getLogger(kPerfName); }
+    spdlog::logger* test()        { return getLogger(kTestName); }
+    spdlog::logger* protocol()    { return netProto(); }
 
 } // namespace bomberman::log
 

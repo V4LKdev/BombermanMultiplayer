@@ -85,7 +85,7 @@ namespace bomberman::server
                     if (client.consecutiveInputGaps >= kRepeatedInputWarnThreshold
                         && state.serverTick >= client.nextGapWarnTick)
                     {
-                        LOG_SERVER_WARN(
+                        LOG_NET_INPUT_WARN(
                             "Repeated input gaps playerId={} streak={} expectedSeq={} slotValid={} slotSeq={} using previousButtons=0x{:02x} lastRecv={} lastConsumed={}",
                             client.playerId, client.consecutiveInputGaps,
                             nextSeq,
@@ -125,7 +125,7 @@ namespace bomberman::server
                     ? static_cast<double>(client.inputLeadSum) / static_cast<double>(client.inputLeadSamples)
                     : 0.0;
 
-                LOG_SERVER_DEBUG(
+                LOG_NET_INPUT_DEBUG(
                     "Input summary playerId={} tick={} lateDrops={} aheadDrops={} inputGaps={} avgLead={:.2f} lastRecv={} lastConsumed={}",
                     client.playerId, state.serverTick,
                     client.lateDrops, client.aheadDrops, client.inputGaps,
@@ -149,13 +149,11 @@ namespace bomberman::server
         const auto snapshot = buildSnapshot(state);
         if ((state.serverTick % kServerSnapshotLogEveryN) == 0)
         {
-            LOG_SERVER_DEBUG("Snapshot tick={} playerCount={}", snapshot.serverTick, snapshot.playerCount);
+            LOG_NET_SNAPSHOT_DEBUG("Snapshot tick={} playerCount={}", snapshot.serverTick, snapshot.playerCount);
         }
-        const auto packetBytes = makeSnapshotPacket(snapshot);
+        broadcastQueuedUnreliableGame(state.host, makeSnapshotPacket(snapshot));
 
-        const int queued = broadcastQueuedUnreliableGame(state.host, packetBytes);
-        if (queued > 0)
-            flush(state.host);
+        flush(state.host);
     }
 
     MsgSnapshot buildSnapshot(const ServerState& state)
