@@ -3,12 +3,28 @@
 
 #include <charconv>
 #include <limits>
+#include <string>
 #include <string_view>
 
 #include <spdlog/spdlog.h>
 
+#ifndef BOMBERMAN_DEFAULT_LOG_LEVEL
+#define BOMBERMAN_DEFAULT_LOG_LEVEL SPDLOG_LEVEL_INFO
+#endif
+
 namespace bomberman::cli
 {
+    struct LoggingCliOptions
+    {
+        spdlog::level::level_enum logLevel = static_cast<spdlog::level::level_enum>(BOMBERMAN_DEFAULT_LOG_LEVEL);
+        std::string logFile;
+        bool hasLogLevelOverride = false;
+        bool hasLogFileOverride = false;
+    };
+
+    inline constexpr std::string_view kLoggingUsageArgs =
+        "[--log-level <trace|debug|info|warn|error|critical>] [--log-file <path>]";
+
     /** @brief Parses a textual log level into a spdlog level enum. */
     inline bool parseLogLevel(std::string_view text, spdlog::level::level_enum& outLevel)
     {
@@ -36,6 +52,57 @@ namespace bomberman::cli
 
         outPort = static_cast<uint16_t>(value);
         return true;
+    }
+
+    /**
+     * @brief Tries to parse one shared logging-related CLI option.
+     *
+     * @param argc Full argc from main().
+     * @param argv Full argv from main().
+     * @param ioIndex Current argument index; advanced when an option consumes a value.
+     * @param outOptions Shared logging CLI state.
+     * @param outError Filled on failure.
+     * @return true if this argument was recognized as a shared logging option.
+     */
+    inline bool tryParseLoggingOption(int argc, char** argv, int& ioIndex, LoggingCliOptions& outOptions, std::string& outError)
+    {
+        const std::string_view arg = argv[ioIndex];
+
+        if (arg == "--log-level")
+        {
+            if (ioIndex + 1 >= argc)
+            {
+                outError = "Missing value for --log-level";
+                return true;
+            }
+
+            const std::string_view value = argv[++ioIndex];
+            if (!parseLogLevel(value, outOptions.logLevel))
+            {
+                outError = "Invalid log level: " + std::string(value);
+                return true;
+            }
+
+            outOptions.hasLogLevelOverride = true;
+            outError.clear();
+            return true;
+        }
+
+        if (arg == "--log-file")
+        {
+            if (ioIndex + 1 >= argc)
+            {
+                outError = "Missing value for --log-file";
+                return true;
+            }
+
+            outOptions.logFile = argv[++ioIndex];
+            outOptions.hasLogFileOverride = true;
+            outError.clear();
+            return true;
+        }
+
+        return false;
     }
 } // namespace bomberman::cli
 

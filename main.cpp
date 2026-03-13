@@ -12,8 +12,7 @@ namespace
 {
     struct CliOptions
     {
-        spdlog::level::level_enum logLevel = static_cast<spdlog::level::level_enum>(BOMBERMAN_DEFAULT_LOG_LEVEL);
-        std::string logFile;
+        bomberman::cli::LoggingCliOptions logging;
         uint16_t port = bomberman::net::kDefaultServerPort;
         bool mute = false;
     };
@@ -21,7 +20,8 @@ namespace
     void printUsage(const char* exeName)
     {
         std::cout
-            << "Usage: " << exeName << " [--log-level <trace|debug|info|warn|error|critical>] [--log-file <path>] [--port <port override>] [--mute]\n";
+            << "Usage: " << exeName << ' ' << bomberman::cli::kLoggingUsageArgs << " [--port <port override>] [--mute]\n"
+            << "       Default log config: " << bomberman::log::defaultConfigFilePath() << " (if present)\n";
     }
 
     bool parseCli(int argc, char** argv, CliOptions& outOptions)
@@ -29,43 +29,24 @@ namespace
         for (int i = 1; i < argc; ++i)
         {
             const std::string_view arg = argv[i];
+            std::string error;
+
+            if (bomberman::cli::tryParseLoggingOption(argc, argv, i, outOptions.logging, error))
+            {
+                if (!error.empty())
+                {
+                    std::cerr << error << '\n';
+                    printUsage(argv[0]);
+                    return false;
+                }
+
+                continue;
+            }
 
             if (arg == "--help")
             {
                 printUsage(argv[0]);
                 return false;
-            }
-
-            if (arg == "--log-level")
-            {
-                if (i + 1 >= argc)
-                {
-                    std::cerr << "Missing value for --log-level\n";
-                    printUsage(argv[0]);
-                    return false;
-                }
-
-                const std::string_view value = argv[++i];
-                if (!bomberman::cli::parseLogLevel(value, outOptions.logLevel))
-                {
-                    std::cerr << "Invalid log level: " << value << '\n';
-                    printUsage(argv[0]);
-                    return false;
-                }
-                continue;
-            }
-
-            if (arg == "--log-file")
-            {
-                if (i + 1 >= argc)
-                {
-                    std::cerr << "Missing value for --log-file\n";
-                    printUsage(argv[0]);
-                    return false;
-                }
-
-                outOptions.logFile = argv[++i];
-                continue;
             }
 
             if (arg == "--port")
@@ -116,8 +97,22 @@ int main(int argc, char** argv)
         return EXIT_FAILURE;
     }
 
+    bomberman::log::LogConfig logConfig{};
+    std::string error;
+    if (!bomberman::log::resolveConfig(logConfig,
+                                       cli.logging.hasLogLevelOverride,
+                                       cli.logging.logLevel,
+                                       cli.logging.hasLogFileOverride,
+                                       cli.logging.logFile,
+                                       error))
+    {
+        std::cerr << error << '\n';
+        return EXIT_FAILURE;
+    }
+
+
     // Initialize project-wide named loggers.
-    bomberman::log::init(cli.logLevel, cli.logFile);
+    bomberman::log::init(logConfig);
 
     // Initiate async connection to server.
     bomberman::net::NetClient client;

@@ -2,8 +2,13 @@
 #define BOMBERMAN_UTIL_LOG_H
 
 #include <string>
+#include <unordered_map>
 
 #include <spdlog/spdlog.h>
+
+#ifndef BOMBERMAN_DEFAULT_LOG_LEVEL
+#define BOMBERMAN_DEFAULT_LOG_LEVEL SPDLOG_LEVEL_INFO
+#endif
 
 /**
  * @brief Centralized logging interface for the project.
@@ -13,19 +18,55 @@
 
 namespace bomberman::log
 {
-    /**
-    * @brief Initializes all named loggers.
-    *
-    * @param consoleLevel Runtime level for the console sink.
-    * @param logFile Optional rotating file sink path (5 MB x 3 files).
-    *
-    * Loggers flush automatically on warn-or-above to minimize crash-time tail loss.
-    */
-#ifndef BOMBERMAN_DEFAULT_LOG_LEVEL
-#define BOMBERMAN_DEFAULT_LOG_LEVEL SPDLOG_LEVEL_INFO
-#endif
+    struct LogConfig
+    {
+        spdlog::level::level_enum baseLevel = static_cast<spdlog::level::level_enum>(BOMBERMAN_DEFAULT_LOG_LEVEL);
+        std::string logFilePath;
+        std::unordered_map<std::string, spdlog::level::level_enum> channelLevels;
+    };
 
-    void init(spdlog::level::level_enum consoleLevel = static_cast<spdlog::level::level_enum>(BOMBERMAN_DEFAULT_LOG_LEVEL), const std::string& logFile = "");
+    /** @brief Builds the hardcoded default logging configuration. */
+    LogConfig makeDefaultConfig();
+
+    /** @brief Returns the default repo-relative log config file path. */
+    std::string defaultConfigFilePath();
+
+    /**
+     * @brief Resolves the final logging config from defaults, default file input, and CLI-style overrides.
+     *
+     * Precedence is:
+     * 1. hardcoded defaults,
+     * 2. default config file if present,
+     * 3. explicit base-level override,
+     * 4. explicit log-file override.
+     */
+    bool resolveConfig(LogConfig& outConfig,
+                       bool hasBaseLevelOverride,
+                       spdlog::level::level_enum baseLevelOverride,
+                       bool hasLogFileOverride,
+                       const std::string& logFileOverride,
+                       std::string& outError);
+
+    /**
+     * @brief Initializes all named loggers.
+     *
+     * @param config Final resolved logging configuration.
+     *
+     * Initialization is one-shot for process lifetime: the first call wins
+     * because logger setup is guarded by std::call_once.
+     *
+     * Loggers flush automatically on warn-or-above to minimize crash-time tail loss.
+     * Logger levels apply before sink filtering, so they also gate file output.
+     */
+    void init(const LogConfig& config);
+
+    /**
+     * @brief Convenience overload for callers that only want a base level and optional file path.
+     *
+     * Equivalent to constructing the hardcoded defaults, overriding the base
+     * level and optional file path, then initializing.
+     */
+    void init(spdlog::level::level_enum baseLevel = static_cast<spdlog::level::level_enum>(BOMBERMAN_DEFAULT_LOG_LEVEL), const std::string& logFile = "");
 
     spdlog::logger* client();       ///< NetClient, main.cpp
     spdlog::logger* server();       ///< server_main.cpp, handlers
@@ -38,7 +79,6 @@ namespace bomberman::log
     spdlog::logger* netDiag();      ///< Reserved for future diagnostics/telemetry plumbing
     spdlog::logger* perf();         ///< Performance instrumentation
     spdlog::logger* test();         ///< Test-only helpers/harnesses
-    spdlog::logger* protocol();     ///< Backwards-compat alias for netProto()
 } // namespace bomberman::log
 
 
@@ -47,7 +87,7 @@ namespace bomberman::log
 // =====================================================================================================================
 // Convenience macros
 //
-// Wrap `SPDLOG_LOGGER_*` with subsystem-specific logger accessors.
+// Wrap SPDLOG_LOGGER_* with subsystem-specific logger accessors.
 // =====================================================================================================================
 
 // ---- Client ----
@@ -119,12 +159,5 @@ namespace bomberman::log
 #define LOG_TEST_INFO(...)           SPDLOG_LOGGER_INFO(bomberman::log::test(), __VA_ARGS__)
 #define LOG_TEST_WARN(...)           SPDLOG_LOGGER_WARN(bomberman::log::test(), __VA_ARGS__)
 #define LOG_TEST_ERROR(...)          SPDLOG_LOGGER_ERROR(bomberman::log::test(), __VA_ARGS__)
-
-// ---- Protocol (backwards-compat alias) ----
-#define LOG_PROTO_TRACE(...)         LOG_NET_PROTO_TRACE(__VA_ARGS__)
-#define LOG_PROTO_DEBUG(...)         LOG_NET_PROTO_DEBUG(__VA_ARGS__)
-#define LOG_PROTO_INFO(...)          LOG_NET_PROTO_INFO(__VA_ARGS__)
-#define LOG_PROTO_WARN(...)          LOG_NET_PROTO_WARN(__VA_ARGS__)
-#define LOG_PROTO_ERROR(...)         LOG_NET_PROTO_ERROR(__VA_ARGS__)
 
 #endif // BOMBERMAN_UTIL_LOG_H
