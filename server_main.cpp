@@ -19,10 +19,12 @@ using namespace bomberman::net;
 namespace
 {
     using ServerClock = std::chrono::steady_clock;
+    using SimDuration = std::chrono::duration<double>;
 
     constexpr std::size_t kMaxPeers         = kMaxPlayers;
     constexpr int         kServiceTimeoutMs = 1;
-    constexpr uint32_t    kSimStepMs        = 1000u / static_cast<uint32_t>(bomberman::sim::kTickRate);
+    constexpr SimDuration kSimStep          = SimDuration{1.0 / static_cast<double>(bomberman::sim::kTickRate)};
+    constexpr auto        kMaxFrameClamp    = std::chrono::milliseconds(bomberman::sim::kMaxFrameClampMs);
 
     /// Global flag for graceful shutdown
     volatile std::sig_atomic_t gRunning = 1;
@@ -183,23 +185,22 @@ int main(int argc, char** argv)
     bomberman::server::initServerState(state, server, cli.seedOverride, cli.seed);
 
     auto lastTickTime = ServerClock::now();
-    uint32_t accumulatorMs = 0;
+    SimDuration accumulator{};
 
 
     // ----- Main Event Loop -----
     while (gRunning)
     {
         const auto currentTickTime = ServerClock::now();
-        uint32_t frameDeltaMs =
-            static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(currentTickTime - lastTickTime).count());
+        auto frameDelta = currentTickTime - lastTickTime;
         lastTickTime = currentTickTime;
 
         // Clamp large frame deltas to avoid spiral of death after long stalls.
-        if (frameDeltaMs > bomberman::sim::kMaxFrameClampMs)
+        if (frameDelta > kMaxFrameClamp)
         {
-            frameDeltaMs = bomberman::sim::kMaxFrameClampMs;
+            frameDelta = kMaxFrameClamp;
         }
-        accumulatorMs += frameDeltaMs;
+        accumulator += std::chrono::duration_cast<SimDuration>(frameDelta);
 
         // Drain all pending ENet events first before advancing the simulation.
         ENetEvent event{};
@@ -220,14 +221,24 @@ int main(int argc, char** argv)
 
                 case ENET_EVENT_TYPE_DISCONNECT:
                 {
-                    const uint32_t peerId = event.peer->incomingPeerID;
-                    const bool wasHandshaked = (event.peer->data != nullptr);
-                    LOG_SERVER_INFO("Peer disconnected (id={}, handshaked={})", peerId, wasHandshaked);
-                    if (wasHandshaked)
+                    auto* client = static_cast<bomberman::server::ClientState*>(event.peer->data);
+                    if (client)
                     {
-                        state.clients.erase(peerId);
+                        const uint8_t playerId = client->playerId;
+                        LOG_SERVER_INFO("Peer disconnected (playerId={})", playerId);
+
+                        // Null peer->data BEFORE resetting client state to prevent dangling reads.
+                        event.peer->data = nullptr;
+                        state.clients[playerId].reset();
+
+                        // Return playerId to the pool.
+                        state.playerIdPool[state.playerIdPoolSize++] = playerId;
                     }
-                    event.peer->data = nullptr;
+                    else
+                    {
+                        LOG_SERVER_INFO("Peer disconnected (not handshaked, enetId={})", event.peer->incomingPeerID);
+                        event.peer->data = nullptr;
+                    }
                     break;
                 }
 
@@ -247,17 +258,18 @@ int main(int argc, char** argv)
 
         // ----- Advance Simulation -----
         int stepCount = 0;
-        while (accumulatorMs >= kSimStepMs && stepCount < bomberman::sim::kMaxStepsPerFrame)
+        while (accumulator >= kSimStep && stepCount < bomberman::sim::kMaxStepsPerFrame)
         {
             bomberman::server::simulateServerTick(state);
 
-            accumulatorMs -= kSimStepMs;
+            accumulator -= kSimStep;
             ++stepCount;
         }
 
         if (stepCount >= bomberman::sim::kMaxStepsPerFrame)
         {
-            LOG_SERVER_WARN("Exceeded max server tick steps ({}), accumulator={}ms", bomberman::sim::kMaxStepsPerFrame, accumulatorMs);
+            const auto accumulatorMs = std::chrono::duration<double, std::milli>(accumulator).count();
+            LOG_SERVER_WARN("Exceeded max server tick steps ({}), accumulator={:.3f}ms", bomberman::sim::kMaxStepsPerFrame, accumulatorMs);
         }
     }
 

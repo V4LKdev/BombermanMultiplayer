@@ -4,7 +4,6 @@
 #include <climits>
 #include <cstring>
 #include <random>
-#include <ranges>
 
 #include "Net/NetSend.h"
 #include "Sim/TileMapGen.h"
@@ -18,8 +17,16 @@ namespace bomberman::server
     {
         state.host = host;
         state.serverTick = 0;
-        state.nextStateSequence = 0;
-        state.clients.clear();
+
+        // Reset all client slots.
+        for (auto& slot : state.clients)
+            slot.reset();
+
+        // Initialize player ID pool.
+        for (uint8_t i = 0; i < kMaxPlayers; ++i)
+            state.playerIdPool[i] = i;
+
+        state.playerIdPoolSize = kMaxPlayers;
 
         LOG_SERVER_INFO("ServerState initialized");
 
@@ -42,61 +49,136 @@ namespace bomberman::server
     {
         ++state.serverTick;
 
-        if (state.clients.empty())
-            return;
+        bool anyClient = false;
 
-        // Advance each player's authoritative position by one tick using the shared sim primitive.
-        for (auto& client : state.clients | std::views::values)
+        for (auto& slot : state.clients)
         {
+            if (!slot.has_value())
+                continue;
+
+            anyClient = true;
+            auto& client = slot.value();
+
+            // ---- Consume next input from ring buffer ----
+            if (client.lastReceivedInputSeq > 0)
+            {
+                // Client has sent at least one input - advance consumed seq unconditionally.
+                const uint32_t nextSeq = client.lastConsumedInputSeq + 1;
+                const std::size_t seqSlot = nextSeq % kServerInputBufferSize;
+
+                auto& entry = client.inputRing[seqSlot];
+                if (entry.valid && entry.seq == nextSeq)
+                {
+                    // Exact match - consume this command.
+                    client.currentButtons  = entry.buttons;
+                    client.previousButtons = client.currentButtons;
+                    entry.valid = false; // mark consumed
+                    client.consecutiveInputGaps = 0;
+                }
+                else
+                {
+                    // Gap or stale slot: hold previous buttons.
+                    client.currentButtons = client.previousButtons;
+                    ++client.inputGaps;
+                    ++client.consecutiveInputGaps;
+
+                    if (client.consecutiveInputGaps >= kRepeatedInputWarnThreshold
+                        && state.serverTick >= client.nextGapWarnTick)
+                    {
+                        LOG_SERVER_WARN(
+                            "Repeated input gaps playerId={} streak={} expectedSeq={} slotValid={} slotSeq={} using previousButtons=0x{:02x} lastRecv={} lastConsumed={}",
+                            client.playerId, client.consecutiveInputGaps,
+                            nextSeq,
+                            entry.valid ? 1 : 0, entry.seq,
+                            client.previousButtons,
+                            client.lastReceivedInputSeq, client.lastConsumedInputSeq);
+
+                        client.nextGapWarnTick = state.serverTick + kRepeatedInputWarnCooldownTicks;
+                    }
+                }
+
+                client.lastConsumedInputSeq = nextSeq;
+            }
+            else
+            {
+                // No input ever received from this client - idle.
+                client.currentButtons = 0;
+            }
+
+            // Derive movement from the button bitmask.
+            const int8_t moveX = buttonsToMoveX(client.currentButtons);
+            const int8_t moveY = buttonsToMoveY(client.currentButtons);
+
             client.pos = sim::stepMovementWithCollision(
-                client.pos,
-                client.input.moveX,
-                client.input.moveY,
-                state.tiles);
+                client.pos, moveX, moveY, state.tiles);
+
+            // Track how far input receive is ahead of consume for aggregated diagnostics.
+            if (client.lastReceivedInputSeq >= client.lastConsumedInputSeq)
+            {
+                client.inputLeadSum += static_cast<uint64_t>(client.lastReceivedInputSeq - client.lastConsumedInputSeq);
+                ++client.inputLeadSamples;
+            }
+
+            if (state.serverTick >= client.nextInputDiagTick)
+            {
+                const double avgLead = (client.inputLeadSamples > 0)
+                    ? static_cast<double>(client.inputLeadSum) / static_cast<double>(client.inputLeadSamples)
+                    : 0.0;
+
+                LOG_SERVER_DEBUG(
+                    "Input summary playerId={} tick={} lateDrops={} aheadDrops={} inputGaps={} avgLead={:.2f} lastRecv={} lastConsumed={}",
+                    client.playerId, state.serverTick,
+                    client.lateDrops, client.aheadDrops, client.inputGaps,
+                    avgLead, client.lastReceivedInputSeq, client.lastConsumedInputSeq);
+
+                client.lateDrops = 0;
+                client.aheadDrops = 0;
+                client.inputGaps = 0;
+                client.inputLeadSum = 0;
+                client.inputLeadSamples = 0;
+                client.nextInputDiagTick = state.serverTick + kInputDiagReportTicks;
+            }
         }
 
         // TODO: Only movement is simulated on the server right now
 
-        const auto msgState = buildStateSnapshot(state);
-        const auto packetBytes = makeStatePacket(msgState, state.nextStateSequence++, state.serverTick);
+        // ---- Construct and Send snapshot ----
+        if (!anyClient)
+            return;
 
-        broadcastUnreliable(state.host, packetBytes);
+        const auto snapshot = buildSnapshot(state);
+        if ((state.serverTick % kServerSnapshotLogEveryN) == 0)
+        {
+            LOG_SERVER_DEBUG("Snapshot tick={} playerCount={}", snapshot.serverTick, snapshot.playerCount);
+        }
+        const auto packetBytes = makeSnapshotPacket(snapshot);
+
+        const int queued = broadcastQueuedUnreliableGame(state.host, packetBytes);
+        if (queued > 0)
+            flush(state.host);
     }
 
-    MsgState buildStateSnapshot(const ServerState& state)
+    MsgSnapshot buildSnapshot(const ServerState& state)
     {
-        MsgState msg{};
+        MsgSnapshot msg{};
+        msg.serverTick = state.serverTick;
 
-        // Collect client IDs into a fixed-size stack array and sort for stable ordering.
-        std::array<uint32_t, kMaxPlayers> ids{};
         uint8_t count = 0;
-
-        for (const auto& id : state.clients | std::views::keys)
+        for (uint8_t i = 0; i < kMaxPlayers && count < kMaxPlayers; ++i)
         {
-            if (count >= kMaxPlayers)
-            {
-                LOG_SERVER_WARN("buildStateSnapshot: more clients than kMaxPlayers ({}), truncating", kMaxPlayers);
-                // TODO: Should disconnect any additional clients in that case
-                break;
-            }
-            ids[count++] = id;
-        }
+            if (!state.clients[i].has_value())
+                continue;
 
-        // Sorting by client ID gives a stable player order across snapshots and makes it easier to correlate with logs/debug info.
-        std::sort(ids.begin(), ids.begin() + count);
+            const auto& client = state.clients[i].value();
+            auto& slot = msg.players[count];
 
-        for (uint8_t i = 0; i < count; ++i)
-        {
-            const uint32_t clientId = ids[i];
-            const auto& client = state.clients.at(clientId);
-
-            auto& slot    = msg.players[i];
-            slot.clientId = static_cast<uint8_t>(clientId);
-            slot.flags    = MsgState::PlayerState::EPlayerFlags::Alive; // TODO: replace with actual alive status
-
-            // Clamp int32 tile-Q8 positions to int16 wire range, should be sufficient for the map sizes
+            slot.playerId = client.playerId;
+            slot.flags = MsgSnapshot::PlayerEntry::EPlayerFlags::Alive; // TODO: replace with actual alive status
+            // Clamp int32 tile-Q8 positions to int16 wire range.
             slot.xQ = static_cast<int16_t>(std::clamp(client.pos.xQ, INT16_MIN, INT16_MAX));
             slot.yQ = static_cast<int16_t>(std::clamp(client.pos.yQ, INT16_MIN, INT16_MAX));
+
+            ++count;
         }
 
         msg.playerCount = count;

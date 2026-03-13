@@ -18,6 +18,8 @@ namespace bomberman::server
 
     namespace
     {
+        constexpr uint32_t kServerInputLogEveryN = static_cast<uint32_t>(sim::kTickRate) * 2u;
+
         /** @brief Sends a Reject packet and initiates a graceful disconnect. */
         void sendReject(ServerContext& ctx, MsgReject::EReason reason)
         {
@@ -25,8 +27,9 @@ namespace bomberman::server
             reject.reason = reason;
             reject.expectedProtocolVersion = (reason == MsgReject::EReason::VersionMismatch) ? kProtocolVersion : 0;
 
-            if (sendReliable(ctx.state.host, ctx.peer, makeRejectPacket(reject, 0, 0)))
+            if (queueReliableControl(ctx.peer, makeRejectPacket(reject)))
             {
+                flush(ctx.state.host);
                 LOG_SERVER_INFO("Sent Reject (reason={}) to peer {}",
                                 static_cast<int>(reason), ctx.peer->incomingPeerID);
             }
@@ -34,17 +37,16 @@ namespace bomberman::server
             enet_peer_disconnect_later(ctx.peer, 0);
         }
 
-        /** @brief Returns true if this peer has already completed the Hello/Welcome handshake. */
-        bool isHandshaked(const ENetPeer* peer)
+        bool hasClientState(const ENetPeer* peer)
         {
-            return peer->data != nullptr;
+            return peer && peer->data != nullptr;
         }
 
-        /** @brief Marks a peer as handshaked. */
-        void markHandshaked(ENetPeer* peer)
+        ClientState* getClientState(ENetPeer* peer)
         {
-            peer->data = reinterpret_cast<void*>(1);
+            return peer ? static_cast<ClientState*>(peer->data) : nullptr;
         }
+
     } // namespace
 
     // =================================================================================================================
@@ -54,17 +56,17 @@ namespace bomberman::server
     void onHello(ServerContext& ctx, const PacketHeader& /*header*/, const uint8_t* payload, std::size_t payloadSize)
     {
         // Ignore duplicate Hello from an already-handshaked peer.
-        if (isHandshaked(ctx.peer))
+        if (hasClientState(ctx.peer))
         {
             LOG_SERVER_WARN("Duplicate Hello from already-handshaked peer {} - ignoring", ctx.peer->incomingPeerID);
             return;
         }
 
-        // Reject if the session is full (all client slots taken).
-        if (ctx.state.clients.size() >= kMaxPlayers)
+        // Reject if the session is full (no player IDs available).
+        if (ctx.state.playerIdPoolSize == 0)
         {
             LOG_SERVER_WARN("Server full ({}/{}) – rejecting peer {}",
-                            ctx.state.clients.size(), static_cast<int>(kMaxPlayers),
+                            static_cast<int>(kMaxPlayers), static_cast<int>(kMaxPlayers),
                             ctx.peer->incomingPeerID);
             sendReject(ctx, MsgReject::EReason::ServerFull);
             return;
@@ -89,49 +91,60 @@ namespace bomberman::server
         const std::string_view playerName(msgHello.name, boundedStrLen(msgHello.name, kPlayerNameMax));
         LOG_SERVER_INFO("Hello from \"{}\" (peer {})", playerName, ctx.peer->incomingPeerID);
 
+        // Allocate a player ID from the pool.
+        const uint8_t playerId = ctx.state.playerIdPool[--ctx.state.playerIdPoolSize];
+
         // Build and send Welcome response.
         MsgWelcome welcome{};
         welcome.protocolVersion = kProtocolVersion;
-        welcome.clientId        = ctx.peer->incomingPeerID;
+        welcome.playerId        = playerId;
         welcome.serverTickRate  = sim::kTickRate;
 
-        if (!sendReliable(ctx.state.host, ctx.peer, makeWelcomePacket(welcome, 0, 0)))
+        if (!queueReliableControl(ctx.peer, makeWelcomePacket(welcome)))
         {
             LOG_SERVER_ERROR("Failed to send Welcome to peer {} - rejecting", ctx.peer->incomingPeerID);
+            // Return playerId to pool on failure.
+            ctx.state.playerIdPool[ctx.state.playerIdPoolSize++] = playerId;
             sendReject(ctx, MsgReject::EReason::Other);
             return;
         }
-        LOG_SERVER_INFO("Sent Welcome to clientId={}", welcome.clientId);
+        LOG_SERVER_INFO("Queued Welcome to playerId={}", playerId);
 
-
-        // Temporarily, the level info packet is considered part of the handshake, will be separated later
+        // Temporarily, the level info packet is considered part of the handshake, will be separated later.
         MsgLevelInfo levelInfo{};
         levelInfo.mapSeed = ctx.state.mapSeed;
-        if (!sendReliable(ctx.state.host, ctx.peer, makeLevelInfoPacket(levelInfo, 0, 0)))
+        if (!queueReliableControl(ctx.peer, makeLevelInfoPacket(levelInfo)))
         {
             LOG_SERVER_ERROR("Failed to send LevelInfo to peer {} - rejecting", ctx.peer->incomingPeerID);
+            ctx.state.playerIdPool[ctx.state.playerIdPoolSize++] = playerId;
             sendReject(ctx, MsgReject::EReason::Other);
             return;
         }
-        LOG_SERVER_INFO("Sent LevelInfo seed={} to clientId={}", levelInfo.mapSeed, welcome.clientId);
 
+        flush(ctx.state.host);
+        LOG_SERVER_INFO("Sent handshake bundle (Welcome + LevelInfo seed={}) to playerId={}",
+                        levelInfo.mapSeed, playerId);
 
-        // Mark handshake complete and initialize per-client state.
-        markHandshaked(ctx.peer);
-
-        // TODO: consider moving client state initialization out of the handler and into a more explicit session management flow.
-        const uint32_t clientId = ctx.peer->incomingPeerID;
-        ClientState& cs = ctx.state.clients[clientId];
-        cs = ClientState{};
+        // Initialize per-client state in the stable-address array slot.
+        auto& slot = ctx.state.clients[playerId];
+        slot.emplace();
+        slot->playerId = playerId;
+        slot->peer = ctx.peer;
         // Spawn at the center of the start tile in Q8 (center convention: col*256+128, row*256+128).
         // TODO: individual spawn points per player.
-        cs.pos = { playerStartX * 256 + 128, playerStartY * 256 + 128 };
+        slot->pos = { playerStartX * 256 + 128, playerStartY * 256 + 128 };
+
+        // Store stable pointer in peer->data for fast lookup in handlers and disconnect path.
+        ctx.peer->data = &slot.value();
+
+        // Start aggregated input diagnostics reporting after the first interval.
+        slot->nextInputDiagTick = ctx.state.serverTick + kInputDiagReportTicks;
     }
 
-    void onInput(ServerContext& ctx, const PacketHeader& header, const uint8_t* payload, std::size_t size)
+    void onInput(ServerContext& ctx, const PacketHeader& /*header*/, const uint8_t* payload, std::size_t size)
     {
         // Ignore input from peers that haven't completed the handshake yet.
-        if (!isHandshaked(ctx.peer))
+        if (!hasClientState(ctx.peer))
         {
             LOG_SERVER_WARN("Input from non-handshaked peer {} - ignoring", ctx.peer->incomingPeerID);
             return;
@@ -144,33 +157,83 @@ namespace bomberman::server
             return;
         }
 
-        const uint32_t clientId = ctx.peer->incomingPeerID;
-        //  Iterate through clients to find the matching clientId.
-        auto it = ctx.state.clients.find(clientId);
-        if (it == ctx.state.clients.end())
+        const uint32_t highestSeq = msgInput.baseInputSeq + msgInput.count - 1;
+
+        auto* client = getClientState(ctx.peer);
+        if (client == nullptr)
         {
-            LOG_SERVER_WARN("Input from unknown clientId={} - ignoring", clientId);
+            LOG_SERVER_WARN("Input peer {} has no client state after guard - ignoring", ctx.peer->incomingPeerID);
             return;
         }
-        auto& client = it->second;
 
-        // Detect new bomb command by comparing to last seen value.
-        if (msgInput.bombCommandId != client.lastBombCommandId)
+        uint8_t lateDropCount = 0;
+        uint8_t aheadDropCount = 0;
+        uint32_t firstAheadSeq = 0;
+        uint32_t lastAheadSeq = 0;
+        const uint32_t maxAcceptableSeq = client->lastConsumedInputSeq + kInputWindowAhead;
+
+        // Store each entry from the batch into the ring buffer.
+        for (uint8_t i = 0; i < msgInput.count; ++i)
         {
-            client.lastBombCommandId = msgInput.bombCommandId;
-            LOG_SERVER_DEBUG("Bomb request: clientId={} bombCmdId={}",
-                             clientId, msgInput.bombCommandId);
-            // TODO: Validate & spawn bomb (cooldown, max bombs, position check)
+            const uint32_t seq = msgInput.baseInputSeq + i;
+
+            // Drop late arrivals: anything already consumed is discarded.
+            if (seq <= client->lastConsumedInputSeq)
+            {
+                ++lateDropCount;
+                continue;
+            }
+
+            // Drop packets too far ahead of the consume window to prevent ring stomping.
+            if (seq > client->lastConsumedInputSeq + kInputWindowAhead)
+            {
+                if (aheadDropCount == 0)
+                    firstAheadSeq = seq;
+                lastAheadSeq = seq;
+                ++aheadDropCount;
+                continue;
+            }
+
+            auto& slot = client->inputRing[seq % kServerInputBufferSize];
+            slot.seq     = seq;
+            slot.buttons = msgInput.inputs[i];
+            slot.valid   = true;
+
+            if (seq > client->lastReceivedInputSeq)
+                client->lastReceivedInputSeq = seq;
         }
 
-        client.input = msgInput;
+        client->lateDrops += lateDropCount;
+        client->aheadDrops += aheadDropCount;
 
-        if (header.sequence % kInputLogEveryN == 0)
+        if (aheadDropCount > 0)
         {
-            LOG_SERVER_DEBUG("Input clientId={} seq={} tick={} move=({},{}) bombCmdId={}",
-                             clientId, header.sequence, header.tick,
-                             static_cast<int>(msgInput.moveX), static_cast<int>(msgInput.moveY),
-                             msgInput.bombCommandId);
+            ++client->consecutiveAheadDropBatches;
+            const uint16_t streak = client->consecutiveAheadDropBatches;
+            if (streak >= kRepeatedInputWarnThreshold
+                && ctx.state.serverTick >= client->nextAheadWarnTick)
+            {
+                LOG_SERVER_WARN(
+                    "Repeated ahead drops playerId={} streak={} latestAheadSeqs=[{}..{}] count={} batch=[{}..{}] maxAcceptable={} lastRecv={} lastConsumed={}",
+                    client->playerId, streak,
+                    firstAheadSeq, lastAheadSeq, aheadDropCount,
+                    msgInput.baseInputSeq, highestSeq,
+                    maxAcceptableSeq, client->lastReceivedInputSeq, client->lastConsumedInputSeq);
+
+                client->nextAheadWarnTick = ctx.state.serverTick + kRepeatedInputWarnCooldownTicks;
+            }
+        }
+        else
+        {
+            client->consecutiveAheadDropBatches = 0;
+        }
+
+        // Periodic logging.
+        if (highestSeq % kServerInputLogEveryN == 0)
+        {
+            LOG_SERVER_DEBUG("Input playerId={} batch=[{}..{}] lastRecv={} lastConsumed={}",
+                             client->playerId, msgInput.baseInputSeq, highestSeq,
+                             client->lastReceivedInputSeq, client->lastConsumedInputSeq);
         }
     }
 
