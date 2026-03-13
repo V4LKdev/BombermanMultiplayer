@@ -729,3 +729,38 @@ Resolve a runtime bug where multiplayer input would work briefly, then stop resp
 
 ### Result
 - The multiplayer foundation is now stable enough to continue with prediction, reconciliation, and richer replicated gameplay.
+
+## 2026-03-13 (9b871be, 236d05b) – Add Channel-Based Logging And Then Simplify Configuration
+
+### Goal
+Prepare the project for the upcoming telemetry/debugging work by making logs easier to filter by concern, while keeping the setup lightweight enough for day-to-day development.
+
+### Changes
+- Expanded the logging layer from coarse subsystem loggers to clearer channel-oriented logging:
+  - `net.conn`
+  - `net.packet`
+  - `net.proto`
+  - `net.input`
+  - `net.snapshot`
+  - plus reserved channels for diagnostics/perf/tests
+- Updated networking call sites to use the new log channels so connection flow, packet transport, input handling, and snapshot traffic can be filtered independently.
+- Added a default logging config file (`Configs/DefaultLogging.ini`) for project-level runtime defaults.
+- Added shared CLI logging parsing through `Util/CliCommon.h` so client and server use the same `--log-level` and `--log-file` behavior.
+- Simplified the first version of the config system after review:
+  - removed explicit `--log-config`
+  - removed config-file control over log-file output
+  - removed redundant enable/disable state for file logging
+  - kept the final precedence as:
+    1. hardcoded defaults
+    2. optional default config file
+    3. CLI `--log-level`
+    4. CLI `--log-file`
+
+### Why This Was Worth Doing
+- The networking layer has grown past the point where one broad `client/server/protocol` split is enough for useful debugging.
+- At the same time, the original config layering was too heavy for the scope of the project, so it was cut back to a simpler default-file-plus-CLI model.
+
+### Result
+- Logs are now easier to filter by actual networking concern.
+- The runtime configuration is simpler and less error-prone.
+- Default config no longer risks turning on shared file logging for both client and server processes.
