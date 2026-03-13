@@ -157,6 +157,9 @@ install (TARGETS Bomberman_Server
   RUNTIME DESTINATION .
 )
 
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/Configs
+        DESTINATION .)
+
 if (CMAKE_MACOSX_BUNDLE)
   install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../assets
           DESTINATION ${PROJECT_NAME}.app/Contents/Resources)
