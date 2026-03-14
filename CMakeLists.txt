@@ -138,6 +138,7 @@ endif()
 
 # spdlog compile-time log level gate (what exists in the binary).
 # spdlog runtime default log level (what is actually printed).
+# Net diagnostics enabled in debug, disabled in release.
 target_compile_definitions(${PROJECT_NAME} PRIVATE
   $<IF:$<CONFIG:Debug>,SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE,SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_INFO>
   $<IF:$<CONFIG:Debug>,BOMBERMAN_DEFAULT_LOG_LEVEL=SPDLOG_LEVEL_DEBUG,BOMBERMAN_DEFAULT_LOG_LEVEL=SPDLOG_LEVEL_INFO>

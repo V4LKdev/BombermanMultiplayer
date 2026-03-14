@@ -3,7 +3,6 @@
 
 #include <array>
 #include <cstddef>
-#include <cstdint>
 #include <cstring>
 #include <string_view>
 
@@ -181,6 +180,22 @@ namespace bomberman::net
                raw == static_cast<uint8_t>(EMsgType::Input)      ||
                raw == static_cast<uint8_t>(EMsgType::Snapshot)   ||
                raw == static_cast<uint8_t>(EMsgType::Correction);
+    }
+
+    /** @brief Returns a human-readable name for a protocol message type. */
+    constexpr std::string_view msgTypeName(EMsgType type)
+    {
+        switch (type)
+        {
+            case EMsgType::Hello:      return "Hello";
+            case EMsgType::Welcome:    return "Welcome";
+            case EMsgType::Reject:     return "Reject";
+            case EMsgType::LevelInfo:  return "LevelInfo";
+            case EMsgType::Input:      return "Input";
+            case EMsgType::Snapshot:   return "Snapshot";
+            case EMsgType::Correction: return "Correction";
+            default:                   return "Unknown";
+        }
     }
 
     /**

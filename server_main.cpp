@@ -6,6 +6,7 @@
 #include <string>
 #include <string_view>
 #include <enet/enet.h>
+#include <optional>
 
 #include "Net/NetCommon.h"
 #include "Server/ServerHandlers.h"
@@ -16,9 +17,15 @@
 
 using namespace bomberman::net;
 
-// TODO: Read these from a config file or CLI arguments
 namespace
 {
+    enum class ParseCliResult : uint8_t
+    {
+        Ok,
+        Help,
+        Error
+    };
+
     using ServerClock = std::chrono::steady_clock;
     using SimDuration = std::chrono::duration<double>;
 
@@ -42,10 +49,10 @@ namespace
         bool seedOverride = false;
     };
 
-    void printUsage(const char* exeName)
+    void printUsage()
     {
         std::cout
-            << "Usage: " << exeName
+            << "Usage: "
             << ' ' << bomberman::cli::kLoggingUsageArgs;
 
         if constexpr (bomberman::cli::kNetDiagAvailable)
@@ -53,10 +60,10 @@ namespace
 
         std::cout
             << " [--port <port override>] [--seed <seed override>]\n"
-            << "       Default log config: " << bomberman::log::defaultConfigFilePath() << " (if present)\n";
+            << "       Default log config location: " << bomberman::log::defaultConfigFilePath() << "\n";
     }
 
-    bool parseCli(int argc, char** argv, CliOptions& outOptions)
+    ParseCliResult parseCli(int argc, char** argv, CliOptions& outOptions)
     {
         for (int i = 1; i < argc; ++i)
         {
@@ -68,8 +75,8 @@ namespace
                 if (!error.empty())
                 {
                     std::cerr << error << '\n';
-                    printUsage(argv[0]);
-                    return false;
+                    printUsage();
+                    return ParseCliResult::Error;
                 }
 
                 continue;
@@ -80,8 +87,8 @@ namespace
                 if (!error.empty())
                 {
                     std::cerr << error << '\n';
-                    printUsage(argv[0]);
-                    return false;
+                    printUsage();
+                    return ParseCliResult::Error;
                 }
 
                 continue;
@@ -89,8 +96,8 @@ namespace
 
             if (arg == "--help")
             {
-                printUsage(argv[0]);
-                return false;
+                printUsage();
+                return ParseCliResult::Help;
             }
 
             if (arg == "--port")
@@ -98,16 +105,16 @@ namespace
                 if (i + 1 >= argc)
                 {
                     std::cerr << "Missing value for --port\n";
-                    printUsage(argv[0]);
-                    return false;
+                    printUsage();
+                    return ParseCliResult::Error;
                 }
 
                 const std::string_view value = argv[++i];
                 if (!bomberman::cli::parsePort(value, outOptions.port))
                 {
                     std::cerr << "Invalid port: " << value << '\n';
-                    printUsage(argv[0]);
-                    return false;
+                    printUsage();
+                    return ParseCliResult::Error;
                 }
                 continue;
             }
@@ -117,23 +124,49 @@ namespace
                 if (i + 1 >= argc)
                 {
                     std::cerr << "Missing value for --seed\n";
-                    printUsage(argv[0]);
-                    return false;
+                    printUsage();
+                    return ParseCliResult::Error;
                 }
 
-                const uint32_t seed = static_cast<uint32_t>(std::stoi(argv[++i]));
-                outOptions.seed = seed;
+                const std::string_view value = argv[++i];
+                if (!bomberman::cli::parseUint32(value, outOptions.seed))
+                {
+                    std::cerr << "Invalid seed: " << value << '\n';
+                    printUsage();
+                    return ParseCliResult::Error;
+                }
+
                 outOptions.seedOverride = true;
                 continue;
             }
 
             std::cerr << "Unknown argument: " << arg << '\n';
-            printUsage(argv[0]);
-            return false;
+            printUsage();
+            return ParseCliResult::Error;
         }
 
-        return true;
+        return ParseCliResult::Ok;
     }
+
+
+    void recordServerDiagNote(bomberman::server::ServerState& state,
+                            std::string_view note,
+                            std::optional<uint8_t> playerId = std::nullopt,
+                            std::optional<uint32_t> transportPeerId = std::nullopt)
+    {
+        NetEvent diagEvent{};
+        diagEvent.type = NetEventType::Note;
+
+        if (playerId.has_value())
+            diagEvent.peerId = *playerId;
+
+        if (transportPeerId.has_value())
+            diagEvent.valueA = *transportPeerId;
+
+        diagEvent.note = note;
+        state.diag.recordEvent(diagEvent);
+    }
+
 } // namespace
 
 // =====================================================================================================================
@@ -148,12 +181,19 @@ namespace
  */
 int main(int argc, char** argv)
 {
+    // Parse CLI options.
     CliOptions cli{};
-    if (!parseCli(argc, argv, cli))
+    switch (parseCli(argc, argv, cli))
     {
-        return EXIT_FAILURE;
+        case ParseCliResult::Ok:
+            break;
+        case ParseCliResult::Help:
+            return EXIT_SUCCESS;
+        case ParseCliResult::Error:
+            return EXIT_FAILURE;
     }
 
+    // Resolve log config from CLI options and defaults.
     bomberman::log::LogConfig logConfig{};
     std::string error;
     if (!bomberman::log::resolveConfig(logConfig,
@@ -166,7 +206,6 @@ int main(int argc, char** argv)
         std::cerr << error << '\n';
         return EXIT_FAILURE;
     }
-
 
     // Initialize project-wide named loggers.
     bomberman::log::init(logConfig);
@@ -196,14 +235,16 @@ int main(int argc, char** argv)
     }
 
     LOG_SERVER_INFO("==== BOMBERMAN DEDICATED SERVER ===================================================================");
-    LOG_SERVER_INFO("Listening on port {} with max {} peers ({} gameplay slots)",
-                    cli.port, kMaxPeers, kMaxPlayers);
+    LOG_NET_DIAG_INFO("Server diagnostics {}", cli.diagnostics.netDiagEnabled ? "enabled" : "disabled");
+    LOG_SERVER_INFO("Listening on port {} with max {} peers ({} gameplay slots)", cli.port, kMaxPeers, kMaxPlayers);
 
+    // Initialize server state.
     bomberman::server::ServerState state{};
     bomberman::server::initServerState(state, server, cli.diagnostics.netDiagEnabled, cli.seedOverride, cli.seed);
 
     auto lastTickTime = ServerClock::now();
     SimDuration accumulator{};
+
 
 
     // ----- Main Event Loop -----
@@ -230,13 +271,7 @@ int main(int argc, char** argv)
             {
                 case ENET_EVENT_TYPE_CONNECT:
                     LOG_SERVER_INFO("Peer connected (id={})", event.peer->incomingPeerID);
-                    {
-                        NetEvent diagEvent{};
-                        diagEvent.type = NetEventType::Note;
-                        diagEvent.valueA = static_cast<uint32_t>(event.peer->incomingPeerID);
-                        diagEvent.note = "transport peer connected";
-                        state.diag.recordEvent(diagEvent);
-                    }
+                    recordServerDiagNote(state, "transport peer connected", std::nullopt, event.peer->incomingPeerID);
                     break;
 
                 case ENET_EVENT_TYPE_RECEIVE:
@@ -251,13 +286,7 @@ int main(int argc, char** argv)
                     {
                         const uint8_t playerId = client->playerId;
                         LOG_SERVER_INFO("Peer disconnected (playerId={})", playerId);
-
-                        NetEvent diagEvent{};
-                        diagEvent.type = NetEventType::Note;
-                        diagEvent.peerId = playerId;
-                        diagEvent.valueA = static_cast<uint32_t>(event.peer->incomingPeerID);
-                        diagEvent.note = "player disconnected";
-                        state.diag.recordEvent(diagEvent);
+                        recordServerDiagNote(state, "peer disconnected", playerId, event.peer->incomingPeerID);
 
                         // Null peer->data BEFORE resetting client state to prevent dangling reads.
                         event.peer->data = nullptr;
@@ -269,12 +298,7 @@ int main(int argc, char** argv)
                     else
                     {
                         LOG_SERVER_INFO("Peer disconnected (not handshaked, enetId={})", event.peer->incomingPeerID);
-
-                        NetEvent diagEvent{};
-                        diagEvent.type = NetEventType::Note;
-                        diagEvent.valueA = static_cast<uint32_t>(event.peer->incomingPeerID);
-                        diagEvent.note = "transport peer disconnected before handshake";
-                        state.diag.recordEvent(diagEvent);
+                        recordServerDiagNote(state, "transport peer disconnected before handshake", std::nullopt, event.peer->incomingPeerID);
 
                         event.peer->data = nullptr;
                     }
@@ -299,6 +323,7 @@ int main(int argc, char** argv)
         int stepCount = 0;
         while (accumulator >= kSimStep && stepCount < bomberman::sim::kMaxStepsPerFrame)
         {
+
             bomberman::server::simulateServerTick(state);
 
             accumulator -= kSimStep;
@@ -311,6 +336,8 @@ int main(int argc, char** argv)
             LOG_SERVER_WARN("Exceeded max server tick steps ({}), accumulator={:.3f}ms", bomberman::sim::kMaxStepsPerFrame, accumulatorMs);
         }
     }
+
+
 
     // Write diagnostics report before tearing down ENet resources.
     state.diag.endSession();

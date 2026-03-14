@@ -10,6 +10,13 @@
 
 namespace
 {
+    enum class ParseCliResult : uint8_t
+    {
+        Ok,
+        Help,
+        Error
+    };
+
     struct CliOptions
     {
         bomberman::cli::LoggingCliOptions logging;
@@ -17,15 +24,15 @@ namespace
         bool mute = false;
     };
 
-    void printUsage(const char* exeName)
+    void printUsage()
     {
         std::cout
-            << "Usage: " << exeName << ' ' << bomberman::cli::kLoggingUsageArgs
+            << "Usage: " << bomberman::cli::kLoggingUsageArgs
             << " [--port <port override>] [--mute]\n"
-            << "       Default log config: " << bomberman::log::defaultConfigFilePath() << " (if present)\n";
+            << "       Default log config location: " << bomberman::log::defaultConfigFilePath() << "\n";
     }
 
-    bool parseCli(int argc, char** argv, CliOptions& outOptions)
+    ParseCliResult parseCli(int argc, char** argv, CliOptions& outOptions)
     {
         for (int i = 1; i < argc; ++i)
         {
@@ -37,8 +44,8 @@ namespace
                 if (!error.empty())
                 {
                     std::cerr << error << '\n';
-                    printUsage(argv[0]);
-                    return false;
+                    printUsage();
+                    return ParseCliResult::Error;
                 }
 
                 continue;
@@ -46,8 +53,8 @@ namespace
 
             if (arg == "--help")
             {
-                printUsage(argv[0]);
-                return false;
+                printUsage();
+                return ParseCliResult::Help;
             }
 
             if (arg == "--port")
@@ -55,16 +62,16 @@ namespace
                 if (i + 1 >= argc)
                 {
                     std::cerr << "Missing value for --port\n";
-                    printUsage(argv[0]);
-                    return false;
+                    printUsage();
+                    return ParseCliResult::Error;
                 }
 
                 const std::string_view value = argv[++i];
                 if (!bomberman::cli::parsePort(value, outOptions.port))
                 {
                     std::cerr << "Invalid port: " << value << '\n';
-                    printUsage(argv[0]);
-                    return false;
+                    printUsage();
+                    return ParseCliResult::Error;
                 }
                 continue;
             }
@@ -76,11 +83,11 @@ namespace
             }
 
             std::cerr << "Unknown argument: " << arg << '\n';
-            printUsage(argv[0]);
-            return false;
+            printUsage();
+            return ParseCliResult::Error;
         }
 
-        return true;
+        return ParseCliResult::Ok;
     }
 } // namespace
 
@@ -92,12 +99,20 @@ namespace
  */
 int main(int argc, char** argv)
 {
+
+    // Parse CLI options.
     CliOptions cli{};
-    if (!parseCli(argc, argv, cli))
+    switch (parseCli(argc, argv, cli))
     {
-        return EXIT_FAILURE;
+        case ParseCliResult::Ok:
+            break;
+        case ParseCliResult::Help:
+            return EXIT_SUCCESS;
+        case ParseCliResult::Error:
+            return EXIT_FAILURE;
     }
 
+    // Resolve log config from CLI options and defaults.
     bomberman::log::LogConfig logConfig{};
     std::string error;
     if (!bomberman::log::resolveConfig(logConfig,
