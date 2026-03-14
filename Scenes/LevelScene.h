@@ -65,6 +65,9 @@ namespace bomberman
          */
         virtual void update(const unsigned int delta) override;
 
+        /** @brief Clears locally held movement input and resets player facing/animation state. */
+        void clearLocalMovementInput();
+
       private:
         // spawn and generation of map objects
         void spawnTextObjects();

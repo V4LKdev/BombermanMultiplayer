@@ -141,6 +141,18 @@ namespace bomberman
             // Process SDL events.
             while(SDL_PollEvent(&event))
             {
+                if (event.type == SDL_WINDOWEVENT)
+                {
+                    if (event.window.event == SDL_WINDOWEVENT_FOCUS_GAINED)
+                    {
+                        handleWindowFocusChanged(true);
+                    }
+                    else if (event.window.event == SDL_WINDOWEVENT_FOCUS_LOST)
+                    {
+                        handleWindowFocusChanged(false);
+                    }
+                }
+
                 sceneManager->onEvent(event);
                 if(event.type == SDL_QUIT)
                 {
@@ -250,6 +262,12 @@ namespace bomberman
 
     void Game::pollNetInput()
     {
+        if (!hasKeyboardFocus_)
+        {
+            netClient_->sendInput(0);
+            return;
+        }
+
         const Uint8* keys = SDL_GetKeyboardState(nullptr);
 
         const bool left  = keys[SDL_SCANCODE_LEFT]  || keys[SDL_SCANCODE_A];
@@ -267,6 +285,18 @@ namespace bomberman
         if (bomb)            buttons |= net::kInputBomb;
 
         netClient_->sendInput(buttons);
+    }
+
+    void Game::handleWindowFocusChanged(const bool hasFocus)
+    {
+        hasKeyboardFocus_ = hasFocus;
+
+        if (hasFocus)
+            return;
+
+        auto* levelScene = dynamic_cast<LevelScene*>(sceneManager->getCurrentScene());
+        if (levelScene != nullptr)
+            levelScene->clearLocalMovementInput();
     }
 
     void Game::stop()

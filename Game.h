@@ -92,12 +92,16 @@ namespace bomberman
         net::NetClient* netClient_ = nullptr;           ///< Optional network client for multiplayer (not owned)
         uint16_t serverPort_ = net::kDefaultServerPort; ///< Server port from CLI or default.
         bool mute_ = false;                             ///< When true, all audio output is silenced at startup.
+        bool hasKeyboardFocus_ = true;                  ///< True while the SDL window has keyboard focus.
 
         net::MsgSnapshot debugSnapshot_{};   ///< Latest server snapshot, refreshed each tick for the debug overlay.
         bool debugSnapshotValid_ = false;    ///< True once at least one snapshot has been received.
 
         /** @brief Draws server-authoritative position dots as a debug overlay. */
         void drawNetDebugOverlay();
+
+        /** @brief Updates internal focus state and clears local input when focus is lost. */
+        void handleWindowFocusChanged(bool hasFocus);
 
         /** @brief Samples keyboard state, builds a button bitmask, and sends it to the server. */
         void pollNetInput();

@@ -624,6 +624,15 @@ namespace bomberman
         player->setMovementDirection(direction);
     }
 
+    void LevelScene::clearLocalMovementInput()
+    {
+        playerDirectionX = 0;
+        playerDirectionY = 0;
+
+        if (player != nullptr)
+            player->setMovementDirection(MovementDirection::None);
+    }
+
     void LevelScene::updateCamera()
     {
         if(player == nullptr)
