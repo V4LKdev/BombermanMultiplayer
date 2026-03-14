@@ -173,7 +173,11 @@ namespace bomberman::log
 
     std::string defaultConfigFilePath()
     {
+#ifdef BOMBERMAN_SOURCE_DIR
+        return (std::filesystem::path(BOMBERMAN_SOURCE_DIR) / kDefaultConfigFilePath).lexically_normal().string();
+#else
         return kDefaultConfigFilePath;
+#endif
     }
 
     static bool loadConfigFile(const std::string& path, LogConfig& inOutConfig, std::string& outError)

@@ -28,7 +28,7 @@ namespace bomberman::log
     /** @brief Builds the hardcoded default logging configuration. */
     LogConfig makeDefaultConfig();
 
-    /** @brief Returns the default repo-relative log config file path. */
+    /** @brief Returns the default logging config path. */
     std::string defaultConfigFilePath();
 
     /**
