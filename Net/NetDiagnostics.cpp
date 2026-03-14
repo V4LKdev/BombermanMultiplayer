@@ -43,13 +43,11 @@ namespace bomberman::net
         {
             switch (type)
             {
-                case NetInputAnomalyType::OutOfOrder:     return "OutOfOrder";
-                case NetInputAnomalyType::Duplicate:      return "Duplicate";
-                case NetInputAnomalyType::Gap:            return "Gap";
-                case NetInputAnomalyType::UnknownButtons: return "UnknownButtons";
-                case NetInputAnomalyType::TooOld:         return "TooOld";
-                case NetInputAnomalyType::Count:          return "Count";
-                default:                                  return "Unknown";
+                case NetInputAnomalyType::OutOfOrder: return "OutOfOrder";
+                case NetInputAnomalyType::Duplicate:  return "Duplicate";
+                case NetInputAnomalyType::Gap:        return "Gap";
+                case NetInputAnomalyType::Count:      return "Count";
+                default:                              return "Unknown";
             }
         }
 
@@ -277,6 +275,23 @@ namespace bomberman::net
         summary_.inputEntriesAccepted += count;
     }
 
+    void NetDiagnostics::recordStaleInputBatch(const uint8_t peerId, const uint32_t highestSeq, const uint8_t count)
+    {
+        if (!enabled_ || !sessionActive_)
+            return;
+
+        summary_.staleInputBatches++;
+
+        NetEvent event{};
+        event.type = NetEventType::Note;
+        event.timestampMs = nowMs();
+        event.peerId = peerId;
+        event.seq = highestSeq;
+        event.valueA = count;
+        event.note = "stale input batch";
+        pushRecentEvent(std::move(event));
+    }
+
     void NetDiagnostics::samplePeer(const uint8_t peerId, const uint32_t rttMs, const uint32_t rttVarianceMs, const uint32_t packetLossPermille,
                                     const uint32_t queuedReliable, const uint32_t queuedUnreliable)
     {
@@ -337,6 +352,7 @@ namespace bomberman::net
         out << "packets_recv_failed=" << summary_.packetsRecvFailed << "\n";
         out << "malformed_packets_recv=" << summary_.malformedPacketsRecv << "\n";
         out << "malformed_packet_bytes_recv=" << summary_.malformedPacketBytesRecv << "\n";
+        out << "stale_input_batches=" << summary_.staleInputBatches << "\n";
         out << "input_entries_received_total=" << summary_.inputEntriesReceivedTotal << "\n";
         out << "input_entries_accepted=" << summary_.inputEntriesAccepted << "\n";
         out << "input_entries_redundant=" << summary_.inputEntriesRedundant << "\n";
@@ -450,12 +466,7 @@ namespace bomberman::net
 
     bool NetDiagnostics::shouldEmitInputAnomalyEvent(const NetInputAnomalyType type)
     {
-        // "TooOld" is expected under the batched resend model. We count it
-        // exactly in summaries, but do not retain individual occurrences in
-        // bounded recent-event history.
-        if (type == NetInputAnomalyType::TooOld)
-            return false;
-
+        static_cast<void>(type);
         return true;
     }
 

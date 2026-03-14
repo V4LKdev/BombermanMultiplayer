@@ -278,20 +278,23 @@ namespace bomberman::server
         if (ctx.diag)
             ctx.diag->recordInputEntriesReceived(msgInput.count);
 
+        // If even the newest command in this batch is already consumed, the
+        // packet itself arrived stale. That is different from useful mixed
+        // batches that intentionally overlap older commands.
+        if (highestSeq <= client->lastConsumedInputSeq)
+        {
+            if (ctx.diag)
+                ctx.diag->recordStaleInputBatch(client->playerId, highestSeq, msgInput.count);
+
+            ctx.receiveResult = ReceiveDispatchResult::Dropped;
+            return;
+        }
+
         // Store each entry from the batch into the ring buffer.
         for (uint8_t i = 0; i < msgInput.count; ++i)
         {
             const uint32_t seq = msgInput.baseInputSeq + i;
             const uint8_t  buttons = msgInput.inputs[i];
-
-            // Detection logic lives here; telemetry goes to diag.
-
-            // Unknown button bits: record but continue processing (do not reject).
-            if ((buttons & ~kInputKnownBits) != 0)
-            {
-                if (ctx.diag)
-                    ctx.diag->recordInputAnomaly(NetInputAnomalyType::UnknownButtons, client->playerId, seq, buttons);
-            }
 
             // Drop late arrivals: anything already consumed is discarded.
             if (seq <= client->lastConsumedInputSeq)

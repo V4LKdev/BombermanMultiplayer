@@ -55,8 +55,6 @@ namespace bomberman::net
         OutOfOrder,
         Duplicate,
         Gap,
-        UnknownButtons,
-        TooOld,
         Count
     };
 
@@ -124,6 +122,7 @@ namespace bomberman::net
         uint64_t packetsRecvFailed = 0;
         uint64_t malformedPacketsRecv = 0; ///< Incoming packets rejected before a typed payload could be dispatched.
         uint64_t malformedPacketBytesRecv = 0; ///< Bytes carried by malformed incoming packets.
+        uint64_t staleInputBatches = 0; ///< Fully stale input batches whose newest command was already consumed on arrival.
 
         uint64_t inputEntriesReceivedTotal = 0; ///< Total input command entries seen inside incoming input batches.
         uint64_t inputEntriesAccepted = 0;      ///< Input command entries accepted and stored for future consumption.
@@ -187,6 +186,9 @@ namespace bomberman::net
 
         /** @brief Records redundant already-consumed input entries seen in a resent batch. */
         void recordInputEntriesRedundant(uint32_t count);
+
+        /** @brief Records a fully stale input batch whose newest sequence was already consumed. */
+        void recordStaleInputBatch(uint8_t peerId, uint32_t highestSeq, uint8_t count);
 
         /** @brief Stores the latest sampled transport health values for a peer. */
         void samplePeer(uint8_t peerId, uint32_t rttMs, uint32_t rttVarianceMs, uint32_t packetLossPermille,
