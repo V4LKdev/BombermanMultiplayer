@@ -765,7 +765,7 @@ Prepare the project for the upcoming telemetry/debugging work by making logs eas
 - The runtime configuration is simpler and less error-prone.
 - Default config no longer risks turning on shared file logging for both client and server processes.
 
-## 2026-03-13 – Make Default Logging Config Resolution Deterministic
+## 2026-03-13 (c77e1e8) – Make Default Logging Config Resolution Deterministic
 
 ### Goal
 Remove the confusing difference between terminal launches and IDE launches when loading the default logging config.
@@ -787,7 +787,7 @@ Remove the confusing difference between terminal launches and IDE launches when 
 - Malformed default config is detected consistently.
 - The logging setup is less fragile and easier to reason about.
 
-## 2026-03-14 – Add Server Diagnostics MVP And Refine Telemetry Semantics
+## 2026-03-14 (251089b) – Add Server Diagnostics MVP And Refine Telemetry Semantics
 
 ### Goal
 Lay the first real diagnostics foundation for the networking layer before prediction/reconciliation work begins.
@@ -833,7 +833,7 @@ Lay the first real diagnostics foundation for the networking layer before predic
 - The project now has a practical server-side telemetry baseline.
 - Diagnostics are strong enough to explain real runtime behavior instead of just producing noise.
 
-## 2026-03-14 – Send Neutral Input While Unfocused
+## 2026-03-14 (ca3bf5d) – Send Neutral Input While Unfocused
 
 ### Goal
 Stop client focus loss from turning into misleading server-side input gaps and stale held movement.
@@ -855,7 +855,7 @@ Stop client focus loss from turning into misleading server-side input gaps and s
 - The server no longer has to infer long hold streaks from missing fresh commands caused by local focus loss.
 - Diagnostics remain useful even in multi-window local testing.
 
-## 2026-03-14 – Fix Overflow Client Rejection Path
+## 2026-03-14 (d312e43, 9eeb05e) – Fix Overflow Client Rejection Path
 
 ### Goal
 Make overflow clients fail clearly and intentionally when all gameplay slots are already occupied.
@@ -879,7 +879,7 @@ Make overflow clients fail clearly and intentionally when all gameplay slots are
 - The UI shows the actual failure reason.
 - Server diagnostics now record the reject lifecycle coherently.
 
-## 2026-03-14 – Tighten Diagnostics Semantics And Add Peer Sampling
+## 2026-03-14 (6c0356b, 65a81ff, 97b81e1) – Tighten Diagnostics Semantics And Add Peer Sampling
 
 ### Goal
 Make the server diagnostics layer more truthful and more useful before expanding it further.
@@ -915,6 +915,15 @@ Make the server diagnostics layer more truthful and more useful before expanding
   - `latest_peer_samples` now shows sane localhost transport values
   - per-message packet aggregates match the expected flow (`Hello`, `Welcome`, `LevelInfo`, `Input`, `Snapshot`)
   - recent events now attribute anomalies to the responsible gameplay peer
+- Additional manual validation:
+  - single-client movement run:
+    - verified `stale_input_batches`, `input_entries_redundant`, and packet receive failures now separate stale delivery from normal resend overlap
+  - four-client local run plus failed/spammed fifth-client joins:
+    - verified overflow attempts are counted as rejected `Hello` receives and paired with explicit `Reject` sends
+    - confirmed overflow clients no longer contaminate gameplay input accounting
+  - repeated connect/disconnect churn with one client:
+    - verified handshake aggregates scale cleanly (`Hello`, `Welcome`, `LevelInfo`)
+    - observed `stale_input_batches=0` in simple reconnect churn, confirming the stale-batch metric is not firing spuriously on ordinary reconnects
 
 ### Result
 - The diagnostics layer is now much closer to a trustworthy server telemetry baseline.
