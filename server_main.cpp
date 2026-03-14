@@ -36,6 +36,7 @@ namespace
     struct CliOptions
     {
         bomberman::cli::LoggingCliOptions logging;
+        bomberman::cli::DiagnosticsCliOptions diagnostics;
         uint16_t port = kDefaultServerPort;
         uint32_t seed = 0;
         bool seedOverride = false;
@@ -45,7 +46,13 @@ namespace
     {
         std::cout
             << "Usage: " << exeName
-            << ' ' << bomberman::cli::kLoggingUsageArgs << " [--port <port override>] [--seed <seed override>]\n"
+            << ' ' << bomberman::cli::kLoggingUsageArgs;
+
+        if constexpr (bomberman::cli::kNetDiagAvailable)
+            std::cout << ' ' << bomberman::cli::kDiagnosticsUsageArgs;
+
+        std::cout
+            << " [--port <port override>] [--seed <seed override>]\n"
             << "       Default log config: " << bomberman::log::defaultConfigFilePath() << " (if present)\n";
     }
 
@@ -57,6 +64,18 @@ namespace
             std::string error;
 
             if (bomberman::cli::tryParseLoggingOption(argc, argv, i, outOptions.logging, error))
+            {
+                if (!error.empty())
+                {
+                    std::cerr << error << '\n';
+                    printUsage(argv[0]);
+                    return false;
+                }
+
+                continue;
+            }
+
+            if (bomberman::cli::tryParseDiagnosticsOption(argc, argv, i, outOptions.diagnostics, error))
             {
                 if (!error.empty())
                 {
@@ -181,7 +200,7 @@ int main(int argc, char** argv)
                     cli.port, kMaxPeers, kMaxPlayers);
 
     bomberman::server::ServerState state{};
-    bomberman::server::initServerState(state, server, cli.seedOverride, cli.seed);
+    bomberman::server::initServerState(state, server, cli.diagnostics.netDiagEnabled, cli.seedOverride, cli.seed);
 
     auto lastTickTime = ServerClock::now();
     SimDuration accumulator{};

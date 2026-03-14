@@ -20,7 +20,8 @@ namespace
     void printUsage(const char* exeName)
     {
         std::cout
-            << "Usage: " << exeName << ' ' << bomberman::cli::kLoggingUsageArgs << " [--port <port override>] [--mute]\n"
+            << "Usage: " << exeName << ' ' << bomberman::cli::kLoggingUsageArgs
+            << " [--port <port override>] [--mute]\n"
             << "       Default log config: " << bomberman::log::defaultConfigFilePath() << " (if present)\n";
     }
 

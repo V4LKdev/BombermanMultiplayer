@@ -354,7 +354,7 @@ namespace bomberman::server
         }
 
         // Periodic logging.
-        if (highestSeq % kInputBatchLogEveryN == 0)
+        if (highestSeq % kInputBatchLogIntervalTicks == 0)
         {
             LOG_NET_INPUT_DEBUG("Input playerId={} batch=[{}..{}] lastRecv={} lastConsumed={}",
                                 client->playerId, msgInput.baseInputSeq, highestSeq,

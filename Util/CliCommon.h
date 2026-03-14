@@ -14,6 +14,12 @@
 
 namespace bomberman::cli
 {
+#if defined(BOMBERMAN_ENABLE_NET_DIAG) && BOMBERMAN_ENABLE_NET_DIAG
+    inline constexpr bool kNetDiagAvailable = true;
+#else
+    inline constexpr bool kNetDiagAvailable = false;
+#endif
+
     struct LoggingCliOptions
     {
         spdlog::level::level_enum logLevel = static_cast<spdlog::level::level_enum>(BOMBERMAN_DEFAULT_LOG_LEVEL);
@@ -22,8 +28,16 @@ namespace bomberman::cli
         bool hasLogFileOverride = false;
     };
 
+    struct DiagnosticsCliOptions
+    {
+        bool netDiagEnabled = false;
+    };
+
     inline constexpr std::string_view kLoggingUsageArgs =
-        "[--log-level <trace|debug|info|warn|error|critical>] [--log-file <path>]";
+        "[--log-level <trace|debug|info|warn|error>] [--log-file <path>]";
+
+    inline constexpr std::string_view kDiagnosticsUsageArgs =
+        "[--net-diag]";
 
     /** @brief Parses a textual log level into a spdlog level enum. */
     inline bool parseLogLevel(std::string_view text, spdlog::level::level_enum& outLevel)
@@ -33,7 +47,6 @@ namespace bomberman::cli
         if (text == "info")     { outLevel = spdlog::level::info; return true; }
         if (text == "warn")     { outLevel = spdlog::level::warn; return true; }
         if (text == "error")    { outLevel = spdlog::level::err; return true; }
-        if (text == "critical") { outLevel = spdlog::level::critical; return true; }
         return false;
     }
 
@@ -99,6 +112,33 @@ namespace bomberman::cli
             outOptions.logFile = argv[++ioIndex];
             outOptions.hasLogFileOverride = true;
             outError.clear();
+            return true;
+        }
+
+        return false;
+    }
+
+    /** @brief Tries to parse one shared diagnostics-related CLI option. */
+    inline bool tryParseDiagnosticsOption(int argc, char** argv, int& ioIndex, DiagnosticsCliOptions& outOptions, std::string& outError)
+    {
+        static_cast<void>(argc);
+        static_cast<void>(argv);
+        static_cast<void>(ioIndex);
+
+        const std::string_view arg = argv[ioIndex];
+
+        if (arg == "--net-diag")
+        {
+            if constexpr (kNetDiagAvailable)
+            {
+                outOptions.netDiagEnabled = true;
+                outError.clear();
+            }
+            else
+            {
+                outError = "--net-diag is not available in this build";
+            }
+
             return true;
         }
 

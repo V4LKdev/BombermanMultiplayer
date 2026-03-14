@@ -13,13 +13,6 @@
 namespace bomberman::net
 {
     // =================================================================================================================
-    // ===== Master flags ==============================================================================================
-    // =================================================================================================================
-
-    /** @brief Enables diagnostics recording for the server session. */
-    constexpr bool kDiagEnabledServer = true;
-
-    // =================================================================================================================
     // ===== Storage policy ============================================================================================
     // =================================================================================================================
 
@@ -27,17 +20,17 @@ namespace bomberman::net
     constexpr std::size_t kRecentEventCapacity = 256;
 
     // =================================================================================================================
-    // ===== Reporting cadence =========================================================================================
+    // ===== Runtime Reporting cadence =================================================================================
     // =================================================================================================================
 
     /** @brief Per-batch input sequence log interval. */
-    constexpr uint32_t kInputBatchLogEveryN = static_cast<uint32_t>(sim::kTickRate) * 2u;
+    constexpr uint32_t kInputBatchLogIntervalTicks = static_cast<uint32_t>(sim::kTickRate) * 2u; ///< Every 2 seconds.
 
     /** @brief Server snapshot summary log interval in server simulation ticks. */
-    constexpr uint32_t kServerSnapshotLogEveryN = static_cast<uint32_t>(sim::kTickRate) * 2u;
+    constexpr uint32_t kServerSnapshotLogIntervalTicks = static_cast<uint32_t>(sim::kTickRate) * 2u; ///< Every 2 seconds.
 
     /** @brief ENet peer transport sample interval in server simulation ticks. */
-    constexpr uint32_t kPeerSampleTicks = static_cast<uint32_t>(sim::kTickRate);
+    constexpr uint32_t kPeerSampleTicks = static_cast<uint32_t>(sim::kTickRate); ///< Once per second.
 
     // =================================================================================================================
     // ===== Anomaly detection policy ==================================================================================

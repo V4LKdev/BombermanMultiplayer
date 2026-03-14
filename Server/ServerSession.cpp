@@ -13,7 +13,7 @@ using namespace bomberman::net;
 
 namespace bomberman::server
 {
-    void initServerState(ServerState& state, ENetHost* host, bool overrideMapSeed, uint32_t mapSeed)
+    void initServerState(ServerState& state, ENetHost* host, bool diagEnabled, bool overrideMapSeed, uint32_t mapSeed)
     {
         state.host = host;
         state.serverTick = 0;
@@ -44,7 +44,7 @@ namespace bomberman::server
         else
             LOG_SERVER_INFO("Map generated with random seed={}", state.mapSeed);
 
-        state.diag.beginSession("server", net::kDiagEnabledServer);
+        state.diag.beginSession("server", diagEnabled);
     }
 
     void simulateServerTick(ServerState& state)
@@ -145,7 +145,7 @@ namespace bomberman::server
 
         const auto snapshot = buildSnapshot(state);
         const auto snapshotBytes = makeSnapshotPacket(snapshot);
-        if ((state.serverTick % kServerSnapshotLogEveryN) == 0)
+        if ((state.serverTick % kServerSnapshotLogIntervalTicks) == 0)
         {
             LOG_NET_SNAPSHOT_DEBUG("Snapshot tick={} playerCount={}", snapshot.serverTick, snapshot.playerCount);
         }

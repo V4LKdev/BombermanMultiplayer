@@ -81,7 +81,8 @@ namespace bomberman::server
     };
 
     /** @brief Initialises a ServerState to a clean pre-game state. */
-    void initServerState(ServerState& state, ENetHost* host, bool overrideMapSeed = false, uint32_t mapSeed = 0);
+    void initServerState(ServerState& state, ENetHost* host, bool diagEnabled = false,
+                         bool overrideMapSeed = false, uint32_t mapSeed = 0);
 
     /** @brief Per-dispatch context passed to handlers. */
     struct ServerContext

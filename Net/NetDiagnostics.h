@@ -212,10 +212,11 @@ namespace bomberman::net
         /**
          * @brief Returns whether an input anomaly should be stored in recent-event history.
          *
-         * Exact anomaly counters are always updated. This policy keeps common
-         * resend overlap from crowding out more useful session history.
+         * Exact anomaly counters are always updated. The current anomaly set is
+         * already narrow enough that all input anomalies are kept in the
+         * bounded recent-event history.
          */
-        bool shouldEmitInputAnomalyEvent(NetInputAnomalyType type);
+        static bool shouldEmitInputAnomalyEvent(NetInputAnomalyType type);
 
         /** @brief Global per-message packet aggregates split by direction and success/failure. */
         struct PacketAggregate

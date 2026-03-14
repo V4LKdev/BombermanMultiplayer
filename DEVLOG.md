@@ -390,7 +390,7 @@ Add practical runtime logging controls for client/server runs and verify compile
 
 ### Changes
 - Added CLI parsing to `main.cpp` and `server_main.cpp`:
-  - `--log-level <trace|debug|info|warn|error|critical>`
+- `--log-level <trace|debug|info|warn|error>`
   - `--log-file <path>`
   - `--help`
 - Wired parsed values into `bomberman::log::init(level, file)`.
