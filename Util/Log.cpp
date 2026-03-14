@@ -2,11 +2,11 @@
 
 #include <algorithm>
 #include <array>
-#include <cassert>
 #include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <mutex>
+#include <stdexcept>
 #include <vector>
 
 #include "Util/CliCommon.h"
@@ -17,7 +17,11 @@ namespace bomberman::log
 {
     namespace
     {
-        std::once_flag gInitFlag;
+        // =============================================================================================================
+        // ===== Constants and lookup tables ===========================================================================
+        // =============================================================================================================
+
+        std::once_flag gInitFlag; ///< Guards one-time logger init.
 
         constexpr const char* kClientName      = "client";
         constexpr const char* kServerName      = "server";
@@ -28,32 +32,29 @@ namespace bomberman::log
         constexpr const char* kNetInputName    = "net.input";
         constexpr const char* kNetSnapshotName = "net.snapshot";
         constexpr const char* kNetDiagName     = "net.diag";
-        constexpr const char* kPerfName        = "perf";
-        constexpr const char* kTestName        = "test";
+
         constexpr const char* kDefaultConfigFilePath = "Configs/DefaultLogging.ini";
 
+        // Compile-time active level from SPDLOG_ACTIVE_LEVEL, used to filter out log messages entirely at compile time.
         constexpr spdlog::level::level_enum kCompileTimeActiveLevel =
             static_cast<spdlog::level::level_enum>(SPDLOG_ACTIVE_LEVEL);
 
-        struct ChannelDefaultLevel
-        {
-            const char* name;
-            spdlog::level::level_enum level;
-        };
-
-        constexpr std::array<ChannelDefaultLevel, 11> kChannelDefaultLevels{{
-            {kClientName,      static_cast<spdlog::level::level_enum>(BOMBERMAN_DEFAULT_LOG_LEVEL)},
-            {kServerName,      static_cast<spdlog::level::level_enum>(BOMBERMAN_DEFAULT_LOG_LEVEL)},
-            {kGameName,        static_cast<spdlog::level::level_enum>(BOMBERMAN_DEFAULT_LOG_LEVEL)},
-            {kNetConnName,     spdlog::level::info},
-            {kNetPacketName,   spdlog::level::warn},
-            {kNetProtoName,    spdlog::level::info},
-            {kNetInputName,    spdlog::level::debug},
-            {kNetSnapshotName, spdlog::level::debug},
-            {kNetDiagName,     spdlog::level::info},
-            {kPerfName,        spdlog::level::info},
-            {kTestName,        spdlog::level::debug},
+        // Known logging channels array.
+        constexpr std::array<const char*, 9> kChannelNames{{
+            kClientName,
+            kServerName,
+            kGameName,
+            kNetConnName,
+            kNetPacketName,
+            kNetProtoName,
+            kNetInputName,
+            kNetSnapshotName,
+            kNetDiagName
         }};
+
+        // =============================================================================================================
+        // ===== String normalisation helpers ==========================================================================
+        // =============================================================================================================
 
         std::string trim(std::string_view text)
         {
@@ -77,23 +78,16 @@ namespace bomberman::log
             return lowered;
         }
 
+        // =============================================================================================================
+        // ===== Channel level lookup ==================================================================================
+        // =============================================================================================================
+
         bool isKnownChannel(std::string_view name)
         {
-            return std::ranges::any_of(kChannelDefaultLevels, [name](const ChannelDefaultLevel& entry)
+            return std::ranges::any_of(kChannelNames, [name](const char* channelName)
             {
-                return name == entry.name;
+                return name == channelName;
             });
-        }
-
-        spdlog::level::level_enum defaultChannelLevel(std::string_view name)
-        {
-            for (const auto& entry : kChannelDefaultLevels)
-            {
-                if (name == entry.name)
-                    return entry.level;
-            }
-
-            return static_cast<spdlog::level::level_enum>(BOMBERMAN_DEFAULT_LOG_LEVEL);
         }
 
         spdlog::level::level_enum configuredChannelLevel(const LogConfig& config, std::string_view name)
@@ -102,9 +96,10 @@ namespace bomberman::log
             if (it != config.channelLevels.end())
                 return it->second;
 
-            return defaultChannelLevel(name);
+            return config.baseLevel;
         }
 
+        /** @brief Selects the strictest log level among the requested base level, channel-specific override, and compile-time active level. */
         spdlog::level::level_enum effectiveLoggerLevel(spdlog::level::level_enum channelLevel, spdlog::level::level_enum baseLevel)
         {
             auto effectiveLevel = baseLevel;
@@ -115,17 +110,11 @@ namespace bomberman::log
             return effectiveLevel;
         }
 
-        /**
-         * @brief Creates and registers a named logger if missing.
-         *
-         * Logger level defaults to the stricter of:
-         * 1. the requested base runtime level,
-         * 2. the channel-specific default level,
-         * 3. the compile-time active level.
-         *
-         * This logger-level filter applies before any sink-level filtering,
-         * including the optional rotating file sink.
-         */
+        // =============================================================================================================
+        // ===== Logger management =====================================================================================
+        // =============================================================================================================
+
+        /** @brief Creates and registers a named logger if missing. */
         void makeLogger(const char* name, spdlog::level::level_enum channelLevel,
                         const std::vector<spdlog::sink_ptr>& sinks, spdlog::level::level_enum baseLevel)
         {
@@ -138,36 +127,28 @@ namespace bomberman::log
             spdlog::register_logger(logger);
         }
 
-        /**
-         * @brief Returns a logger by name, guaranteeing a non-null result.
-         *
-         * If init() has not been called yet, asserts in debug builds and then
-         * falls back to default initialization so release builds recover
-         * defensively instead of dereferencing a nullptr.
-         */
+        /** @brief Returns a logger by name, guaranteeing a non-null result. */
         spdlog::logger* getLogger(const char* name)
         {
             auto* logger = spdlog::get(name).get();
 
             if (!logger)
             {
-                assert(false && "Logger accessed before bomberman::log::init()"); ///< Surface missing init() calls during development, but recover gracefully in release.
-                init();
-                logger = spdlog::get(name).get();
+                throw std::logic_error("Logger accessed before log::init()");
             }
 
             return logger;
         }
     } // namespace
 
+    // =================================================================================================================
+    // ===== Public API implementation =================================================================================
+    // =================================================================================================================
+
     LogConfig makeDefaultConfig()
     {
         LogConfig config{};
         config.baseLevel = static_cast<spdlog::level::level_enum>(BOMBERMAN_DEFAULT_LOG_LEVEL);
-
-        for (const auto& entry : kChannelDefaultLevels)
-            config.channelLevels.emplace(entry.name, entry.level);
-
         return config;
     }
 
@@ -179,6 +160,7 @@ namespace bomberman::log
         return kDefaultConfigFilePath;
 #endif
     }
+
 
     static bool loadConfigFile(const std::string& path, LogConfig& inOutConfig, std::string& outError)
     {
@@ -196,7 +178,7 @@ namespace bomberman::log
             Channels,
         };
 
-        ESection section = ESection::None;
+        auto section = ESection::None;
         std::string line;
         int lineNumber = 0;
         while (std::getline(input, line))
@@ -215,6 +197,7 @@ namespace bomberman::log
                     return false;
                 }
 
+                // Case-insensitive section name matching.
                 const std::string sectionName = toLower(trim(std::string_view(stripped).substr(1, stripped.size() - 2)));
                 if (sectionName == "log")
                     section = ESection::Log;
@@ -222,7 +205,6 @@ namespace bomberman::log
                     section = ESection::Channels;
                 else
                     section = ESection::None;
-
                 continue;
             }
 
@@ -233,15 +215,15 @@ namespace bomberman::log
                 return false;
             }
 
-            const std::string key = trim(std::string_view(stripped).substr(0, equalsPos));
-            const std::string value = trim(std::string_view(stripped).substr(equalsPos + 1));
+            const std::string key = toLower(trim(std::string_view(stripped).substr(0, equalsPos)));
+            const std::string value = toLower(trim(std::string_view(stripped).substr(equalsPos + 1)));
 
             if (section == ESection::Log)
             {
                 if (key == "level")
                 {
                     spdlog::level::level_enum parsedLevel{};
-                    if (!bomberman::cli::parseLogLevel(value, parsedLevel))
+                    if (!cli::parseLogLevel(value, parsedLevel))
                     {
                         outError = "Invalid [log] level at line " + std::to_string(lineNumber) + ": " + value;
                         return false;
@@ -278,7 +260,6 @@ namespace bomberman::log
                 return false;
             }
         }
-
 
         outError.clear();
         return true;
@@ -331,35 +312,43 @@ namespace bomberman::log
         return true;
     }
 
-    /** @brief Initializes all named loggers. Thread-safe via std::call_once. */
     void init(const LogConfig& config)
     {
         std::call_once(gInitFlag, [&]
         {
-            std::vector<spdlog::sink_ptr> sinks;
-
-            auto consoleSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
-            consoleSink->set_level(config.baseLevel);
-            consoleSink->set_pattern("[%H:%M:%S.%e] [%n] [%^%l%$] %v");
-            sinks.push_back(consoleSink);
-
-            if (!config.logFilePath.empty())
+            try
             {
-                constexpr std::size_t kMaxFileSize = 5 * 1024 * 1024; // 5 MB
-                constexpr std::size_t kMaxFiles    = 3;
+                std::vector<spdlog::sink_ptr> sinks;
 
-                auto fileSink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
-                    config.logFilePath,
-                    kMaxFileSize,
-                    kMaxFiles);
+                // Console sink with color and millisecond timestamps, respecting the base log level.
+                auto consoleSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+                consoleSink->set_level(config.baseLevel);
+                consoleSink->set_pattern("[%H:%M:%S.%e] [%n] [%^%l%$] %v");
+                sinks.push_back(consoleSink);
 
-                fileSink->set_level(spdlog::level::trace);
-                fileSink->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%n] [%l] %v");
-                sinks.push_back(fileSink);
+                // Optional rotating file sink with millisecond timestamps, always capturing all log levels if not compiletime gated.
+                if (!config.logFilePath.empty())
+                {
+                    constexpr std::size_t kMaxFileSize = 5 * 1024 * 1024; // 5 MB
+                    constexpr std::size_t kMaxFiles    = 3;
+
+                    auto fileSink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
+                        config.logFilePath,
+                        kMaxFileSize,
+                        kMaxFiles);
+
+                    fileSink->set_level(spdlog::level::trace);
+                    fileSink->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%n] [%l] %v");
+                    sinks.push_back(fileSink);
+                }
+
+                for (const char* channelName : kChannelNames)
+                    makeLogger(channelName, configuredChannelLevel(config, channelName), sinks, config.baseLevel);
             }
-
-            for (const auto& entry : kChannelDefaultLevels)
-                makeLogger(entry.name, configuredChannelLevel(config, entry.name), sinks, config.baseLevel);
+            catch (const spdlog::spdlog_ex& e)
+            {
+                throw std::runtime_error(std::string("Failed to initialize logging: ") + e.what());
+            }
         });
     }
 
@@ -380,7 +369,5 @@ namespace bomberman::log
     spdlog::logger* netInput()    { return getLogger(kNetInputName); }
     spdlog::logger* netSnapshot() { return getLogger(kNetSnapshotName); }
     spdlog::logger* netDiag()     { return getLogger(kNetDiagName); }
-    spdlog::logger* perf()        { return getLogger(kPerfName); }
-    spdlog::logger* test()        { return getLogger(kTestName); }
 
 } // namespace bomberman::log

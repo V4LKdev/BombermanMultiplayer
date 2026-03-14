@@ -3,7 +3,6 @@
 
 #include <string>
 #include <unordered_map>
-
 #include <spdlog/spdlog.h>
 
 #ifndef BOMBERMAN_DEFAULT_LOG_LEVEL
@@ -12,8 +11,6 @@
 
 /**
  * @brief Centralized logging interface for the project.
- *
- * Exposes named loggers per subsystem and convenience macros for call sites.
  */
 
 namespace bomberman::log
@@ -51,22 +48,11 @@ namespace bomberman::log
      * @brief Initializes all named loggers.
      *
      * @param config Final resolved logging configuration.
-     *
-     * Initialization is one-shot for process lifetime: the first call wins
-     * because logger setup is guarded by std::call_once.
-     *
-     * Loggers flush automatically on warn-or-above to minimize crash-time tail loss.
-     * Logger levels apply before sink filtering, so they also gate file output.
      */
     void init(const LogConfig& config);
-
-    /**
-     * @brief Convenience overload for callers that only want a base level and optional file path.
-     *
-     * Equivalent to constructing the hardcoded defaults, overriding the base
-     * level and optional file path, then initializing.
-     */
+    /** @brief Convenience overload that initializes from a base level plus optional log file path. */
     void init(spdlog::level::level_enum baseLevel = static_cast<spdlog::level::level_enum>(BOMBERMAN_DEFAULT_LOG_LEVEL), const std::string& logFile = "");
+
 
     spdlog::logger* client();       ///< NetClient, main.cpp
     spdlog::logger* server();       ///< server_main.cpp, handlers
@@ -76,12 +62,8 @@ namespace bomberman::log
     spdlog::logger* netProto();     ///< Serialization/deserialization, protocol versioning
     spdlog::logger* netInput();     ///< Input batching, buffering, gap/drop diagnostics
     spdlog::logger* netSnapshot();  ///< Snapshot/correction send + receive paths
-    spdlog::logger* netDiag();      ///< Reserved for future diagnostics/telemetry plumbing
-    spdlog::logger* perf();         ///< Performance instrumentation
-    spdlog::logger* test();         ///< Test-only helpers/harnesses
+    spdlog::logger* netDiag();      ///< Diagnostics for network issues like latency, jitter, packet loss, etc.
 } // namespace bomberman::log
-
-
 
 
 // =====================================================================================================================
@@ -147,17 +129,5 @@ namespace bomberman::log
 #define LOG_NET_DIAG_INFO(...)       SPDLOG_LOGGER_INFO(bomberman::log::netDiag(), __VA_ARGS__)
 #define LOG_NET_DIAG_WARN(...)       SPDLOG_LOGGER_WARN(bomberman::log::netDiag(), __VA_ARGS__)
 #define LOG_NET_DIAG_ERROR(...)      SPDLOG_LOGGER_ERROR(bomberman::log::netDiag(), __VA_ARGS__)
-
-#define LOG_PERF_TRACE(...)          SPDLOG_LOGGER_TRACE(bomberman::log::perf(), __VA_ARGS__)
-#define LOG_PERF_DEBUG(...)          SPDLOG_LOGGER_DEBUG(bomberman::log::perf(), __VA_ARGS__)
-#define LOG_PERF_INFO(...)           SPDLOG_LOGGER_INFO(bomberman::log::perf(), __VA_ARGS__)
-#define LOG_PERF_WARN(...)           SPDLOG_LOGGER_WARN(bomberman::log::perf(), __VA_ARGS__)
-#define LOG_PERF_ERROR(...)          SPDLOG_LOGGER_ERROR(bomberman::log::perf(), __VA_ARGS__)
-
-#define LOG_TEST_TRACE(...)          SPDLOG_LOGGER_TRACE(bomberman::log::test(), __VA_ARGS__)
-#define LOG_TEST_DEBUG(...)          SPDLOG_LOGGER_DEBUG(bomberman::log::test(), __VA_ARGS__)
-#define LOG_TEST_INFO(...)           SPDLOG_LOGGER_INFO(bomberman::log::test(), __VA_ARGS__)
-#define LOG_TEST_WARN(...)           SPDLOG_LOGGER_WARN(bomberman::log::test(), __VA_ARGS__)
-#define LOG_TEST_ERROR(...)          SPDLOG_LOGGER_ERROR(bomberman::log::test(), __VA_ARGS__)
 
 #endif // BOMBERMAN_UTIL_LOG_H

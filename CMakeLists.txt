@@ -66,10 +66,9 @@ set(SERVER_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/Server/ServerSnapshot.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Net/NetDiagnostics.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Util/Log.cpp
-  # ${CMAKE_CURRENT_SOURCE_DIR}/NetServer.cpp
 )
 
-# ---- macOS bundle parameters (from original) ----
+# ---- macOS bundle parameters ----
 
 set(APP_ICON "")
 if (CMAKE_MACOSX_BUNDLE)
