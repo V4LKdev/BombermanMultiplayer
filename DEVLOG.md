@@ -854,3 +854,27 @@ Stop client focus loss from turning into misleading server-side input gaps and s
 - Unfocused multiplayer clients now fail safe by sending neutral input.
 - The server no longer has to infer long hold streaks from missing fresh commands caused by local focus loss.
 - Diagnostics remain useful even in multi-window local testing.
+
+## 2026-03-14 – Fix Overflow Client Rejection Path
+
+### Goal
+Make overflow clients fail clearly and intentionally when all gameplay slots are already occupied.
+
+### Problem
+- The server ENet host was capped to the same count as gameplay slots.
+- A 5th client could time out at the transport level before ever reaching the protocol `Hello`/`Reject` path.
+- That produced the wrong UI result (`Connection timed out`) and no explicit reject note in diagnostics.
+
+### Changes
+- Increased transport peer capacity above gameplay slot capacity so overflow peers can connect far enough to receive `MsgReject::ServerFull`.
+- Preserved the last explicit reject reason in `NetClient`.
+- Updated the connect scene status text to distinguish:
+  - `Server is full`
+  - `Access denied`
+  - `Connection rejected`
+- Clarified diagnostics note wording from generic peer lifecycle labels to explicit transport-level wording.
+
+### Result
+- Overflow clients now fail through the intended protocol path instead of timing out.
+- The UI shows the actual failure reason.
+- Server diagnostics now record the reject lifecycle coherently.
