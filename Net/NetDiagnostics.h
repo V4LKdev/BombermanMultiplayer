@@ -163,19 +163,19 @@ namespace bomberman::net
         /** @brief Convenience overload for simple note-style events. */
         void recordEvent(NetEventType type, std::string_view note = {});
 
-        /** @brief Records an outgoing packet attempt and updates summary counters. */
-        void recordPacketSent(EMsgType type, uint8_t channelId, std::size_t bytes,
+        /** @brief Records an outgoing packet attempt for a gameplay peer (or 0xFF if unknown) and updates summary counters. */
+        void recordPacketSent(EMsgType type, uint8_t peerId, uint8_t channelId, std::size_t bytes,
                               NetPacketResult result = NetPacketResult::Ok);
 
-        /** @brief Records an incoming packet attempt and updates summary counters. */
-        void recordPacketRecv(EMsgType type, uint8_t channelId, std::size_t bytes,
+        /** @brief Records an incoming packet attempt for a gameplay peer (or 0xFF if unknown) and updates summary counters. */
+        void recordPacketRecv(EMsgType type, uint8_t peerId, uint8_t channelId, std::size_t bytes,
                               NetPacketResult result = NetPacketResult::Ok);
 
-        /** @brief Records a malformed incoming packet that failed before typed dispatch. */
-        void recordMalformedPacketRecv(uint8_t channelId, std::size_t bytes, std::string_view note = {});
+        /** @brief Records an incoming packet that failed before typed dispatch, such as a malformed header. */
+        void recordMalformedPacketRecv(uint8_t peerId, uint8_t channelId, std::size_t bytes, std::string_view note = {});
 
-        /** @brief Records an input anomaly and increments per-type anomaly counters. */
-        void recordInputAnomaly(NetInputAnomalyType type, uint32_t inputSeq, uint8_t buttons,
+        /** @brief Records an input anomaly for a gameplay peer and increments per-type anomaly counters. */
+        void recordInputAnomaly(NetInputAnomalyType type, uint8_t peerId, uint32_t inputSeq, uint8_t buttons,
                                 std::string_view note = {});
 
         /** @brief Records how many input entries were seen in an incoming batch. */
@@ -214,7 +214,7 @@ namespace bomberman::net
          */
         bool shouldEmitInputAnomalyEvent(NetInputAnomalyType type);
 
-        /** @brief Per-message packet aggregates split by direction and success/failure. */
+        /** @brief Global per-message packet aggregates split by direction and success/failure. */
         struct PacketAggregate
         {
             uint64_t outgoingOk = 0;

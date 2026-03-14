@@ -15,6 +15,14 @@
 
 namespace bomberman::server
 {
+    /** @brief Typed receive outcome used to classify packet handling after header parse. */
+    enum class ReceiveDispatchResult : uint8_t
+    {
+        Ok,
+        Dropped,
+        Rejected,
+        Malformed
+    };
 
     /** @brief Server-side input ring buffer size per client. Must be power of two. */
     constexpr std::size_t kServerInputBufferSize = 32;
@@ -90,6 +98,8 @@ namespace bomberman::server
         ServerState&          state;
         ENetPeer*             peer;
         net::NetDiagnostics*  diag = nullptr; ///< Non-owning pointer, null-checked at each call site.
+        ReceiveDispatchResult receiveResult = ReceiveDispatchResult::Rejected;
+        uint8_t diagPeerId = 0xFF; ///< Gameplay peer/player ID if known, otherwise invalid sentinel.
     };
 
     /** @brief Advances the server simulation by one tick. */

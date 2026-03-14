@@ -18,6 +18,18 @@ namespace bomberman::server
 
     namespace
     {
+        constexpr NetPacketResult toNetPacketResult(const ReceiveDispatchResult result)
+        {
+            switch (result)
+            {
+                case ReceiveDispatchResult::Ok:        return NetPacketResult::Ok;
+                case ReceiveDispatchResult::Dropped:   return NetPacketResult::Dropped;
+                case ReceiveDispatchResult::Rejected:  return NetPacketResult::Rejected;
+                case ReceiveDispatchResult::Malformed: return NetPacketResult::Malformed;
+                default:                               return NetPacketResult::Rejected;
+            }
+        }
+
         constexpr std::string_view rejectReasonName(const MsgReject::EReason reason)
         {
             switch (reason)
@@ -62,6 +74,7 @@ namespace bomberman::server
                 if (ctx.diag)
                 {
                     ctx.diag->recordPacketSent(EMsgType::Reject,
+                                               0xFF,
                                                static_cast<uint8_t>(EChannel::ControlReliable),
                                                kPacketHeaderSize + kMsgRejectSize);
                     const std::string note = std::string("peer rejected: ") + std::string(rejectReasonName(reason));
@@ -69,6 +82,14 @@ namespace bomberman::server
                                    static_cast<uint32_t>(ctx.peer->incomingPeerID),
                                    static_cast<uint32_t>(reason));
                 }
+            }
+            else if (ctx.diag)
+            {
+                ctx.diag->recordPacketSent(EMsgType::Reject,
+                                           0xFF,
+                                           static_cast<uint8_t>(EChannel::ControlReliable),
+                                           kPacketHeaderSize + kMsgRejectSize,
+                                           NetPacketResult::Dropped);
             }
 
             enet_peer_disconnect_later(ctx.peer, 0);
@@ -84,6 +105,12 @@ namespace bomberman::server
             return peer ? static_cast<ClientState*>(peer->data) : nullptr;
         }
 
+        uint8_t gameplayPeerId(ENetPeer* peer)
+        {
+            const auto* client = getClientState(peer);
+            return client ? client->playerId : 0xFF;
+        }
+
     } // namespace
 
     // =================================================================================================================
@@ -96,6 +123,8 @@ namespace bomberman::server
         if (hasClientState(ctx.peer))
         {
             LOG_NET_CONN_DEBUG("Duplicate Hello from already-handshaked peer {} - ignoring", ctx.peer->incomingPeerID);
+            ctx.receiveResult = ReceiveDispatchResult::Dropped;
+            ctx.diagPeerId = gameplayPeerId(ctx.peer);
             return;
         }
 
@@ -105,6 +134,7 @@ namespace bomberman::server
             LOG_NET_CONN_WARN("Server full ({}/{}) – rejecting peer {}",
                               static_cast<int>(kMaxPlayers), static_cast<int>(kMaxPlayers),
                               ctx.peer->incomingPeerID);
+            ctx.receiveResult = ReceiveDispatchResult::Rejected;
             sendReject(ctx, MsgReject::EReason::ServerFull);
             return;
         }
@@ -113,6 +143,7 @@ namespace bomberman::server
         if (!deserializeMsgHello(payload, payloadSize, msgHello))
         {
             LOG_NET_PROTO_WARN("Failed to parse Hello payload from peer {}", ctx.peer->incomingPeerID);
+            ctx.receiveResult = ReceiveDispatchResult::Malformed;
             return;
         }
 
@@ -121,6 +152,7 @@ namespace bomberman::server
         {
             LOG_NET_PROTO_ERROR("Protocol mismatch: peer {} sent version {}, expected {}",
                                 ctx.peer->incomingPeerID, msgHello.protocolVersion, kProtocolVersion);
+            ctx.receiveResult = ReceiveDispatchResult::Rejected;
             sendReject(ctx, MsgReject::EReason::VersionMismatch);
             return;
         }
@@ -140,8 +172,15 @@ namespace bomberman::server
         if (!queueReliableControl(ctx.peer, makeWelcomePacket(welcome)))
         {
             LOG_NET_CONN_ERROR("Failed to send Welcome to peer {} - rejecting", ctx.peer->incomingPeerID);
+            if (ctx.diag)
+                ctx.diag->recordPacketSent(EMsgType::Welcome,
+                                           playerId,
+                                           static_cast<uint8_t>(EChannel::ControlReliable),
+                                           kPacketHeaderSize + kMsgWelcomeSize,
+                                           NetPacketResult::Dropped);
             // Return playerId to pool on failure.
             ctx.state.playerIdPool[ctx.state.playerIdPoolSize++] = playerId;
+            ctx.receiveResult = ReceiveDispatchResult::Rejected;
             sendReject(ctx, MsgReject::EReason::Other);
             return;
         }
@@ -149,6 +188,7 @@ namespace bomberman::server
 
         if (ctx.diag)
             ctx.diag->recordPacketSent(EMsgType::Welcome,
+                                       playerId,
                                        static_cast<uint8_t>(EChannel::ControlReliable),
                                        kPacketHeaderSize + kMsgWelcomeSize);
 
@@ -158,13 +198,21 @@ namespace bomberman::server
         if (!queueReliableControl(ctx.peer, makeLevelInfoPacket(levelInfo)))
         {
             LOG_NET_CONN_ERROR("Failed to send LevelInfo to peer {} - rejecting", ctx.peer->incomingPeerID);
+            if (ctx.diag)
+                ctx.diag->recordPacketSent(EMsgType::LevelInfo,
+                                           playerId,
+                                           static_cast<uint8_t>(EChannel::ControlReliable),
+                                           kPacketHeaderSize + kMsgLevelInfoSize,
+                                           NetPacketResult::Dropped);
             ctx.state.playerIdPool[ctx.state.playerIdPoolSize++] = playerId;
+            ctx.receiveResult = ReceiveDispatchResult::Rejected;
             sendReject(ctx, MsgReject::EReason::Other);
             return;
         }
 
         if (ctx.diag)
             ctx.diag->recordPacketSent(EMsgType::LevelInfo,
+                                       playerId,
                                        static_cast<uint8_t>(EChannel::ControlReliable),
                                        kPacketHeaderSize + kMsgLevelInfoSize);
 
@@ -190,6 +238,8 @@ namespace bomberman::server
         recordPeerNote(ctx.diag, playerId, "player accepted",
                        static_cast<uint32_t>(ctx.peer->incomingPeerID),
                        levelInfo.mapSeed);
+        ctx.diagPeerId = playerId;
+        ctx.receiveResult = ReceiveDispatchResult::Ok;
     }
 
     void onInput(ServerContext& ctx, const PacketHeader& /*header*/, const uint8_t* payload, std::size_t size)
@@ -198,6 +248,7 @@ namespace bomberman::server
         if (!hasClientState(ctx.peer))
         {
             LOG_NET_INPUT_WARN("Input from non-handshaked peer {} - ignoring", ctx.peer->incomingPeerID);
+            ctx.receiveResult = ReceiveDispatchResult::Rejected;
             return;
         }
 
@@ -205,6 +256,7 @@ namespace bomberman::server
         if (!deserializeMsgInput(payload, size, msgInput))
         {
             LOG_NET_PROTO_WARN("Failed to parse Input payload from peer {}", ctx.peer->incomingPeerID);
+            ctx.receiveResult = ReceiveDispatchResult::Malformed;
             return;
         }
 
@@ -214,8 +266,10 @@ namespace bomberman::server
         if (client == nullptr)
         {
             LOG_NET_INPUT_ERROR("Input peer {} has no client state after guard - ignoring", ctx.peer->incomingPeerID);
+            ctx.receiveResult = ReceiveDispatchResult::Rejected;
             return;
         }
+        ctx.diagPeerId = client->playerId;
 
         uint8_t lateDropCount = 0;
         uint8_t aheadDropCount = 0;
@@ -239,7 +293,7 @@ namespace bomberman::server
             if ((buttons & ~kInputKnownBits) != 0)
             {
                 if (ctx.diag)
-                    ctx.diag->recordInputAnomaly(NetInputAnomalyType::UnknownButtons, seq, buttons);
+                    ctx.diag->recordInputAnomaly(NetInputAnomalyType::UnknownButtons, client->playerId, seq, buttons);
             }
 
             // Drop late arrivals: anything already consumed is discarded.
@@ -257,7 +311,7 @@ namespace bomberman::server
                 lastAheadSeq = seq;
                 ++aheadDropCount;
                 if (ctx.diag)
-                    ctx.diag->recordInputAnomaly(NetInputAnomalyType::OutOfOrder, seq, buttons);
+                    ctx.diag->recordInputAnomaly(NetInputAnomalyType::OutOfOrder, client->playerId, seq, buttons);
                 continue;
             }
 
@@ -309,6 +363,8 @@ namespace bomberman::server
                                 client->playerId, msgInput.baseInputSeq, highestSeq,
                                 client->lastReceivedInputSeq, client->lastConsumedInputSeq);
         }
+
+        ctx.receiveResult = ReceiveDispatchResult::Ok;
     }
 
     // =================================================================================================================
@@ -336,6 +392,8 @@ namespace bomberman::server
         LOG_NET_PACKET_TRACE("Received {} bytes on channel {}", dataLength, channelName(channelId));
 
         ServerContext ctx{state, event.peer, &state.diag};
+        ctx.receiveResult = ReceiveDispatchResult::Rejected;
+        ctx.diagPeerId = gameplayPeerId(event.peer);
 
         PacketHeader header{};
         const uint8_t* payload = nullptr;
@@ -344,16 +402,19 @@ namespace bomberman::server
         if (!tryParsePacket(event.packet->data, dataLength, header, payload, payloadSize))
         {
             LOG_NET_PACKET_WARN("Failed to deserialize PacketHeader (malformed or truncated, {} bytes)", dataLength);
-            state.diag.recordMalformedPacketRecv(channelId, dataLength, "header parse failed");
+            state.diag.recordMalformedPacketRecv(ctx.diagPeerId, channelId, dataLength, "header parse failed");
             return;
         }
 
         if (!gDispatcher.dispatch(ctx, header, payload, payloadSize))
         {
             LOG_NET_PACKET_TRACE("No handler for message type 0x{:02x}", static_cast<int>(header.type));
+            state.diag.recordPacketRecv(header.type, ctx.diagPeerId, channelId, dataLength, NetPacketResult::Rejected);
+            return;
         }
 
-        state.diag.recordPacketRecv(header.type, channelId, dataLength);
+        state.diag.recordPacketRecv(header.type, ctx.diagPeerId, channelId, dataLength,
+                                    toNetPacketResult(ctx.receiveResult));
     }
 
 } // namespace bomberman::server

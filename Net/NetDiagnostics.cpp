@@ -52,6 +52,21 @@ namespace bomberman::net
                 default:                                  return "Unknown";
             }
         }
+
+        constexpr std::string_view msgTypeName(const uint8_t rawType)
+        {
+            switch (static_cast<EMsgType>(rawType))
+            {
+                case EMsgType::Hello:      return "Hello";
+                case EMsgType::Welcome:    return "Welcome";
+                case EMsgType::Reject:     return "Reject";
+                case EMsgType::LevelInfo:  return "LevelInfo";
+                case EMsgType::Input:      return "Input";
+                case EMsgType::Snapshot:   return "Snapshot";
+                case EMsgType::Correction: return "Correction";
+                default:                   return "Unknown";
+            }
+        }
     }
 
     // =================================================================================================================
@@ -112,7 +127,7 @@ namespace bomberman::net
         pushRecentEvent(std::move(stamped));
     }
 
-    void NetDiagnostics::recordPacketSent(const EMsgType type, const uint8_t channelId, const std::size_t bytes,
+    void NetDiagnostics::recordPacketSent(const EMsgType type, const uint8_t peerId, const uint8_t channelId, const std::size_t bytes,
                                           const NetPacketResult result)
     {
         if (!enabled_ || !sessionActive_)
@@ -143,13 +158,14 @@ namespace bomberman::net
         event.timestampMs = nowMs();
         event.packetDirection = NetPacketDirection::Outgoing;
         event.packetResult = result;
+        event.peerId = peerId;
         event.channelId = channelId;
         event.msgType = static_cast<uint8_t>(type);
         event.valueA = static_cast<uint32_t>(bytes);
         pushRecentEvent(std::move(event));
     }
 
-    void NetDiagnostics::recordPacketRecv(const EMsgType type, const uint8_t channelId, const std::size_t bytes,
+    void NetDiagnostics::recordPacketRecv(const EMsgType type, const uint8_t peerId, const uint8_t channelId, const std::size_t bytes,
                                           const NetPacketResult result)
     {
         if (!enabled_ || !sessionActive_)
@@ -180,13 +196,14 @@ namespace bomberman::net
         event.timestampMs = nowMs();
         event.packetDirection = NetPacketDirection::Incoming;
         event.packetResult = result;
+        event.peerId = peerId;
         event.channelId = channelId;
         event.msgType = static_cast<uint8_t>(type);
         event.valueA = static_cast<uint32_t>(bytes);
         pushRecentEvent(std::move(event));
     }
 
-    void NetDiagnostics::recordMalformedPacketRecv(const uint8_t channelId, const std::size_t bytes,
+    void NetDiagnostics::recordMalformedPacketRecv(const uint8_t peerId, const uint8_t channelId, const std::size_t bytes,
                                                    std::string_view note)
     {
         if (!enabled_ || !sessionActive_)
@@ -203,13 +220,14 @@ namespace bomberman::net
         event.timestampMs = nowMs();
         event.packetDirection = NetPacketDirection::Incoming;
         event.packetResult = NetPacketResult::Malformed;
+        event.peerId = peerId;
         event.channelId = channelId;
         event.valueA = static_cast<uint32_t>(bytes);
         event.note = note;
         pushRecentEvent(std::move(event));
     }
 
-    void NetDiagnostics::recordInputAnomaly(const NetInputAnomalyType type, const uint32_t inputSeq,
+    void NetDiagnostics::recordInputAnomaly(const NetInputAnomalyType type, const uint8_t peerId, const uint32_t inputSeq,
                                             const uint8_t buttons, std::string_view note)
     {
         if (!enabled_ || !sessionActive_)
@@ -228,6 +246,7 @@ namespace bomberman::net
         event.type = NetEventType::InputAnomaly;
         event.timestampMs = nowMs();
         event.anomalyType = type;
+        event.peerId = peerId;
         event.seq = inputSeq;
         event.valueA = buttons;
         event.note = note;
@@ -346,6 +365,24 @@ namespace bomberman::net
                 << " loss_permille=" << sample.packetLossPermille
                 << " q_rel=" << sample.queuedReliable
                 << " q_unrel=" << sample.queuedUnreliable << "\n";
+        }
+
+        out << "packet_aggregates\n";
+        for (std::size_t i = 0; i < packetAggregates_.size(); ++i)
+        {
+            const auto& agg = packetAggregates_[i];
+            const uint64_t total = agg.outgoingOk + agg.outgoingFail + agg.incomingOk + agg.incomingFail;
+            if (total == 0)
+                continue;
+
+            out << "  - msg=0x" << std::hex << static_cast<int>(i) << std::dec
+                << " name=" << msgTypeName(static_cast<uint8_t>(i))
+                << " out_ok=" << agg.outgoingOk
+                << " out_fail=" << agg.outgoingFail
+                << " out_bytes=" << agg.outgoingBytes
+                << " in_ok=" << agg.incomingOk
+                << " in_fail=" << agg.incomingFail
+                << " in_bytes=" << agg.incomingBytes << "\n";
         }
 
         out << "recent_events\n";

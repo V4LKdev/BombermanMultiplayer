@@ -90,7 +90,7 @@ namespace bomberman::server
 
                     // Detection lives here; telemetry goes to diag.
                     state.diag.recordInputAnomaly(net::NetInputAnomalyType::Gap,
-                                                  nextSeq, client.previousButtons, "hold");
+                                                  client.playerId, nextSeq, client.previousButtons, "hold");
 
                     if (client.consecutiveInputGaps >= kRepeatedInputWarnThreshold
                         && state.serverTick >= client.nextGapWarnTick)
@@ -157,14 +157,24 @@ namespace bomberman::server
             return;
 
         const auto snapshot = buildSnapshot(state);
+        const auto snapshotBytes = makeSnapshotPacket(snapshot);
         if ((state.serverTick % kServerSnapshotLogEveryN) == 0)
         {
             LOG_NET_SNAPSHOT_DEBUG("Snapshot tick={} playerCount={}", snapshot.serverTick, snapshot.playerCount);
         }
-        broadcastQueuedUnreliableGame(state.host, makeSnapshotPacket(snapshot));
-        state.diag.recordPacketSent(EMsgType::Snapshot,
-                                    static_cast<uint8_t>(EChannel::GameUnreliable),
-                                    kPacketHeaderSize + kMsgSnapshotSize);
+
+        for (const auto& slot : state.clients)
+        {
+            if (!slot.has_value() || slot->peer == nullptr)
+                continue;
+
+            const bool queued = queueUnreliableGame(slot->peer, snapshotBytes);
+            state.diag.recordPacketSent(EMsgType::Snapshot,
+                                        slot->playerId,
+                                        static_cast<uint8_t>(EChannel::GameUnreliable),
+                                        kPacketHeaderSize + kMsgSnapshotSize,
+                                        queued ? NetPacketResult::Ok : NetPacketResult::Dropped);
+        }
 
         flush(state.host);
     }
