@@ -18,6 +18,18 @@ namespace bomberman::server
 
     namespace
     {
+        constexpr std::string_view rejectReasonName(const MsgReject::EReason reason)
+        {
+            switch (reason)
+            {
+                case MsgReject::EReason::VersionMismatch: return "version mismatch";
+                case MsgReject::EReason::ServerFull:      return "server full";
+                case MsgReject::EReason::Banned:          return "banned";
+                case MsgReject::EReason::Other:           return "other";
+                default:                                  return "unknown";
+            }
+        }
+
         void recordPeerNote(net::NetDiagnostics* diag, const uint8_t peerId, std::string_view note,
                             const uint32_t valueA = 0, const uint32_t valueB = 0)
         {
@@ -52,9 +64,10 @@ namespace bomberman::server
                     ctx.diag->recordPacketSent(EMsgType::Reject,
                                                static_cast<uint8_t>(EChannel::ControlReliable),
                                                kPacketHeaderSize + kMsgRejectSize);
-                    recordPeerNote(ctx.diag, 0xFF, "peer rejected",
-                                   static_cast<uint32_t>(reason),
-                                   static_cast<uint32_t>(ctx.peer->incomingPeerID));
+                    const std::string note = std::string("peer rejected: ") + std::string(rejectReasonName(reason));
+                    recordPeerNote(ctx.diag, 0xFF, note,
+                                   static_cast<uint32_t>(ctx.peer->incomingPeerID),
+                                   static_cast<uint32_t>(reason));
                 }
             }
 

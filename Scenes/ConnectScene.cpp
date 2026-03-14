@@ -419,7 +419,26 @@ namespace bomberman
                 setStatusText("Connection timed out", {220, 80, 80, 255});
                 break;
             case net::EConnectState::FailedHandshake:
-                setStatusText("Handshake failed", {220, 80, 80, 255});
+                if (const auto& rejectReason = client->lastRejectReason(); rejectReason.has_value())
+                {
+                    switch (*rejectReason)
+                    {
+                        case net::MsgReject::EReason::ServerFull:
+                            setStatusText("Server is full", {220, 80, 80, 255});
+                            break;
+                        case net::MsgReject::EReason::Banned:
+                            setStatusText("Access denied", {220, 80, 80, 255});
+                            break;
+                        case net::MsgReject::EReason::Other:
+                        default:
+                            setStatusText("Connection rejected", {220, 80, 80, 255});
+                            break;
+                    }
+                }
+                else
+                {
+                    setStatusText("Handshake failed", {220, 80, 80, 255});
+                }
                 break;
             case net::EConnectState::FailedProtocol:
                 setStatusText("Protocol version mismatch", {220, 80, 80, 255});

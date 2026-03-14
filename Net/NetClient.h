@@ -2,6 +2,7 @@
 #define BOMBERMAN_NET_NETCLIENT_H
 
 #include <memory>
+#include <optional>
 #include <string_view>
 #include <string>
 
@@ -125,6 +126,10 @@ namespace bomberman::net
         [[nodiscard]]
         EConnectState connectState() const { return state_; }
 
+        /** @brief Returns the last explicit server reject reason, if any. */
+        [[nodiscard]]
+        const std::optional<MsgReject::EReason>& lastRejectReason() const { return lastRejectReason_; }
+
         /** @brief Returns server-assigned player id, or kInvalidPlayerId before connect. */
         [[nodiscard]]
         uint8_t playerId() const { return playerId_; }
@@ -167,6 +172,7 @@ namespace bomberman::net
 
         uint8_t playerId_ = kInvalidPlayerId; ///< Assigned by server during handshake [0, kMaxPlayers).
         uint16_t serverTickRate_ = 0;   ///< Received from server during handshake.
+        std::optional<MsgReject::EReason> lastRejectReason_; ///< Set only when a Reject payload is received.
 
         bool initializeENet();
         void shutdownENet();

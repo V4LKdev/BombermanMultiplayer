@@ -177,6 +177,7 @@ namespace bomberman::net
         // Store pending state for async handshake in pump().
         impl_->pendingPlayerName = std::string(playerName);
         impl_->connectStartTime = SteadyClock::now();
+        lastRejectReason_.reset();
 
         state_ = EConnectState::Connecting;
         LOG_NET_CONN_DEBUG("Async connect initiated to {}:{}", host, port);
@@ -445,9 +446,12 @@ namespace bomberman::net
         if (!deserializeMsgReject(payload, payloadSize, reject))
         {
             LOG_NET_PROTO_WARN("Failed to parse Reject payload - treating as generic handshake failure");
+            lastRejectReason_.reset();
             state_ = EConnectState::FailedHandshake;
             return;
         }
+
+        lastRejectReason_ = reject.reason;
 
         switch (reject.reason)
         {
@@ -572,6 +576,7 @@ namespace bomberman::net
         state_ = EConnectState::Disconnected;
         playerId_ = kInvalidPlayerId;
         serverTickRate_ = 0;
+        lastRejectReason_.reset();
         if (impl_)
         {
             impl_->nextInputSeq = 0;

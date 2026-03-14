@@ -22,7 +22,9 @@ namespace
     using ServerClock = std::chrono::steady_clock;
     using SimDuration = std::chrono::duration<double>;
 
-    constexpr std::size_t kMaxPeers         = kMaxPlayers;
+    // Allow a few extra transport-level peers so overflow clients can reach Hello
+    // and receive an explicit ServerFull reject instead of timing out in ENet connect.
+    constexpr std::size_t kMaxPeers         = kMaxPlayers + 4;
     constexpr int         kServiceTimeoutMs = 1;
     constexpr SimDuration kSimStep          = SimDuration{1.0 / static_cast<double>(bomberman::sim::kTickRate)};
     constexpr auto        kMaxFrameClamp    = std::chrono::milliseconds(bomberman::sim::kMaxFrameClampMs);
@@ -175,7 +177,8 @@ int main(int argc, char** argv)
     }
 
     LOG_SERVER_INFO("==== BOMBERMAN DEDICATED SERVER ===================================================================");
-    LOG_SERVER_INFO("Listening on port {} with max {} peers", cli.port, kMaxPeers);
+    LOG_SERVER_INFO("Listening on port {} with max {} peers ({} gameplay slots)",
+                    cli.port, kMaxPeers, kMaxPlayers);
 
     bomberman::server::ServerState state{};
     bomberman::server::initServerState(state, server, cli.seedOverride, cli.seed);
@@ -212,7 +215,7 @@ int main(int argc, char** argv)
                         NetEvent diagEvent{};
                         diagEvent.type = NetEventType::Note;
                         diagEvent.valueA = static_cast<uint32_t>(event.peer->incomingPeerID);
-                        diagEvent.note = "peer connected";
+                        diagEvent.note = "transport peer connected";
                         state.diag.recordEvent(diagEvent);
                     }
                     break;
@@ -251,7 +254,7 @@ int main(int argc, char** argv)
                         NetEvent diagEvent{};
                         diagEvent.type = NetEventType::Note;
                         diagEvent.valueA = static_cast<uint32_t>(event.peer->incomingPeerID);
-                        diagEvent.note = "peer disconnected before handshake";
+                        diagEvent.note = "transport peer disconnected before handshake";
                         state.diag.recordEvent(diagEvent);
 
                         event.peer->data = nullptr;
