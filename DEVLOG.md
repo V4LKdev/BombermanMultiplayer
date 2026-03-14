@@ -878,3 +878,45 @@ Make overflow clients fail clearly and intentionally when all gameplay slots are
 - Overflow clients now fail through the intended protocol path instead of timing out.
 - The UI shows the actual failure reason.
 - Server diagnostics now record the reject lifecycle coherently.
+
+## 2026-03-14 – Tighten Diagnostics Semantics And Add Peer Sampling
+
+### Goal
+Make the server diagnostics layer more truthful and more useful before expanding it further.
+
+### Problem
+- Header-valid packets were still being counted as successful receives even if typed payload handling failed later.
+- Snapshot send accounting treated one broadcast operation as one sent packet, which undercounted the server’s main outbound traffic path.
+- Packet and anomaly diagnostics were still too anonymous to answer which gameplay peer was responsible for a problem.
+- The report already had packet aggregate data internally, but did not show it.
+- Some old per-client rolling counters and the `tick(nowMs)` naming were leftover transitional artifacts from earlier iterations.
+
+### Changes
+- Tightened typed receive semantics so server packet accounting now distinguishes:
+  - `Ok`
+  - `Dropped`
+  - `Rejected`
+  - `Malformed`
+- Threaded gameplay peer identity through packet and anomaly diagnostics APIs.
+- Changed snapshot send accounting to count per-recipient queue attempts instead of one broadcast operation.
+- Exposed per-message packet aggregates in the diagnostics report.
+- Renamed diagnostics bookkeeping from `tick(nowMs)` to `advanceTick()` to match what it actually does.
+- Added periodic ENet peer sampling for:
+  - RTT
+  - RTT variance
+  - packet loss (converted to permille)
+  - queued reliable data
+  - queued unreliable data
+- Removed the old rolling per-client summary counters that only existed for transitional periodic debug logs.
+
+### Validation
+- Ran local smoke tests after the semantics cleanup and after peer sampling was added.
+- Confirmed that:
+  - `latest_peer_samples` now shows sane localhost transport values
+  - per-message packet aggregates match the expected flow (`Hello`, `Welcome`, `LevelInfo`, `Input`, `Snapshot`)
+  - recent events now attribute anomalies to the responsible gameplay peer
+
+### Result
+- The diagnostics layer is now much closer to a trustworthy server telemetry baseline.
+- Receive/send counters better reflect what the server actually processed and queued.
+- Transport-health data is now available alongside gameplay-facing anomaly data.
