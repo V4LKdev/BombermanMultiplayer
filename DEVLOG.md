@@ -742,7 +742,7 @@ Prepare the project for the upcoming telemetry/debugging work by making logs eas
   - `net.proto`
   - `net.input`
   - `net.snapshot`
-  - plus reserved channels for diagnostics/perf/tests
+  - `net.diag`
 - Updated networking call sites to use the new log channels so connection flow, packet transport, input handling, and snapshot traffic can be filtered independently.
 - Added a default logging config file (`Configs/DefaultLogging.ini`) for project-level runtime defaults.
 - Added shared CLI logging parsing through `Util/CliCommon.h` so client and server use the same `--log-level` and `--log-file` behavior.
@@ -805,9 +805,8 @@ Lay the first real diagnostics foundation for the networking layer before predic
 - Added server-side input diagnostics for:
   - gaps / hold fallback
   - ahead-window drops
-  - unknown input bits
 - Added lifecycle notes for:
-  - peer connected
+  - transport peer connected
   - player accepted
   - player disconnected
   - peer rejected
@@ -830,8 +829,11 @@ Lay the first real diagnostics foundation for the networking layer before predic
   - recent-event history is readable instead of being drowned by resend overlap
 
 ### Result
-- The project now has a practical server-side telemetry baseline.
-- Diagnostics are strong enough to explain real runtime behavior instead of just producing noise.
+- The project now has a practical first server-side telemetry baseline.
+- Later follow-up work tightened the truthfulness model further by:
+  - separating stale input batches from normal resend overlap
+  - removing dead runtime `UnknownButtons` anomaly handling
+  - making reject/send/receive accounting more semantically exact
 
 ## 2026-03-14 (ca3bf5d) – Send Neutral Input While Unfocused
 
@@ -929,3 +931,39 @@ Make the server diagnostics layer more truthful and more useful before expanding
 - The diagnostics layer is now much closer to a trustworthy server telemetry baseline.
 - Receive/send counters better reflect what the server actually processed and queued.
 - Transport-health data is now available alongside gameplay-facing anomaly data.
+
+## 2026-03-15 (abd10ac, a259e59, 66d55de) – Finalize Server Telemetry Truthfulness And Cleanup
+
+### Goal
+Finish the remaining high-value cleanup work on the server telemetry path so the diagnostics model matches the runtime behavior more honestly before moving on to new features.
+
+### Changes
+- Split normal resend overlap from truly stale input delivery:
+  - already-consumed entries repeated inside a useful batch remain `input_entries_redundant`
+  - fully stale batches are now counted separately as `stale_input_batches`
+- Removed dead runtime `UnknownButtons` anomaly semantics from the server path because malformed input bits are already rejected during deserialization.
+- Kept input anomalies focused on live runtime issues:
+  - `OutOfOrder`
+  - `Duplicate`
+  - `Gap`
+- Polished the diagnostics report output into a more readable structured text format with:
+  - clearer section headers
+  - explicit packet aggregates by message type
+  - clearer recent-event formatting
+- Added `msgTypeName(...)` to the shared protocol layer so diagnostics and logging can name packet types consistently.
+- Moved server diagnostics enablement to startup configuration and cleaned up helper code around CLI parsing and diagnostics note emission.
+
+### Validation
+- Re-ran focused manual tests against the refined model:
+  - single-client movement run
+  - four-client session with overflow/reject attempts
+  - reconnect/disconnect churn
+- Confirmed the current report now distinguishes:
+  - accepted input entries
+  - resend overlap
+  - stale batches
+  - true runtime anomalies
+
+### Result
+- The server telemetry model now tells a cleaner and more truthful story.
+- The remaining work can shift from semantics cleanup to new capability instead of more firefighting in the diagnostics baseline.
