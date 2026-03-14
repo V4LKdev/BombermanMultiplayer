@@ -50,10 +50,7 @@ namespace bomberman::server
     void simulateServerTick(ServerState& state)
     {
         ++state.serverTick;
-
-        // TODO: pass real wall-clock time in ms here once available from the main loop.
-        //       For now the tick counter serves as a monotonic proxy.
-        state.diag.tick(state.serverTick);
+        state.diag.advanceTick();
 
         bool anyClient = false;
 
@@ -85,7 +82,6 @@ namespace bomberman::server
                 {
                     // Gap or stale slot: hold previous buttons.
                     client.currentButtons = client.previousButtons;
-                    ++client.inputGaps;
                     ++client.consecutiveInputGaps;
 
                     // Detection lives here; telemetry goes to diag.
@@ -122,31 +118,22 @@ namespace bomberman::server
             client.pos = sim::stepMovementWithCollision(
                 client.pos, moveX, moveY, state.tiles);
 
-            // Track how far input receive is ahead of consume for aggregated diagnostics.
-            if (client.lastReceivedInputSeq >= client.lastConsumedInputSeq)
+            if ((state.serverTick % kPeerSampleTicks) == 0 && client.peer != nullptr)
             {
-                client.inputLeadSum += static_cast<uint64_t>(client.lastReceivedInputSeq - client.lastConsumedInputSeq);
-                ++client.inputLeadSamples;
-            }
+                const uint32_t queuedReliable = client.peer->reliableDataInTransit;
+                const uint32_t totalWaiting = static_cast<uint32_t>(client.peer->totalWaitingData);
+                const uint32_t queuedUnreliable = (totalWaiting > queuedReliable)
+                    ? (totalWaiting - queuedReliable)
+                    : 0;
+                const uint32_t packetLossPermille = static_cast<uint32_t>(
+                    (static_cast<uint64_t>(client.peer->packetLoss) * 1000u) / ENET_PEER_PACKET_LOSS_SCALE);
 
-            if (state.serverTick >= client.nextInputDiagTick)
-            {
-                const double avgLead = (client.inputLeadSamples > 0)
-                    ? static_cast<double>(client.inputLeadSum) / static_cast<double>(client.inputLeadSamples)
-                    : 0.0;
-
-                LOG_NET_INPUT_DEBUG(
-                    "Input summary playerId={} tick={} lateDrops={} aheadDrops={} inputGaps={} avgLead={:.2f} lastRecv={} lastConsumed={}",
-                    client.playerId, state.serverTick,
-                    client.lateDrops, client.aheadDrops, client.inputGaps,
-                    avgLead, client.lastReceivedInputSeq, client.lastConsumedInputSeq);
-
-                client.lateDrops = 0;
-                client.aheadDrops = 0;
-                client.inputGaps = 0;
-                client.inputLeadSum = 0;
-                client.inputLeadSamples = 0;
-                client.nextInputDiagTick = state.serverTick + kInputDiagReportTicks;
+                state.diag.samplePeer(client.playerId,
+                                      client.peer->roundTripTime,
+                                      client.peer->roundTripTimeVariance,
+                                      packetLossPermille,
+                                      queuedReliable,
+                                      queuedUnreliable);
             }
         }
 

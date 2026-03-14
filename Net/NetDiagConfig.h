@@ -30,18 +30,14 @@ namespace bomberman::net
     // ===== Reporting cadence =========================================================================================
     // =================================================================================================================
 
-    /**
-     * @brief Aggregated input diagnostics summary log interval in server simulation ticks.
-     *
-     * At the end of each interval the per-client counters are logged and reset.
-     */
-    constexpr uint32_t kInputDiagReportTicks = static_cast<uint32_t>(sim::kTickRate) * 4u; ///<  4 seconds at 60 ticks/s
-
     /** @brief Per-batch input sequence log interval. */
     constexpr uint32_t kInputBatchLogEveryN = static_cast<uint32_t>(sim::kTickRate) * 2u;
 
     /** @brief Server snapshot summary log interval in server simulation ticks. */
     constexpr uint32_t kServerSnapshotLogEveryN = static_cast<uint32_t>(sim::kTickRate) * 2u;
+
+    /** @brief ENet peer transport sample interval in server simulation ticks. */
+    constexpr uint32_t kPeerSampleTicks = static_cast<uint32_t>(sim::kTickRate);
 
     // =================================================================================================================
     // ===== Anomaly detection policy ==================================================================================

@@ -277,7 +277,7 @@ namespace bomberman::net
         summary_.inputEntriesAccepted += count;
     }
 
-    void NetDiagnostics::samplePeer(const uint8_t peerId, const uint32_t rttMs, const uint32_t packetLossPermille,
+    void NetDiagnostics::samplePeer(const uint8_t peerId, const uint32_t rttMs, const uint32_t rttVarianceMs, const uint32_t packetLossPermille,
                                     const uint32_t queuedReliable, const uint32_t queuedUnreliable)
     {
         if (!enabled_ || !sessionActive_)
@@ -287,6 +287,7 @@ namespace bomberman::net
         sample.peerId = peerId;
         sample.timestampMs = nowMs();
         sample.rttMs = rttMs;
+        sample.rttVarianceMs = rttVarianceMs;
         sample.packetLossPermille = packetLossPermille;
         sample.queuedReliable = queuedReliable;
         sample.queuedUnreliable = queuedUnreliable;
@@ -301,13 +302,11 @@ namespace bomberman::net
     // ===== Session maintenance and reporting =========================================================================
     // =================================================================================================================
 
-    void NetDiagnostics::tick(const uint32_t nowMs)
+    void NetDiagnostics::advanceTick()
     {
         if (!enabled_ || !sessionActive_)
             return;
 
-        // Reserved for future cadence-based summary/report logic.
-        (void)nowMs;
         summary_.tickCount++;
     }
 
@@ -362,6 +361,7 @@ namespace bomberman::net
             out << "  - peer=" << static_cast<int>(peerId)
                 << " ts_ms=" << sample.timestampMs
                 << " rtt_ms=" << sample.rttMs
+                << " rtt_var_ms=" << sample.rttVarianceMs
                 << " loss_permille=" << sample.packetLossPermille
                 << " q_rel=" << sample.queuedReliable
                 << " q_unrel=" << sample.queuedUnreliable << "\n";

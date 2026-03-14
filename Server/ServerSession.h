@@ -53,16 +53,7 @@ namespace bomberman::server
         uint8_t previousButtons = 0;   ///< Fallback buttons when input is missing.
         uint8_t currentButtons  = 0;   ///< Buttons used for the current simulation tick.
 
-        // ---- Input diagnostics ----
-        // TODO(diag-migration): these windowed counters are transitional. Detection logic stays here;
-        //      long-lived telemetry storage is now owned by ServerState::diag via recordInputAnomaly().
-        //      Remove these fields once the periodic summary log is replaced by writeSessionReport().
-        uint32_t lateDrops = 0;
-        uint32_t aheadDrops = 0;
-        uint32_t inputGaps = 0;
-        uint64_t inputLeadSum = 0;
-        uint32_t inputLeadSamples = 0;
-        uint32_t nextInputDiagTick = net::kInputDiagReportTicks;
+        // ---- Input warning state ----
         uint16_t consecutiveAheadDropBatches = 0;
         uint16_t consecutiveInputGaps = 0;
         uint32_t nextAheadWarnTick = 0;

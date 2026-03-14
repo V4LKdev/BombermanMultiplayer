@@ -91,6 +91,7 @@ namespace bomberman::net
         uint8_t peerId = 0xFF;
         uint64_t timestampMs = 0;
         uint32_t rttMs = 0;
+        uint32_t rttVarianceMs = 0;
         uint32_t packetLossPermille = 0;
         uint32_t queuedReliable = 0;
         uint32_t queuedUnreliable = 0;
@@ -188,11 +189,11 @@ namespace bomberman::net
         void recordInputEntriesRedundant(uint32_t count);
 
         /** @brief Stores the latest sampled transport health values for a peer. */
-        void samplePeer(uint8_t peerId, uint32_t rttMs, uint32_t packetLossPermille,
+        void samplePeer(uint8_t peerId, uint32_t rttMs, uint32_t rttVarianceMs, uint32_t packetLossPermille,
                         uint32_t queuedReliable, uint32_t queuedUnreliable);
 
-        /** @brief Advances minimal session bookkeeping. Reserved for future cadence logic. */
-        void tick(uint32_t nowMs);
+        /** @brief Advances per-session tick bookkeeping. */
+        void advanceTick();
 
         /** @brief Writes a temporary human-readable text session report to disk. */
         bool writeSessionReport(std::string_view filePath) const;

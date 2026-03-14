@@ -232,9 +232,6 @@ namespace bomberman::server
         // Store stable pointer in peer->data for fast lookup in handlers and disconnect path.
         ctx.peer->data = &slot.value();
 
-        // Start aggregated input diagnostics reporting after the first interval.
-        slot->nextInputDiagTick = ctx.state.serverTick + kInputDiagReportTicks;
-
         recordPeerNote(ctx.diag, playerId, "player accepted",
                        static_cast<uint32_t>(ctx.peer->incomingPeerID),
                        levelInfo.mapSeed);
@@ -324,9 +321,6 @@ namespace bomberman::server
             if (seq > client->lastReceivedInputSeq)
                 client->lastReceivedInputSeq = seq;
         }
-
-        client->lateDrops += lateDropCount;
-        client->aheadDrops += aheadDropCount;
 
         if (ctx.diag)
         {
