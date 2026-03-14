@@ -4,24 +4,17 @@
 #include <SDL.h>
 #include <memory>
 #include <optional>
-#include <utility>
-#include <vector>
 
 #include "Const.h"
-#include "Entities/Enemy.h"
 #include "Entities/Music.h"
 #include "Entities/Player.h"
-#include "Entities/Sound.h"
-#include "Entities/Text.h"
-#include "Net/NetCommon.h"
 #include "Scenes/Scene.h"
 #include "Sim/Movement.h"
 
 namespace bomberman
 {
     /**
-     * @brief Level Scene
-     *
+     * @brief Shared level-scene scaffold used by both singleplayer and multiplayer.
      */
     class LevelScene : public Scene
     {
@@ -35,7 +28,7 @@ namespace bomberman
         };
 
         /**
-         * @brief Construct a new Level Scene
+         * @brief Construct a shared level scene scaffold.
          *
          * @param game      - game pointer
          * @param stage     - stage number
@@ -44,6 +37,8 @@ namespace bomberman
          */
         LevelScene(Game* game, const unsigned int stage, const unsigned int prevScore,
                    std::optional<uint32_t> mapSeed = std::nullopt);
+
+        virtual ~LevelScene() override = default;
 
         /** @brief Returns the field transform needed to map tile-Q8 world coords to screen pixels. */
         [[nodiscard]]
@@ -68,115 +63,56 @@ namespace bomberman
         /** @brief Clears locally held movement input and resets player facing/animation state. */
         void clearLocalMovementInput();
 
-      private:
-        // spawn and generation of map objects
-        void spawnTextObjects();
+      protected:
+        /** @brief Completes shared world setup after derived state is ready. */
+        void initializeLevelWorld(std::optional<uint32_t> mapSeed);
+
+        // spawn and generation of shared map objects
         void generateTileMap(std::optional<uint32_t> mapSeed);
-        void generateEnemies();
         void spawnGrass(const int positionX, const int positionY);
         void spawnBrick(const int positionX, const int positionY);
         void spawnStone(const int positionX, const int positionY);
         void spawnPlayer(const int positionX, const int positionY);
-        void spawnEnemy(Texture texture, AIType type, const int positionX, const int positionY);
-        void spawnBomb(Object* object);
-        void spawnBang(Object* object);
-        void spawnDoor(Object* object);
 
-        /**
-         * @brief Finish level
-         *
-         */
-        void finish() const;
-        /**
-         * @brief Game over
-         *
-         */
-        void gameOver();
-        /**
-         * @brief Exit level
-         *
-         */
-        void exit() const;
+        /** @brief Allows derived scenes to collect collision objects during map spawn. */
+        virtual void onCollisionObjectSpawned(Tile tile, const std::shared_ptr<Object>& object);
 
-        // timers update
-        void updateTimers(const unsigned int delta);
-        void updateLevelTimer();
-        void updateBombTimer(const unsigned int delta);
-        void updateBangTimer(const unsigned int delta);
-        void updateGameOverTimer(const unsigned int delta);
         // update movement
         void updateMovement(const bool isPressed, const int keycode);
         // update camera
         void updateCamera();
-        // score update
-        void updateScore();
-        // update collisions
-        void updatePlayerCollision();
-        void updateEnemiesCollision();
-        void updateBangsCollision();
-        bool isCollisionDetected(const SDL_FRect& rect1, const SDL_FRect& rect2) const;
-        // destroy brick
-        void destroyBrick(std::shared_ptr<Object> brick);
-        // enemy follow to player if in attack radius
-        void followToPlayer(Enemy* enemy);
 
         /**
-         * @brief Returns true when the game is running in networked (multiplayer) mode.
+         * @brief Per-mode update body executed when the scene is not paused.
          */
-        [[nodiscard]]
-        bool isNetworked() const;
+        virtual void updateLevel(const unsigned int delta) = 0;
 
         /**
-         * @brief Steps the local player position by one simulation tick (singleplayer only).
+         * @brief Optional per-mode key-down handling.
+         */
+        virtual void onKeyPressed(SDL_Scancode scancode);
+
+        /** @brief Whether ENTER pause toggle is enabled for this level mode. */
+        [[nodiscard]]
+        virtual bool supportsPause() const { return true; }
+
+        /**
+         * @brief Steps the local player position by one simulation tick.
          */
         void stepLocalPlayerMovement();
 
         /**
-         * @brief Applies the server-authoritative player position from a snapshot.
-         *
-         * @param snapshot Most recent server snapshot.
+         * @brief Writes `playerPos_` to the player sprite in screen space.
          */
-        void applySnapshot(const net::MsgSnapshot& snapshot);
-
-        // timers in ms const
-        const int levelTimerStart = 200500;
-        const int levelTimerUpdateText = 1000;
-        const int bombTimerStart = 1500;
-        const int bangTimerStart = 800;
-        const int gameOverTimerStart = 1000;
-        const int winTimerStart = 200;
-        // const for score
-        const unsigned int scoreRewardForKill = 200;
-        const unsigned int scoreRewardForStage = 1000;
+        void syncPlayerSpriteToSimPosition();
 
         std::shared_ptr<Music> menuMusic = nullptr;                       // menu music
-        std::shared_ptr<Sound> gameoverSound = nullptr;                   // game over sound
-        std::shared_ptr<Sound> winSound = nullptr;                        // win sound
-        std::shared_ptr<Sound> explosionSound = nullptr;                  // explosion sound
-        std::shared_ptr<Text> timerNumber = nullptr;                      // timer
-        std::shared_ptr<Text> scoreNumber = nullptr;                      // score
         std::shared_ptr<Player> player = nullptr;                         // player
-        std::shared_ptr<Sprite> bomb = nullptr;                           // player's bomb
-        std::shared_ptr<Sprite> door = nullptr;                           // door for level finish
-        std::vector<std::shared_ptr<Enemy>> enemies;                      // enemies
-        std::vector<std::pair<Tile, std::shared_ptr<Object>>> collisions; // collisions
-        std::vector<std::shared_ptr<Object>> bangs;                       // bomb's bang
         Tile tiles[tileArrayHeight][tileArrayWidth];                      // tilemap
 
         int playerDirectionX = 0; // direction used for control
         int playerDirectionY = 0; // direction used for control
-        // timer variables
-        int levelTimer = levelTimerStart;
-        int levelTimerDelta = 0;
-        int bombTimer = 0;
-        int bangTimer = 0;
-        int gameOverTimer = 0;
-        // bool flags
-        bool isGameOver = false;
         bool isPaused = false;
-        bool isWin = false;
-        // variables
-        unsigned int score = 0;
         unsigned int stage = 0;
 
         // level positioning
@@ -190,9 +126,6 @@ namespace bomberman
         /// Canonical player position in tile-Q8, owned by LevelScene.
         sim::TilePos playerPos_{};
 
-        /// Last server snapshot tick that was applied to the player sprite.
-        /// Guards against re-applying the same snapshot on consecutive scene ticks.
-        uint32_t lastAppliedSnapshotTick_ = 0;
     };
 } // namespace bomberman
 

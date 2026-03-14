@@ -4,7 +4,6 @@
 #include "Game.h"
 #include "Scenes/ConnectScene.h"
 #include "Scenes/GameOverScene.h"
-#include "Scenes/LevelScene.h"
 #include "Scenes/MenuScene.h"
 #include "Scenes/StageScene.h"
 
@@ -166,7 +165,7 @@ namespace bomberman
         {
             case MenuItem::Start:
                 // go to level scene
-                game->getSceneManager()->addScene("stage", std::make_shared<StageScene>(game, 1, 0));
+                game->getSceneManager()->addScene("stage", std::make_shared<StageScene>(game, 1, 0, LevelMode::Singleplayer));
                 game->getSceneManager()->activateScene("stage");
                 break;
             case MenuItem::Exit:

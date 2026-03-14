@@ -407,7 +407,7 @@ namespace bomberman
                 if (!enteredOnlineFlow_)
                 {
                     enteredOnlineFlow_ = true;
-                    game->getSceneManager()->addScene("stage", std::make_shared<StageScene>(game, 1, 0));
+                    game->getSceneManager()->addScene("stage", std::make_shared<StageScene>(game, 1, 0, LevelMode::Multiplayer));
                     game->getSceneManager()->activateScene("stage");
                     game->getSceneManager()->removeScene("connect");
                 }

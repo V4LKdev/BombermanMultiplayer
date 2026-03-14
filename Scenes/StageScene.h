@@ -1,10 +1,7 @@
 #ifndef _BOMBERMAN_SCENES_STAGE_SCENE_H_
 #define _BOMBERMAN_SCENES_STAGE_SCENE_H_
 
-#include <SDL.h>
-#include <memory>
-
-#include "Entities/Text.h"
+#include "Scenes/LevelSceneFactory.h"
 #include "Scenes/Scene.h"
 
 namespace bomberman
@@ -21,7 +18,7 @@ namespace bomberman
          *
          * @param game
          */
-        StageScene(Game* game, const unsigned int level, const unsigned int score);
+        StageScene(Game* game, const unsigned int level, const unsigned int score, LevelMode mode);
         /**
          * @brief Trigger on update if scene is active
          *
@@ -36,6 +33,7 @@ namespace bomberman
         const int sceneTimer = 2000;
         unsigned int stage = 0;
         unsigned int score = 0;
+        LevelMode mode = LevelMode::Singleplayer;
     };
 } // namespace bomberman
 

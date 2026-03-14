@@ -1,137 +1,60 @@
-#include <algorithm>
 #include <cmath>
 #include <chrono>
-#include <functional>
 #include <optional>
-#include <random>
-#include <string>
 
 #include "Entities/Sprite.h"
 #include "Game.h"
-#include "Net/NetClient.h"
-#include "Scenes/GameOverScene.h"
 #include "Scenes/LevelScene.h"
-#include "Scenes/StageScene.h"
-#include "Sim/Movement.h"
 #include "Sim/TileMapGen.h"
-#include "Util/Collision.h"
-#include "Util/Pathfinding.h"
 
 namespace bomberman
 {
-    namespace
-    {
-        constexpr float kDamageHitboxScale = 0.2f; ///< Bang/damage hitbox shrink
-    } // namespace
-
-    LevelScene::LevelScene(Game* _game, const unsigned int _stage, const unsigned int prevScore,
-                           std::optional<uint32_t> mapSeed)
-        : Scene(_game), score(prevScore), stage(_stage)
+    LevelScene::LevelScene(Game* _game, const unsigned int _stage, const unsigned int /*prevScore*/,
+                           std::optional<uint32_t> /*mapSeed*/)
+        : Scene(_game), tiles{}, stage(_stage)
     {
 
-        // common field parameters
         fieldPositionX = 0;
         fieldPositionY = game->getWindowHeight() / 15;
         const float scale =
             (game->getWindowHeight() - fieldPositionY) / static_cast<float>(tileArrayHeight * tileSize);
-        scaledTileSize = static_cast<int>(round(scale * tileSize));
-        // menu music
+        scaledTileSize = static_cast<int>(std::round(scale * tileSize));
+
         menuMusic = std::make_shared<Music>(game->getAssetManager()->getMusic(MusicEnum::Level));
         menuMusic->play();
-        // sounds
-        gameoverSound = std::make_shared<Sound>(game->getAssetManager()->getSound(SoundEnum::Lose));
-        winSound = std::make_shared<Sound>(game->getAssetManager()->getSound(SoundEnum::Win));
-        explosionSound = std::make_shared<Sound>(game->getAssetManager()->getSound(SoundEnum::Explosion));
-        // draw text
-        spawnTextObjects();
-
-        // generate tile map - use server-provided seed if available, otherwise pick one locally
-        generateTileMap(mapSeed);
-
-        // prepare player - spawn at the fixed start tile
-        spawnPlayer(fieldPositionX + playerStartX * scaledTileSize,
-                    fieldPositionY + playerStartY * scaledTileSize);
-
-        playerPos_ = { playerStartX * 256 + 128, playerStartY * 256 + 128 };
-
-        // generate enemies
-        generateEnemies();
-        // set timer
-        updateLevelTimer();
     }
 
-    void LevelScene::spawnTextObjects()
+    void LevelScene::initializeLevelWorld(std::optional<uint32_t> mapSeed)
     {
-        const int fontWidth = static_cast<int>(game->getWindowWidth() / 32.0f);
-        const int fontHeight = static_cast<int>(game->getWindowHeight() / 30.0f);
-        // timer text
-        auto timerText =
-            std::make_shared<Text>(game->getAssetManager()->getFont(), game->getRenderer(), "TIME");
-        timerText->setSize(fontWidth * 4, fontHeight);
-        timerText->setPosition(30, 10);
-        timerText->attachToCamera(false);
-        addObject(timerText);
-        backgroundObjectLastNumber++;
+        generateTileMap(mapSeed);
 
-        // timer number
-        timerNumber = std::make_shared<Text>(game->getAssetManager()->getFont(), game->getRenderer(), "000");
-        timerNumber->setSize(fontWidth * 3, fontHeight);
-        timerNumber->setPosition(timerText->getPositionX() + timerText->getWidth() + 30,
-                                 timerText->getPositionY());
-        timerNumber->attachToCamera(false);
-        addObject(timerNumber);
-        backgroundObjectLastNumber++;
-
-        // score
-        std::string scoreText = std::to_string(score);
-        scoreNumber =
-            std::make_shared<Text>(game->getAssetManager()->getFont(), game->getRenderer(), scoreText);
-        scoreNumber->setSize(fontWidth * static_cast<int>(scoreText.size()), fontHeight);
-        scoreNumber->setPosition(
-            static_cast<int>(game->getWindowWidth() / 2.0f - scoreNumber->getWidth() / 2.0f),
-            timerText->getPositionY());
-        scoreNumber->attachToCamera(false);
-        addObject(scoreNumber);
-        backgroundObjectLastNumber++;
-
-        // stage
-        std::string stageTextConv = "STAGE " + std::to_string(stage);
-        auto stageText =
-            std::make_shared<Text>(game->getAssetManager()->getFont(), game->getRenderer(), stageTextConv);
-        stageText->setSize(fontWidth * static_cast<int>(stageTextConv.size()), fontHeight);
-        stageText->setPosition(game->getWindowWidth() - 30 - stageText->getWidth(),
-                               timerText->getPositionY());
-        stageText->attachToCamera(false);
-        addObject(stageText);
-        backgroundObjectLastNumber++;
+        spawnPlayer(fieldPositionX + playerStartX * scaledTileSize,
+                    fieldPositionY + playerStartY * scaledTileSize);
+        playerPos_ = { playerStartX * 256 + 128, playerStartY * 256 + 128 };
+        syncPlayerSpriteToSimPosition();
     }
 
     void LevelScene::generateTileMap(std::optional<uint32_t> mapSeed)
     {
-
         const uint32_t seed = mapSeed.has_value()
             ? mapSeed.value()
             : static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count());
 
         sim::generateTileMap(seed, tiles);
 
-        // Spawn visual tile objects from the generated tile array.
         for(int i = 0; i < static_cast<int>(tileArrayHeight); i++)
         {
             for(int j = 0; j < static_cast<int>(tileArrayWidth); j++)
             {
-                // spawn brick and grass
                 if(tiles[i][j] == Tile::Brick)
                 {
                     spawnGrass(fieldPositionX + j * scaledTileSize, fieldPositionY + i * scaledTileSize);
                     spawnBrick(fieldPositionX + j * scaledTileSize, fieldPositionY + i * scaledTileSize);
                 }
-                // spawn grass
                 if(tiles[i][j] == Tile::Grass || tiles[i][j] == Tile::EmptyGrass)
                 {
                     spawnGrass(fieldPositionX + j * scaledTileSize, fieldPositionY + i * scaledTileSize);
                 }
-                // spawn stone
                 if(tiles[i][j] == Tile::Stone)
                 {
                     spawnStone(fieldPositionX + j * scaledTileSize, fieldPositionY + i * scaledTileSize);
@@ -157,7 +80,7 @@ namespace bomberman
         brick->setPosition(positionX, positionY);
         brick->setSize(scaledTileSize, scaledTileSize);
         addObject(brick);
-        collisions.push_back(std::make_pair(Tile::Brick, brick));
+        onCollisionObjectSpawned(Tile::Brick, brick);
     }
 
     void LevelScene::spawnStone(const int positionX, const int positionY)
@@ -167,13 +90,14 @@ namespace bomberman
         stone->setPosition(positionX, positionY);
         stone->setSize(scaledTileSize, scaledTileSize);
         addObject(stone);
-        collisions.push_back(std::make_pair(Tile::Stone, stone));
+        onCollisionObjectSpawned(Tile::Stone, stone);
         backgroundObjectLastNumber++;
     }
 
+    void LevelScene::onCollisionObjectSpawned(const Tile /*tile*/, const std::shared_ptr<Object>& /*object*/) {}
+
     void LevelScene::spawnPlayer(const int positionX, const int positionY)
     {
-        // spawn player
         player = std::make_shared<Player>(game->getAssetManager()->getTexture(Texture::Player),
                                           game->getRenderer());
         player->setPosition(positionX, positionY);
@@ -182,229 +106,32 @@ namespace bomberman
         addObject(player);
     }
 
-    void LevelScene::spawnEnemy(Texture texture, AIType type, const int positionX, const int positionY)
-    {
-        auto enemy =
-            std::make_shared<Enemy>(game->getAssetManager()->getTexture(texture), game->getRenderer());
-        enemy->setPosition(positionX, positionY);
-        enemy->setSize(scaledTileSize, scaledTileSize);
-        enemy->setAIType(type);
-        addObject(enemy);
-        enemies.push_back(enemy);
-    }
-
-    void LevelScene::generateEnemies()
-    {
-        // TODO: currently enemies are generated randomly on client, but in networked game they should be generated on server and transmitted to client.
-        if (isNetworked())
-            return;
-
-        // we need enemy in random tile
-        const auto seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
-        auto randCount = std::bind(std::uniform_int_distribution<int>(minEnemiesOnLevel, maxEnemiesOnLevel),
-                                   std::mt19937(static_cast<unsigned int>(seed)));
-        auto randType = std::bind(std::uniform_int_distribution<int>(0, 1),
-                                  std::mt19937(static_cast<unsigned int>(seed)));
-        auto randTexture = std::bind(std::uniform_int_distribution<int>(0, 2),
-                                     std::mt19937(static_cast<unsigned int>(seed)));
-        auto randCellX = std::bind(std::uniform_int_distribution<int>(0, tileArrayHeight - 1),
-                                   std::mt19937(static_cast<unsigned int>(seed)));
-        auto randCellY = std::bind(std::uniform_int_distribution<int>(0, tileArrayWidth - 1),
-                                   std::mt19937(static_cast<unsigned int>(seed)));
-        // start enemies spawn
-        for(int i = 0; i < randCount(); i++)
-        {
-            // try to find suitable tile
-            int cellX = randCellX();
-            int cellY = randCellY();
-            while(tiles[cellX][cellY] == Tile::Brick || tiles[cellX][cellY] == Tile::Stone ||
-                  tiles[cellX][cellY] == Tile::EmptyGrass)
-            {
-                cellX = randCellX();
-                cellY = randCellY();
-            }
-            // spawn enemy
-            int textureRand = randTexture();
-            spawnEnemy(textureRand == 0 ? Texture::Enemy1 :
-                                          (textureRand == 1 ? Texture::Enemy2 : Texture::Enemy3),
-                       randType() == 0 ? AIType::Wandering : AIType::Chasing,
-                       fieldPositionX + cellY * scaledTileSize, fieldPositionY + cellX * scaledTileSize);
-        }
-    }
-
-    void LevelScene::spawnBomb(Object* object)
-    {
-        // we can only have 1 bomb and should have object
-        if(bomb || !object)
-        {
-            return;
-        }
-        // calculate position
-        int bombPositionX = object->getPositionX();
-        int bombPositionY = object->getPositionY() - fieldPositionY;
-        const int bombPositionDiffX = bombPositionX % scaledTileSize;
-        const int bombPositionDiffY = bombPositionY % scaledTileSize;
-        // set bomb in strongly in cell
-        bombPositionX = (bombPositionDiffX > scaledTileSize / 2) ?
-                            bombPositionX + scaledTileSize - bombPositionDiffX :
-                            bombPositionX - bombPositionDiffX;
-        bombPositionY = (bombPositionDiffY > scaledTileSize / 2) ?
-                            bombPositionY + scaledTileSize - bombPositionDiffY :
-                            bombPositionY - bombPositionDiffY;
-        bombPositionY += fieldPositionY;
-        // create bomb in position
-        bomb =
-            std::make_shared<Sprite>(game->getAssetManager()->getTexture(Texture::Bomb), game->getRenderer());
-        bomb->setSize(scaledTileSize, scaledTileSize);
-        bomb->setPosition(bombPositionX, bombPositionY);
-        insertObject(bomb, backgroundObjectLastNumber);
-        // animation
-        auto animation = std::make_shared<Animation>();
-        animation->addAnimationEntity(AnimationEntity(0, 0, tileSize, tileSize));
-        animation->addAnimationEntity(AnimationEntity(tileSize * 1, 0, tileSize, tileSize));
-        animation->addAnimationEntity(AnimationEntity(tileSize * 2, 0, tileSize, tileSize));
-        animation->addAnimationEntity(AnimationEntity(tileSize * 3, 0, tileSize, tileSize));
-        animation->setSprite(bomb.get());
-        bomb->addAnimation(animation);
-        // change to bomb
-        const int bombCellX = static_cast<int>(
-            round((bomb->getPositionX() - fieldPositionX) / static_cast<float>(scaledTileSize)));
-        const int bombCellY = static_cast<int>(
-            round((bomb->getPositionY() - fieldPositionY) / static_cast<float>(scaledTileSize)));
-        tiles[bombCellY][bombCellX] = Tile::Bomb;
-        // update timer
-        bombTimer = bombTimerStart;
-        animation->play();
-    }
-
-    void LevelScene::spawnBang(Object* object)
-    {
-        // change to grass
-        const int bombCellX = static_cast<int>(
-            round((bomb->getPositionX() - fieldPositionX) / static_cast<float>(scaledTileSize)));
-        const int bombCellY = static_cast<int>(
-            round((bomb->getPositionY() - fieldPositionY) / static_cast<float>(scaledTileSize)));
-        tiles[bombCellY][bombCellX] = Tile::Grass;
-        // create bangs in position
-        for(unsigned int i = 0; i < bangSpawnCells; i++)
-        {
-            auto bang = std::make_shared<Sprite>(game->getAssetManager()->getTexture(Texture::Explosion),
-                                                 game->getRenderer());
-            bang->setSize(scaledTileSize, scaledTileSize);
-            bang->setPosition(object->getPositionX() + bangSpawnPositions[i][0] * scaledTileSize,
-                              object->getPositionY() + bangSpawnPositions[i][1] * scaledTileSize);
-            addObject(bang);
-            bangs.push_back(bang);
-            // change to bang
-            const int bangCellX = static_cast<int>(
-                round((bang->getPositionX() - fieldPositionX) / static_cast<float>(scaledTileSize)));
-            const int bangCellY = static_cast<int>(
-                round((bang->getPositionY() - fieldPositionY) / static_cast<float>(scaledTileSize)));
-            tiles[bangCellY][bangCellX] = Tile::Bang;
-            // animation
-            auto animation = std::make_shared<Animation>();
-            for(unsigned int j = 1; j < 12; j++)
-            {
-                animation->addAnimationEntity(AnimationEntity(tileSize * j, 0, tileSize, tileSize));
-            }
-            animation->setSprite(bang.get());
-            bang->addAnimation(animation);
-            animation->play();
-            explosionSound->play();
-        }
-        // update timer
-        bangTimer = bangTimerStart;
-    }
-
-    void LevelScene::spawnDoor(Object* object)
-    {
-        // create door in position
-        door =
-            std::make_shared<Sprite>(game->getAssetManager()->getTexture(Texture::Door), game->getRenderer());
-        door->setSize(scaledTileSize, scaledTileSize);
-        door->setPosition(object->getPositionX(), object->getPositionY());
-        insertObject(door, backgroundObjectLastNumber);
-    }
-
-    void LevelScene::finish() const
-    {
-        menuMusic->stop();
-        if(isWin)
-        {
-            winSound->play();
-            game->getSceneManager()->addScene("stage", std::make_shared<StageScene>(game, stage + 1, score));
-            game->getSceneManager()->activateScene("stage");
-        }
-        else
-        {
-            gameoverSound->play();
-            game->getSceneManager()->activateScene("gameover");
-        }
-        game->getSceneManager()->removeScene("level");
-    }
-
-    void LevelScene::gameOver()
-    {
-        menuMusic->stop();
-        gameOverTimer = gameOverTimerStart;
-        isGameOver = true;
-    }
-
-    void LevelScene::exit() const
-    {
-        menuMusic->stop();
-        game->getSceneManager()->activateScene("menu");
-        game->getSceneManager()->removeScene("level");
-    }
-
     void LevelScene::onEvent(const SDL_Event& event)
     {
         Scene::onEvent(event);
-        // we need to update movement if movement keys pressed or released
+
         if((event.type == SDL_KEYDOWN || event.type == SDL_KEYUP) && event.key.repeat == 0)
         {
-            updateMovement(event.type == SDL_KEYDOWN ? true : false, event.key.keysym.scancode);
+            updateMovement(event.type == SDL_KEYDOWN, event.key.keysym.scancode);
         }
 
-        if(event.type == SDL_KEYDOWN)
+        if(event.type != SDL_KEYDOWN || event.key.repeat != 0)
+            return;
+
+        if(event.key.keysym.scancode == SDL_SCANCODE_RETURN)
         {
-            // we should go to main menu by Escape key
-            if(event.key.keysym.scancode == SDL_SCANCODE_ESCAPE)
-            {
-                gameOver();
-                isWin = false;
-                gameOverTimer = winTimerStart;
-            }
-            // we can spawn a bomb by space press
-            else if(event.key.keysym.scancode == SDL_SCANCODE_SPACE)
-            {
-                if(!isNetworked() && !isGameOver)
-                {
-                    spawnBomb(player.get());
-                }
-            }
-            // we can pause a game by pressing enter key
-            else if(event.key.keysym.scancode == SDL_SCANCODE_RETURN)
-            {
-                isPaused = !isPaused;
-                if(isPaused)
-                {
-                    menuMusic->pause();
-                }
-                else
-                {
-                    menuMusic->resume();
-                }
-            }
-            // stage complete cheat
-            else if(event.key.keysym.scancode == SDL_SCANCODE_BACKSPACE)
-            {
-                gameOver();
-                isWin = true;
-                score += scoreRewardForStage * 100;
-                gameOverTimer = winTimerStart;
-            }
+            if(!supportsPause())
+                return;
+
+            isPaused = !isPaused;
+            if(isPaused)
+                menuMusic->pause();
+            else
+                menuMusic->resume();
+            return;
         }
+
+        onKeyPressed(event.key.keysym.scancode);
     }
 
     void LevelScene::update(const unsigned int delta)
@@ -412,133 +139,10 @@ namespace bomberman
         if(isPaused)
             return;
 
-        if (isNetworked())
-        {
-            // --- Networked mode ---
-            // Server is the authority for all gameplay state.
-            // We only apply the latest authoritative position snapshot and run
-            // animations; local gameplay logic (enemies, bombs, timers) is
-            // suppressed until the server drives those events explicitly.
-            net::MsgSnapshot snapshot{};
-            if (game->tryGetLatestSnapshot(snapshot))
-            {
-                applySnapshot(snapshot);
-            }
-            Scene::update(delta);
-            updateCamera();
-        }
-        else
-        {
-            // --- Singleplayer mode ---
-            // Advance player position via the shared sim primitive, then run all
-            // local gameplay systems.
-            stepLocalPlayerMovement();
-            Scene::update(delta);
-            updatePlayerCollision();
-            updateEnemiesCollision();
-            updateBangsCollision();
-            updateCamera();
-            updateTimers(delta);
-        }
+        updateLevel(delta);
     }
 
-    void LevelScene::updateTimers(const unsigned int delta)
-    {
-        // update level timer
-        levelTimer -= delta;
-        levelTimerDelta += delta;
-        if(levelTimerDelta >= levelTimerUpdateText)
-        {
-            updateLevelTimer();
-        }
-        // update bomb timer
-        if(bomb != nullptr)
-        {
-            updateBombTimer(delta);
-        }
-        // update bang timer
-        if(bangs.size() > 0)
-        {
-            updateBangTimer(delta);
-        }
-        // update game over timer
-        if(isGameOver)
-        {
-            updateGameOverTimer(delta);
-        }
-
-        // finish level if level timer is 0
-        if(levelTimer <= 0 && !isGameOver)
-        {
-            gameOver();
-            isWin = false;
-            gameOverTimer = winTimerStart;
-        }
-    }
-
-    void LevelScene::updateLevelTimer()
-    {
-        if(levelTimer < 0)
-        {
-            return;
-        }
-        levelTimerDelta = 0;
-        const int timeInSec = static_cast<int>(levelTimer / 1000.0f);
-        std::string timeString = std::to_string(timeInSec);
-        while(timeString.size() < 3)
-        {
-            timeString = "0" + timeString;
-        }
-        timerNumber->setText(timeString);
-    }
-
-    void LevelScene::updateBombTimer(const unsigned int delta)
-    {
-        if(bombTimer > 0)
-        {
-            bombTimer -= delta;
-        }
-        else
-        {
-            spawnBang(bomb.get());
-            removeObject(bomb);
-            bomb = nullptr;
-        }
-    }
-
-    void LevelScene::updateBangTimer(const unsigned int delta)
-    {
-        if(bangTimer > 0)
-        {
-            bangTimer -= delta;
-        }
-        else
-        {
-            for(auto& bang : bangs)
-            {
-                removeObject(bang);
-                // change to grass
-                const int bangCellX = static_cast<int>(
-                    round((bang->getPositionX() - fieldPositionX) / static_cast<float>(scaledTileSize)));
-                const int bangCellY = static_cast<int>(
-                    round((bang->getPositionY() - fieldPositionY) / static_cast<float>(scaledTileSize)));
-                tiles[bangCellY][bangCellX] = baseTiles[bangCellY][bangCellX];
-            }
-            bangs.clear();
-        }
-    }
-
-    void LevelScene::updateGameOverTimer(const unsigned int delta)
-    {
-        if(gameOverTimer > 0)
-        {
-            gameOverTimer -= delta;
-        }
-        else
-        {
-            finish();
-        }
-    }
+    void LevelScene::onKeyPressed(const SDL_Scancode /*scancode*/) {}
 
     void LevelScene::updateMovement(const bool isPressed, const int keycode)
     {
@@ -546,7 +150,7 @@ namespace bomberman
         {
             return;
         }
-        // on press we start movement
+
         if(isPressed)
         {
             switch(keycode)
@@ -571,7 +175,6 @@ namespace bomberman
                     break;
             }
         }
-        // on release we stop moving
         else
         {
             switch(keycode)
@@ -596,41 +199,18 @@ namespace bomberman
                     break;
             }
         }
-        // depend on pressed key choose player's direction
+
         MovementDirection direction = MovementDirection::None;
         if(playerDirectionX != 0)
         {
-            if(playerDirectionX > 0)
-            {
-                direction = MovementDirection::Right;
-            }
-            else
-            {
-                direction = MovementDirection::Left;
-            }
+            direction = playerDirectionX > 0 ? MovementDirection::Right : MovementDirection::Left;
         }
         else if(playerDirectionY != 0)
         {
-            if(playerDirectionY > 0)
-            {
-                direction = MovementDirection::Down;
-            }
-            else
-            {
-                direction = MovementDirection::Up;
-            }
+            direction = playerDirectionY > 0 ? MovementDirection::Down : MovementDirection::Up;
         }
-        // apply direction
+
         player->setMovementDirection(direction);
-    }
-
-    void LevelScene::clearLocalMovementInput()
-    {
-        playerDirectionX = 0;
-        playerDirectionY = 0;
-
-        if (player != nullptr)
-            player->setMovementDirection(MovementDirection::None);
     }
 
     void LevelScene::updateCamera()
@@ -639,12 +219,11 @@ namespace bomberman
         {
             return;
         }
-        // consts for camera checking
+
         const int screenStart = fieldPositionX;
         const int screenFinish = fieldPositionX + scaledTileSize * static_cast<int>(tileArrayWidth);
         const int screenWidthHalf = game->getWindowWidth() / 2;
         int cameraPositionX = player->getPositionX();
-        // check borders of screen
         if(cameraPositionX <= screenWidthHalf)
         {
             cameraPositionX = screenStart;
@@ -657,288 +236,42 @@ namespace bomberman
         {
             cameraPositionX -= screenWidthHalf;
         }
-        // time to move camera
         setCamera(cameraPositionX, 0);
     }
 
-    void LevelScene::updateScore()
+
+    void LevelScene::clearLocalMovementInput()
     {
-        std::string scoreText = std::to_string(score);
-        scoreNumber->setText(scoreText);
-        scoreNumber->setSize(static_cast<int>(timerNumber->getWidth() / 3.0f) *
-                                 static_cast<int>(scoreText.size()),
-                             scoreNumber->getHeight());
-        scoreNumber->setPosition(game->getWindowWidth() / 2 - scoreNumber->getWidth() / 2,
-                                 scoreNumber->getPositionY());
-    }
+        playerDirectionX = 0;
+        playerDirectionY = 0;
 
-    void LevelScene::updatePlayerCollision()
-    {
-        if(player == nullptr)
-            return;
-
-        // Wall collision is now guaranteed by sim::stepMovementWithCollision in
-        // stepLocalPlayerMovement() — no revert needed here.
-
-        // Door win-condition check.
-        if(door != nullptr)
-        {
-            SDL_FRect playerRect = collision::scaleCentered(player->getRectF(), sim::kPlayerHitboxScale);
-            if(isCollisionDetected(playerRect, door->getRectF()))
-            {
-                if(!isGameOver && enemies.size() == 0)
-                {
-                    gameOver();
-                    isWin = true;
-                    score += scoreRewardForStage;
-                    gameOverTimer = winTimerStart;
-                }
-            }
-        }
-    }
-
-    void LevelScene::updateEnemiesCollision()
-    {
-        // iterate enemies for collision
-        for(const auto& enemy : enemies)
-        {
-            // iterate drawables for collision
-            for(const auto& collisionObject : collisions)
-            {
-                // check for block collision
-                if(isCollisionDetected(enemy->getRectF(), collisionObject.second->getRectF()))
-                {
-                    // stop moving on collision detection
-                    enemy->setMoving(false);
-                    enemy->revertLastMove();
-                }
-            }
-            // check for bomb collision
-            if(bomb && isCollisionDetected(enemy->getRectF(), bomb->getRectF()))
-            {
-                // stop moving on collision detection
-                enemy->setMoving(false);
-                enemy->revertLastMove();
-            }
-            // check for player collision
-            if(player != nullptr)
-            {
-                // set width to smaller size
-                SDL_FRect playerRect = collision::scaleCentered(player->getRectF(), kDamageHitboxScale);
-                if(isCollisionDetected(playerRect, enemy->getRectF()))
-                {
-                    // player killed by enemy
-                    removeObject(player);
-                    player = nullptr;
-                    gameOver();
-                }
-            }
-            if(player != nullptr)
-            {
-                // can attack?
-                if(!enemy->isMovingToCell() && enemy->canAttack())
-                {
-                    // check for attack radius
-                    if(abs(player->getPositionX() + player->getWidth() / 2 - enemy->getPositionX() -
-                           enemy->getWidth() / 2) < enemy->getAttackRadius() &&
-                       abs(player->getPositionY() + player->getHeight() / 2 - enemy->getPositionY() -
-                           enemy->getHeight() / 2) < enemy->getAttackRadius())
-                    {
-                        // start follow to player
-                        followToPlayer(enemy.get());
-                    }
-                }
-            }
-        }
-    }
-
-    void LevelScene::updateBangsCollision()
-    {
-        // check for bang collision
-        for(const auto& bang : bangs)
-        {
-            // check bricks
-            auto itCollision = collisions.begin();
-            while(itCollision != collisions.end())
-            {
-                if((*itCollision).first == Tile::Brick)
-                {
-                    auto brick = (*itCollision).second;
-                    if(isCollisionDetected(brick->getRectF(), bang->getRectF()))
-                    {
-                        destroyBrick(brick);
-                        // remove brick from collision array
-                        itCollision = collisions.erase(itCollision);
-                        continue;
-                    }
-                }
-                ++itCollision;
-            }
-            // check enemies
-            auto itEnemies = enemies.begin();
-            while(itEnemies != enemies.end())
-            {
-                SDL_FRect enemyRect =
-                    collision::scaleCentered((*itEnemies)->getRectF(), kDamageHitboxScale);
-                if(isCollisionDetected(enemyRect, bang->getRectF()))
-                {
-                    removeObject(*itEnemies);
-                    itEnemies = enemies.erase(itEnemies);
-
-                    // enemy killed by bang
-                    score += scoreRewardForKill;
-                    updateScore();
-                    continue;
-                }
-                ++itEnemies;
-            }
-            // check player
-            if(player != nullptr)
-            {
-                SDL_FRect playerRect = collision::scaleCentered(player->getRectF(), kDamageHitboxScale);
-                if(isCollisionDetected(playerRect, bang->getRectF()))
-                {
-                    removeObject(player);
-                    player = nullptr;
-                    gameOver();
-                }
-            }
-        }
-    }
-
-    bool LevelScene::isCollisionDetected(const SDL_FRect& rect1, const SDL_FRect& rect2) const
-    {
-        return collision::intersects(rect1, rect2);
-    }
-
-    void LevelScene::destroyBrick(std::shared_ptr<Object> brick)
-    {
-        // we need door if don't have
-        if(door == nullptr)
-        {
-            // left bricks count
-            long bricksCount = std::count_if(collisions.begin(), collisions.end(),
-                                             [](auto collision) { return collision.first == Tile::Brick; });
-            // random for door spawn
-            const auto seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
-            auto randDoor = std::bind(std::uniform_int_distribution<int>(0, doorSpawnRandomize),
-                                      std::mt19937(static_cast<unsigned int>(seed)));
-            // spawn door if we can
-            if(randDoor() == 0 || bricksCount <= 1)
-            {
-                spawnDoor(brick.get());
-            }
-        }
-        // change brick to grass and remove it
-        const int brickCellX = static_cast<int>(
-            round((brick->getPositionX() - fieldPositionX) / static_cast<float>(scaledTileSize)));
-        const int brickCellY = static_cast<int>(
-            round((brick->getPositionY() - fieldPositionY) / static_cast<float>(scaledTileSize)));
-        tiles[brickCellY][brickCellX] = Tile::Grass;
-        removeObject(brick);
-    }
-
-    void LevelScene::followToPlayer(Enemy* enemy)
-    {
-        // move to nearest cell if enemy is wandering
-        if(enemy->isMoving())
-        {
-            std::pair<int, int> cell = std::make_pair(0, 0);
-            enemy->moveToCell(cell);
-            return;
-        }
-        // get cells of creatures by their position
-        const int playerCellX = static_cast<int>(
-            round((player->getPositionX() - fieldPositionX) / static_cast<float>(scaledTileSize)));
-        const int playerCellY = static_cast<int>(
-            round((player->getPositionY() - fieldPositionY) / static_cast<float>(scaledTileSize)));
-        const int enemyCellX = static_cast<int>(
-            round((enemy->getPositionX() - fieldPositionX) / static_cast<float>(scaledTileSize)));
-        const int enemyCellY = static_cast<int>(
-            round((enemy->getPositionY() - fieldPositionY) / static_cast<float>(scaledTileSize)));
-
-        // Source is the left-most bottom-most corner
-        std::pair<unsigned int, unsigned int> src = std::make_pair(enemyCellY, enemyCellX);
-
-        // Destination is the left-most top-most corner
-        std::pair<unsigned int, unsigned int> dest = std::make_pair(playerCellY, playerCellX);
-
-        // get best nearest cell to follow
-        std::pair<int, int> cell = findBestCell(tiles, src, dest);
-        if(cell.first >= 0 && cell.second >= 0)
-        {
-            cell.first -= src.first;
-            cell.second -= src.second;
-            enemy->moveToCell(cell);
-        }
-        else
-        {
-            enemy->generateNewPath();
-        }
-    }
-
-    bool LevelScene::isNetworked() const
-    {
-        const net::NetClient* netClient = game->getNetClient();
-        return netClient != nullptr && netClient->isConnected();
+        if(player != nullptr)
+            player->setMovementDirection(MovementDirection::None);
     }
 
     void LevelScene::stepLocalPlayerMovement()
     {
-        if (!player)
+        if(!player)
             return;
 
-        // Clamp direction components to {-1, 0, 1}.
         const auto clampDir = [](int d) -> int8_t {
             return static_cast<int8_t>(d > 0 ? 1 : (d < 0 ? -1 : 0));
         };
         const int8_t moveX = clampDir(playerDirectionX);
         const int8_t moveY = clampDir(playerDirectionY);
 
-        // Run the shared authoritative movement primitive — same function the server uses.
         playerPos_ = sim::stepMovementWithCollision(playerPos_, moveX, moveY, tiles);
+        syncPlayerSpriteToSimPosition();
+    }
 
-        // Write the updated Q8 center position to the sprite as a screen top-left.
-        // Camera offset is not subtracted here — updateCamera() applies it via setCamera().
+    void LevelScene::syncPlayerSpriteToSimPosition()
+    {
+        if(!player)
+            return;
+
         const int screenX = sim::tileQToScreenTopLeft(playerPos_.xQ, fieldPositionX, scaledTileSize, 0);
         const int screenY = sim::tileQToScreenTopLeft(playerPos_.yQ, fieldPositionY, scaledTileSize, 0);
         player->setPosition(screenX, screenY);
-    }
-
-    void LevelScene::applySnapshot(const net::MsgSnapshot& snapshot)
-    {
-        if (!player)
-            return;
-
-        // Freshness guard: skip if this snapshot has already been applied.
-        if (snapshot.serverTick <= lastAppliedSnapshotTick_)
-            return;
-
-        const net::NetClient* netClient = game->getNetClient();
-        if (!netClient)
-            return;
-
-        const uint8_t localId = netClient->playerId();
-
-        for (uint8_t i = 0; i < snapshot.playerCount; ++i)
-        {
-            if (snapshot.players[i].playerId != localId)
-                continue;
-
-            // Keep playerPos_ in sync so camera and any future Q8 queries are correct.
-            playerPos_.xQ = snapshot.players[i].xQ;
-            playerPos_.yQ = snapshot.players[i].yQ;
-
-            // Convert tile-Q8 center position to screen top-left for sprite rendering.
-            // Camera offset is not subtracted here — updateCamera() reads getPositionX/Y()
-            // to compute the scene camera, which the renderer applies during draw.
-            const int screenX = sim::tileQToScreenTopLeft(playerPos_.xQ, fieldPositionX, scaledTileSize, 0);
-            const int screenY = sim::tileQToScreenTopLeft(playerPos_.yQ, fieldPositionY, scaledTileSize, 0);
-            player->setPosition(screenX, screenY);
-
-            lastAppliedSnapshotTick_ = snapshot.serverTick;
-            break;
-        }
     }
 
 } // namespace bomberman

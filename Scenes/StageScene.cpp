@@ -3,13 +3,15 @@
 #include "Game.h"
 #include "Net/NetClient.h"
 #include "Scenes/LevelScene.h"
+#include "Scenes/LevelSceneFactory.h"
 #include "Scenes/MenuScene.h"
 #include "Scenes/StageScene.h"
 
 namespace bomberman
 {
-    StageScene::StageScene(Game* _game, const unsigned int level, const unsigned int _score)
-        : Scene(_game), stage(level), score(_score)
+    StageScene::StageScene(Game* _game, const unsigned int level, const unsigned int _score,
+                           const LevelMode _mode)
+        : Scene(_game), stage(level), score(_score), mode(_mode)
     {
         // stage text
         auto text = std::make_shared<Text>(game->getAssetManager()->getFont(), game->getRenderer(),
@@ -28,17 +30,19 @@ namespace bomberman
         {
             untilNextSceneTimer = 0;
 
-            // If connected to a server, use the authoritative map seed.
             std::optional<uint32_t> mapSeed = std::nullopt;
-            net::NetClient* netClient = game->getNetClient();
-            if (netClient && netClient->isConnected())
+            if (mode == LevelMode::Multiplayer)
             {
-                uint32_t seed = 0;
-                if (netClient->tryGetMapSeed(seed))
-                    mapSeed = seed;
+                net::NetClient* netClient = game->getNetClient();
+                if (netClient && netClient->isConnected())
+                {
+                    uint32_t seed = 0;
+                    if (netClient->tryGetMapSeed(seed))
+                        mapSeed = seed;
+                }
             }
 
-            game->getSceneManager()->addScene("level", std::make_shared<LevelScene>(game, stage, score, mapSeed));
+            game->getSceneManager()->addScene("level", createLevelScene(game, stage, score, mode, mapSeed));
             game->getSceneManager()->activateScene("level");
             game->getSceneManager()->removeScene("stage");
         }
