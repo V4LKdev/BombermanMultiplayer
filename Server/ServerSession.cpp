@@ -43,11 +43,17 @@ namespace bomberman::server
             LOG_SERVER_INFO("Map generated with provided seed={}", state.mapSeed);
         else
             LOG_SERVER_INFO("Map generated with random seed={}", state.mapSeed);
+
+        state.diag.beginSession("server", net::kDiagEnabledServer);
     }
 
     void simulateServerTick(ServerState& state)
     {
         ++state.serverTick;
+
+        // TODO: pass real wall-clock time in ms here once available from the main loop.
+        //       For now the tick counter serves as a monotonic proxy.
+        state.diag.tick(state.serverTick);
 
         bool anyClient = false;
 
@@ -81,6 +87,10 @@ namespace bomberman::server
                     client.currentButtons = client.previousButtons;
                     ++client.inputGaps;
                     ++client.consecutiveInputGaps;
+
+                    // Detection lives here; telemetry goes to diag.
+                    state.diag.recordInputAnomaly(net::NetInputAnomalyType::Gap,
+                                                  nextSeq, client.previousButtons, "hold");
 
                     if (client.consecutiveInputGaps >= kRepeatedInputWarnThreshold
                         && state.serverTick >= client.nextGapWarnTick)
@@ -152,6 +162,9 @@ namespace bomberman::server
             LOG_NET_SNAPSHOT_DEBUG("Snapshot tick={} playerCount={}", snapshot.serverTick, snapshot.playerCount);
         }
         broadcastQueuedUnreliableGame(state.host, makeSnapshotPacket(snapshot));
+        state.diag.recordPacketSent(EMsgType::Snapshot,
+                                    static_cast<uint8_t>(EChannel::GameUnreliable),
+                                    kPacketHeaderSize + kMsgSnapshotSize);
 
         flush(state.host);
     }

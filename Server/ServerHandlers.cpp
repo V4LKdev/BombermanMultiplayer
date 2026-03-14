@@ -18,7 +18,20 @@ namespace bomberman::server
 
     namespace
     {
-        constexpr uint32_t kServerInputLogEveryN = static_cast<uint32_t>(sim::kTickRate) * 2u;
+        void recordPeerNote(net::NetDiagnostics* diag, const uint8_t peerId, std::string_view note,
+                            const uint32_t valueA = 0, const uint32_t valueB = 0)
+        {
+            if (!diag)
+                return;
+
+            NetEvent event{};
+            event.type = NetEventType::Note;
+            event.peerId = peerId;
+            event.valueA = valueA;
+            event.valueB = valueB;
+            event.note = std::string(note);
+            diag->recordEvent(event);
+        }
 
         /** @brief Sends a Reject packet and initiates a graceful disconnect. */
         void sendReject(ServerContext& ctx, MsgReject::EReason reason)
@@ -27,11 +40,22 @@ namespace bomberman::server
             reject.reason = reason;
             reject.expectedProtocolVersion = (reason == MsgReject::EReason::VersionMismatch) ? kProtocolVersion : 0;
 
-            if (queueReliableControl(ctx.peer, makeRejectPacket(reject)))
+            const bool sent = queueReliableControl(ctx.peer, makeRejectPacket(reject));
+            if (sent)
             {
                 flush(ctx.state.host);
                 LOG_NET_CONN_INFO("Sent Reject (reason={}) to peer {}",
                                   static_cast<int>(reason), ctx.peer->incomingPeerID);
+
+                if (ctx.diag)
+                {
+                    ctx.diag->recordPacketSent(EMsgType::Reject,
+                                               static_cast<uint8_t>(EChannel::ControlReliable),
+                                               kPacketHeaderSize + kMsgRejectSize);
+                    recordPeerNote(ctx.diag, 0xFF, "peer rejected",
+                                   static_cast<uint32_t>(reason),
+                                   static_cast<uint32_t>(ctx.peer->incomingPeerID));
+                }
             }
 
             enet_peer_disconnect_later(ctx.peer, 0);
@@ -110,6 +134,11 @@ namespace bomberman::server
         }
         LOG_NET_CONN_INFO("Queued Welcome to playerId={}", playerId);
 
+        if (ctx.diag)
+            ctx.diag->recordPacketSent(EMsgType::Welcome,
+                                       static_cast<uint8_t>(EChannel::ControlReliable),
+                                       kPacketHeaderSize + kMsgWelcomeSize);
+
         // Temporarily, the level info packet is considered part of the handshake, will be separated later.
         MsgLevelInfo levelInfo{};
         levelInfo.mapSeed = ctx.state.mapSeed;
@@ -120,6 +149,11 @@ namespace bomberman::server
             sendReject(ctx, MsgReject::EReason::Other);
             return;
         }
+
+        if (ctx.diag)
+            ctx.diag->recordPacketSent(EMsgType::LevelInfo,
+                                       static_cast<uint8_t>(EChannel::ControlReliable),
+                                       kPacketHeaderSize + kMsgLevelInfoSize);
 
         flush(ctx.state.host);
         LOG_NET_CONN_INFO("Sent handshake bundle (Welcome + LevelInfo seed={}) to playerId={}",
@@ -139,6 +173,10 @@ namespace bomberman::server
 
         // Start aggregated input diagnostics reporting after the first interval.
         slot->nextInputDiagTick = ctx.state.serverTick + kInputDiagReportTicks;
+
+        recordPeerNote(ctx.diag, playerId, "player accepted",
+                       static_cast<uint32_t>(ctx.peer->incomingPeerID),
+                       levelInfo.mapSeed);
     }
 
     void onInput(ServerContext& ctx, const PacketHeader& /*header*/, const uint8_t* payload, std::size_t size)
@@ -168,14 +206,28 @@ namespace bomberman::server
 
         uint8_t lateDropCount = 0;
         uint8_t aheadDropCount = 0;
+        uint8_t acceptedCount = 0;
         uint32_t firstAheadSeq = 0;
         uint32_t lastAheadSeq = 0;
         const uint32_t maxAcceptableSeq = client->lastConsumedInputSeq + kInputWindowAhead;
+
+        if (ctx.diag)
+            ctx.diag->recordInputEntriesReceived(msgInput.count);
 
         // Store each entry from the batch into the ring buffer.
         for (uint8_t i = 0; i < msgInput.count; ++i)
         {
             const uint32_t seq = msgInput.baseInputSeq + i;
+            const uint8_t  buttons = msgInput.inputs[i];
+
+            // Detection logic lives here; telemetry goes to diag.
+
+            // Unknown button bits: record but continue processing (do not reject).
+            if ((buttons & ~kInputKnownBits) != 0)
+            {
+                if (ctx.diag)
+                    ctx.diag->recordInputAnomaly(NetInputAnomalyType::UnknownButtons, seq, buttons);
+            }
 
             // Drop late arrivals: anything already consumed is discarded.
             if (seq <= client->lastConsumedInputSeq)
@@ -191,13 +243,16 @@ namespace bomberman::server
                     firstAheadSeq = seq;
                 lastAheadSeq = seq;
                 ++aheadDropCount;
+                if (ctx.diag)
+                    ctx.diag->recordInputAnomaly(NetInputAnomalyType::OutOfOrder, seq, buttons);
                 continue;
             }
 
             auto& slot = client->inputRing[seq % kServerInputBufferSize];
             slot.seq     = seq;
-            slot.buttons = msgInput.inputs[i];
+            slot.buttons = buttons;
             slot.valid   = true;
+            ++acceptedCount;
 
             if (seq > client->lastReceivedInputSeq)
                 client->lastReceivedInputSeq = seq;
@@ -205,6 +260,12 @@ namespace bomberman::server
 
         client->lateDrops += lateDropCount;
         client->aheadDrops += aheadDropCount;
+
+        if (ctx.diag)
+        {
+            ctx.diag->recordInputEntriesAccepted(acceptedCount);
+            ctx.diag->recordInputEntriesRedundant(lateDropCount);
+        }
 
         if (aheadDropCount > 0)
         {
@@ -229,7 +290,7 @@ namespace bomberman::server
         }
 
         // Periodic logging.
-        if (highestSeq % kServerInputLogEveryN == 0)
+        if (highestSeq % kInputBatchLogEveryN == 0)
         {
             LOG_NET_INPUT_DEBUG("Input playerId={} batch=[{}..{}] lastRecv={} lastConsumed={}",
                                 client->playerId, msgInput.baseInputSeq, highestSeq,
@@ -256,10 +317,30 @@ namespace bomberman::server
 
     void handleEventReceive(const ENetEvent& event, ServerState& state)
     {
-        LOG_NET_PACKET_TRACE("Received {} bytes on channel {}", event.packet->dataLength, channelName(event.channelID));
+        const std::size_t dataLength = event.packet->dataLength;
+        const uint8_t channelId = event.channelID;
 
-        ServerContext ctx{state, event.peer};
-        dispatchPacket(gDispatcher, ctx, event.packet->data, event.packet->dataLength);
+        LOG_NET_PACKET_TRACE("Received {} bytes on channel {}", dataLength, channelName(channelId));
+
+        ServerContext ctx{state, event.peer, &state.diag};
+
+        PacketHeader header{};
+        const uint8_t* payload = nullptr;
+        std::size_t payloadSize = 0;
+
+        if (!tryParsePacket(event.packet->data, dataLength, header, payload, payloadSize))
+        {
+            LOG_NET_PACKET_WARN("Failed to deserialize PacketHeader (malformed or truncated, {} bytes)", dataLength);
+            state.diag.recordMalformedPacketRecv(channelId, dataLength, "header parse failed");
+            return;
+        }
+
+        if (!gDispatcher.dispatch(ctx, header, payload, payloadSize))
+        {
+            LOG_NET_PACKET_TRACE("No handler for message type 0x{:02x}", static_cast<int>(header.type));
+        }
+
+        state.diag.recordPacketRecv(header.type, channelId, dataLength);
     }
 
 } // namespace bomberman::server

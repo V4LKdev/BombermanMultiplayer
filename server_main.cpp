@@ -1,6 +1,7 @@
 #include <csignal>
 #include <chrono>
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <string>
 #include <string_view>
@@ -207,6 +208,13 @@ int main(int argc, char** argv)
             {
                 case ENET_EVENT_TYPE_CONNECT:
                     LOG_SERVER_INFO("Peer connected (id={})", event.peer->incomingPeerID);
+                    {
+                        NetEvent diagEvent{};
+                        diagEvent.type = NetEventType::Note;
+                        diagEvent.valueA = static_cast<uint32_t>(event.peer->incomingPeerID);
+                        diagEvent.note = "peer connected";
+                        state.diag.recordEvent(diagEvent);
+                    }
                     break;
 
                 case ENET_EVENT_TYPE_RECEIVE:
@@ -222,6 +230,13 @@ int main(int argc, char** argv)
                         const uint8_t playerId = client->playerId;
                         LOG_SERVER_INFO("Peer disconnected (playerId={})", playerId);
 
+                        NetEvent diagEvent{};
+                        diagEvent.type = NetEventType::Note;
+                        diagEvent.peerId = playerId;
+                        diagEvent.valueA = static_cast<uint32_t>(event.peer->incomingPeerID);
+                        diagEvent.note = "player disconnected";
+                        state.diag.recordEvent(diagEvent);
+
                         // Null peer->data BEFORE resetting client state to prevent dangling reads.
                         event.peer->data = nullptr;
                         state.clients[playerId].reset();
@@ -232,6 +247,13 @@ int main(int argc, char** argv)
                     else
                     {
                         LOG_SERVER_INFO("Peer disconnected (not handshaked, enetId={})", event.peer->incomingPeerID);
+
+                        NetEvent diagEvent{};
+                        diagEvent.type = NetEventType::Note;
+                        diagEvent.valueA = static_cast<uint32_t>(event.peer->incomingPeerID);
+                        diagEvent.note = "peer disconnected before handshake";
+                        state.diag.recordEvent(diagEvent);
+
                         event.peer->data = nullptr;
                     }
                     break;
@@ -267,6 +289,11 @@ int main(int argc, char** argv)
             LOG_SERVER_WARN("Exceeded max server tick steps ({}), accumulator={:.3f}ms", bomberman::sim::kMaxStepsPerFrame, accumulatorMs);
         }
     }
+
+    // Write diagnostics report before tearing down ENet resources.
+    state.diag.endSession();
+    std::filesystem::create_directories("logs");
+    state.diag.writeSessionReport("logs/server_diag.txt");
 
     // Clean up.
     enet_host_destroy(server);

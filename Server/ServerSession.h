@@ -8,6 +8,8 @@
 #include <enet/enet.h>
 
 #include "Const.h"
+#include "Net/NetDiagConfig.h"
+#include "Net/NetDiagnostics.h"
 #include "Net/NetCommon.h"
 #include "Sim/Movement.h"
 
@@ -19,18 +21,6 @@ namespace bomberman::server
 
     /** @brief Maximum distance ahead of lastConsumedInputSeq that a received input is allowed to be. */
     constexpr uint32_t kInputWindowAhead = kServerInputBufferSize - 1;
-
-    /** @brief Aggregated input diagnostics reporting cadence in simulation ticks. */
-    constexpr uint32_t kInputDiagReportTicks = static_cast<uint32_t>(sim::kTickRate) * 4u;
-
-    /** @brief Warning threshold for repeated ahead drops or input gaps before emitting a WARN line. */
-    constexpr uint16_t kRepeatedInputWarnThreshold = 6;
-
-    /** @brief Minimum spacing between repeated input WARN logs. */
-    constexpr uint32_t kRepeatedInputWarnCooldownTicks = static_cast<uint32_t>(sim::kTickRate) * 2u;
-
-    /** @brief Server snapshot debug summary cadence in ticks. */
-    constexpr uint32_t kServerSnapshotLogEveryN = static_cast<uint32_t>(sim::kTickRate) * 2u;
 
     /** @brief A single slot in the per-client input ring buffer. */
     struct InputRingEntry
@@ -56,12 +46,15 @@ namespace bomberman::server
         uint8_t currentButtons  = 0;   ///< Buttons used for the current simulation tick.
 
         // ---- Input diagnostics ----
+        // TODO(diag-migration): these windowed counters are transitional. Detection logic stays here;
+        //      long-lived telemetry storage is now owned by ServerState::diag via recordInputAnomaly().
+        //      Remove these fields once the periodic summary log is replaced by writeSessionReport().
         uint32_t lateDrops = 0;
         uint32_t aheadDrops = 0;
         uint32_t inputGaps = 0;
         uint64_t inputLeadSum = 0;
         uint32_t inputLeadSamples = 0;
-        uint32_t nextInputDiagTick = kInputDiagReportTicks;
+        uint32_t nextInputDiagTick = net::kInputDiagReportTicks;
         uint16_t consecutiveAheadDropBatches = 0;
         uint16_t consecutiveInputGaps = 0;
         uint32_t nextAheadWarnTick = 0;
@@ -83,6 +76,9 @@ namespace bomberman::server
 
         uint32_t mapSeed = 0;
         sim::TileMap tiles{};
+
+        /** @brief Diagnostics recorder for this server session. */
+        net::NetDiagnostics diag;
     };
 
     /** @brief Initialises a ServerState to a clean pre-game state. */
@@ -91,8 +87,9 @@ namespace bomberman::server
     /** @brief Per-dispatch context passed to handlers. */
     struct ServerContext
     {
-        ServerState& state;
-        ENetPeer*    peer;
+        ServerState&          state;
+        ENetPeer*             peer;
+        net::NetDiagnostics*  diag = nullptr; ///< Non-owning pointer, null-checked at each call site.
     };
 
     /** @brief Advances the server simulation by one tick. */
