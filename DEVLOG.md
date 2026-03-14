@@ -764,3 +764,93 @@ Prepare the project for the upcoming telemetry/debugging work by making logs eas
 - Logs are now easier to filter by actual networking concern.
 - The runtime configuration is simpler and less error-prone.
 - Default config no longer risks turning on shared file logging for both client and server processes.
+
+## 2026-03-13 – Make Default Logging Config Resolution Deterministic
+
+### Goal
+Remove the confusing difference between terminal launches and IDE launches when loading the default logging config.
+
+### Changes
+- Stopped resolving `Configs/DefaultLogging.ini` relative to the current working directory.
+- Compiled the project source root into both targets and resolved the default logging config from that stable path.
+- Kept the fallback model unchanged:
+  - hardcoded defaults first
+  - default config file if present
+  - CLI overrides on top
+
+### Why This Mattered
+- A malformed config file would fail correctly from the project root, but silently be skipped when launched from a different working directory.
+- That made logging behavior depend on how the executable was started rather than on the project itself.
+
+### Result
+- Terminal and CLion launches now behave the same.
+- Malformed default config is detected consistently.
+- The logging setup is less fragile and easier to reason about.
+
+## 2026-03-14 – Add Server Diagnostics MVP And Refine Telemetry Semantics
+
+### Goal
+Lay the first real diagnostics foundation for the networking layer before prediction/reconciliation work begins.
+
+### Changes
+- Added `NetDiagnostics` and `NetDiagConfig` as a small reusable diagnostics core.
+- Wired server-side session lifecycle hooks:
+  - session begin
+  - session end
+  - text report output on shutdown
+- Added packet accounting hooks for:
+  - successful typed receives
+  - successful queued sends
+  - malformed receives before typed dispatch
+- Added server-side input diagnostics for:
+  - gaps / hold fallback
+  - ahead-window drops
+  - unknown input bits
+- Added lifecycle notes for:
+  - peer connected
+  - player accepted
+  - player disconnected
+  - peer rejected
+- Refined the telemetry model after smoke tests:
+  - successful packet traffic is counted exactly but no longer floods recent-event history
+  - resend overlap is no longer mislabeled as a `TooOld` anomaly
+  - overlap is now tracked separately as `input_entries_redundant`
+  - recent-event history is reserved for genuinely interesting events
+- Added useful input transport summary fields:
+  - `input_entries_received_total`
+  - `input_entries_accepted`
+  - `input_entries_redundant`
+  - `input_redundancy_ratio`
+
+### Validation
+- Ran local smoke tests with one client and with several clients.
+- Confirmed that:
+  - packet counters look plausible
+  - anomaly counts are now semantically correct
+  - recent-event history is readable instead of being drowned by resend overlap
+
+### Result
+- The project now has a practical server-side telemetry baseline.
+- Diagnostics are strong enough to explain real runtime behavior instead of just producing noise.
+
+## 2026-03-14 – Send Neutral Input While Unfocused
+
+### Goal
+Stop client focus loss from turning into misleading server-side input gaps and stale held movement.
+
+### Problem
+- Under Hyprland, moving the mouse off a client window immediately removes focus.
+- When that happened during testing, the client could stop producing fresh gameplay input while the server kept simulating.
+- The server then logged long `Gap` / `hold` streaks that were mostly test-environment artifacts rather than network transport faults.
+
+### Changes
+- Added explicit keyboard-focus tracking in `Game`.
+- On `SDL_WINDOWEVENT_FOCUS_LOST`, the client now:
+  - marks itself unfocused
+  - clears local held movement state in `LevelScene`
+- While unfocused, `pollNetInput()` sends a neutral `0` button mask every simulation tick instead of relying on stale local key state.
+
+### Result
+- Unfocused multiplayer clients now fail safe by sending neutral input.
+- The server no longer has to infer long hold streaks from missing fresh commands caused by local focus loss.
+- Diagnostics remain useful even in multi-window local testing.
