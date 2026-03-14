@@ -967,3 +967,34 @@ Finish the remaining high-value cleanup work on the server telemetry path so the
 ### Result
 - The server telemetry model now tells a cleaner and more truthful story.
 - The remaining work can shift from semantics cleanup to new capability instead of more firefighting in the diagnostics baseline.
+
+## 2026-03-15 (2cd9f3e) – Split Level Scene Into Shared SP/MP Architecture
+
+### Goal
+Separate singleplayer gameplay logic from multiplayer presentation logic before adding more mode-specific systems such as prediction, remote players, authoritative replicated gameplay, and different match rules.
+
+### Changes
+- Turned `LevelScene` into a shared abstract scaffold instead of a mixed-mode concrete scene.
+- Added `SingleplayerLevelScene` for the full local gameplay path:
+  - enemies
+  - bombs / bangs
+  - door spawning
+  - timer progression
+  - score updates
+  - win / game-over / stage flow
+  - local collision-driven gameplay
+- Added `MultiplayerLevelScene` as an intentionally thin snapshot-driven scene:
+  - applies authoritative local-player position from snapshots
+  - updates scene objects and camera
+  - leaves future multiplayer-only systems room to grow cleanly
+- Added `LevelSceneFactory` plus `LevelMode` so stage/menu/connect flow resolves the correct concrete level scene in one place.
+- Updated `StageScene`, `MenuScene`, and `ConnectScene` to create the correct mode-specific level flow.
+- Preserved `LevelScene` as the common base type so existing `Game.cpp` integration remains simple.
+
+### Validation
+- Re-tested the existing singleplayer flow to confirm the full gameplay scene still behaves correctly.
+- Re-tested multiplayer scene startup to confirm the new thin scene shape works with the current snapshot-driven movement scope.
+
+### Result
+- Singleplayer and multiplayer scene responsibilities are now structurally separated instead of being mixed inside one class.
+- The project now has clean space for multiplayer-only work such as remote player sprites, prediction/reconciliation, authoritative bombs, and different multiplayer UI/debug systems without further bloating the singleplayer path.
