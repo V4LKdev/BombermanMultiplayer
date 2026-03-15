@@ -1101,3 +1101,21 @@ Tighten multiplayer leave/shutdown behavior and make the server diagnostics mode
 ### Result
 - Multiplayer shutdown behavior is cleaner and server diagnostics now tell a much more coherent story under impairment.
 - The project is in a better place to add a fixed input buffer and local movement prediction without first fighting the telemetry model.
+
+## 2026-03-15 (7af5a91) – Tighten Multiplayer Scene Input And Continuity Flow
+
+### Goal
+Remove a few remaining multiplayer scene/input mismatches now that the scene split and remote-player work are in place.
+
+### Changes
+- Stopped multiplayer network input polling from running in non-gameplay scenes.
+- Added a scene-level capability hook so `Game` no longer needs RTTI to decide whether a scene wants network input polling.
+- Kept SDL event-driven local movement explicitly singleplayer-only.
+- Made multiplayer stage/level return to menu cleanly if the client is no longer connected.
+- Ensured stale online `"level"` scenes are removed when leaving multiplayer.
+- Fixed a small warning-cleanup issue in newer diagnostics code.
+
+### Result
+- Multiplayer input flow is now better aligned with the actual scene architecture.
+- Menu/connect/stage scenes no longer accidentally behave like online gameplay scenes.
+- The multiplayer leave/disconnect path is more robust and less stateful.
