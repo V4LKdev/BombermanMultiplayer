@@ -1036,3 +1036,68 @@ Replace the temporary multiplayer debug-dot overlay with real multiplayer player
 ### Result
 - Multiplayer presentation has moved from temporary diagnostics-style visualization to real scene-owned remote player rendering.
 - The codebase now has a clean place to add interpolation, extrapolation, remote animation improvements, and later multiplayer-only presentation systems without putting that logic back into `Game`.
+
+## 2026-03-15 (48c805e) – Add Network Impairment Launcher And Pre-Prediction Baseline
+
+### Goal
+Create a repeatable local workflow for making multiplayer latency pain visible before client-side prediction work starts.
+
+### Changes
+- Added a Linux `tc netem` launcher for local client testing with prompted:
+  - delay
+  - jitter
+  - packet loss
+- Added automatic impairment cleanup on exit and on interrupted launcher shutdown.
+- Added a baseline test archive under `Docs/NetworkTests/Baseline_2026-03-15/` containing:
+  - raw server diagnostics reports
+  - short scenario notes summarizing feel and key observations
+
+### Validation
+- Ran single-client local tests across:
+  - control
+  - delay
+  - heavy delay
+  - delay + jitter
+  - delay + jitter + loss
+- Confirmed server RTT/variance/loss samples moved in believable ways under the launcher-imposed impairment.
+
+### Result
+- The project now has a simple, repeatable before-prediction test harness and a saved baseline to compare against later prediction work.
+
+## 2026-03-15 (3462d69, 19a8087) – Graceful MP Shutdown And Refine Server Diagnostics Semantics
+
+### Goal
+Tighten multiplayer leave/shutdown behavior and make the server diagnostics model clearer before moving on to input buffering and prediction.
+
+### Changes
+- Added graceful multiplayer disconnect on:
+  - ESC leave from `MultiplayerLevelScene`
+  - SDL window close / Alt+F4
+  - `SIGINT` / `SIGTERM` on the client
+- Stopped the server from writing diagnostics reports when `--net-diag` is not enabled.
+- Refactored diagnostics semantics to separate:
+  - packet/dispatch facts
+  - input stream accounting
+  - simulation continuity
+- Replaced generic note-style lifecycle reporting with structured peer lifecycle events.
+- Stopped treating fully stale input batches as packet receive failures.
+- Added input stream accounting that now closes explicitly with:
+  - received
+  - accepted
+  - redundant
+  - rejected outside window
+- Kept `Gap` strictly simulation-level and reported it under a dedicated `Simulation continuity` section.
+- Added cooldown-based recent-event dedupe so repeated impairment-driven events no longer flood the recent-event ring.
+- Added a future placeholder constant for fixed server input delay and a corresponding buffered-recovery diagnostics seam for later use.
+
+### Validation
+- Re-tested local multiplayer leave behavior and confirmed cleaner disconnect handling.
+- Re-ran control and impaired single-client diagnostics tests.
+- Confirmed the refined report now shows:
+  - exact input accounting totals
+  - a clean separation between input-stream timing and simulation consequences
+  - far more readable recent-event history under jitter
+
+### Result
+- Multiplayer shutdown behavior is cleaner and server diagnostics now tell a much more coherent story under impairment.
+- The project is in a better place to add a fixed input buffer and local movement prediction without first fighting the telemetry model.
