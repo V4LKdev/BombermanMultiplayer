@@ -115,6 +115,10 @@ namespace bomberman
          */
         void setFlip(SDL_RendererFlip flip);
         /**
+         * @brief Set texture color modulation applied during draw.
+         */
+        void setColorMod(Uint8 r, Uint8 g, Uint8 b);
+        /**
          * @brief Update object
          *
          * @param delta - time in milliseconds
@@ -135,6 +139,9 @@ namespace bomberman
         SDL_RendererFlip flipping = SDL_FLIP_NONE;      // flip of texture
         float positionX = 0.0f;                         // precise position X
         float positionY = 0.0f;                         // precise position Y
+        Uint8 colorModR = 0xFF;                         // texture color modulation R
+        Uint8 colorModG = 0xFF;                         // texture color modulation G
+        Uint8 colorModB = 0xFF;                         // texture color modulation B
 
       private:
         bool isAttachedToCamera = true; // follow to camera

@@ -94,11 +94,6 @@ namespace bomberman
         bool mute_ = false;                             ///< When true, all audio output is silenced at startup.
         bool hasKeyboardFocus_ = true;                  ///< True while the SDL window has keyboard focus.
 
-        net::MsgSnapshot debugSnapshot_{};   ///< Latest server snapshot, refreshed each tick for the debug overlay.
-        bool debugSnapshotValid_ = false;    ///< True once at least one snapshot has been received.
-
-        /** @brief Draws server-authoritative position dots as a debug overlay. */
-        void drawNetDebugOverlay();
 
         /** @brief Updates internal focus state and clears local input when focus is lost. */
         void handleWindowFocusChanged(bool hasFocus);

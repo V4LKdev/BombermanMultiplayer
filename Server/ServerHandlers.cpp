@@ -1,5 +1,6 @@
 #include "ServerHandlers.h"
 
+#include <optional>
 #include <string_view>
 
 #include "Const.h"
@@ -161,12 +162,18 @@ namespace bomberman::server
         LOG_NET_CONN_INFO("Hello from \"{}\" (peer {})", playerName, ctx.peer->incomingPeerID);
 
         // Allocate a player ID from the pool.
-        const uint8_t playerId = ctx.state.playerIdPool[--ctx.state.playerIdPoolSize];
+        const std::optional<uint8_t> playerId = acquirePlayerId(ctx.state);
+        if(!playerId.has_value())
+        {
+            ctx.receiveResult = ReceiveDispatchResult::Rejected;
+            sendReject(ctx, MsgReject::EReason::ServerFull);
+            return;
+        }
 
         // Build and send Welcome response.
         MsgWelcome welcome{};
         welcome.protocolVersion = kProtocolVersion;
-        welcome.playerId        = playerId;
+        welcome.playerId        = playerId.value();
         welcome.serverTickRate  = sim::kTickRate;
 
         if (!queueReliableControl(ctx.peer, makeWelcomePacket(welcome)))
@@ -174,21 +181,21 @@ namespace bomberman::server
             LOG_NET_CONN_ERROR("Failed to send Welcome to peer {} - rejecting", ctx.peer->incomingPeerID);
             if (ctx.diag)
                 ctx.diag->recordPacketSent(EMsgType::Welcome,
-                                           playerId,
+                                           playerId.value(),
                                            static_cast<uint8_t>(EChannel::ControlReliable),
                                            kPacketHeaderSize + kMsgWelcomeSize,
                                            NetPacketResult::Dropped);
             // Return playerId to pool on failure.
-            ctx.state.playerIdPool[ctx.state.playerIdPoolSize++] = playerId;
+            releasePlayerId(ctx.state, playerId.value());
             ctx.receiveResult = ReceiveDispatchResult::Rejected;
             sendReject(ctx, MsgReject::EReason::Other);
             return;
         }
-        LOG_NET_CONN_INFO("Queued Welcome to playerId={}", playerId);
+        LOG_NET_CONN_INFO("Queued Welcome to playerId={}", playerId.value());
 
         if (ctx.diag)
             ctx.diag->recordPacketSent(EMsgType::Welcome,
-                                       playerId,
+                                       playerId.value(),
                                        static_cast<uint8_t>(EChannel::ControlReliable),
                                        kPacketHeaderSize + kMsgWelcomeSize);
 
@@ -200,11 +207,11 @@ namespace bomberman::server
             LOG_NET_CONN_ERROR("Failed to send LevelInfo to peer {} - rejecting", ctx.peer->incomingPeerID);
             if (ctx.diag)
                 ctx.diag->recordPacketSent(EMsgType::LevelInfo,
-                                           playerId,
+                                           playerId.value(),
                                            static_cast<uint8_t>(EChannel::ControlReliable),
                                            kPacketHeaderSize + kMsgLevelInfoSize,
                                            NetPacketResult::Dropped);
-            ctx.state.playerIdPool[ctx.state.playerIdPoolSize++] = playerId;
+            releasePlayerId(ctx.state, playerId.value());
             ctx.receiveResult = ReceiveDispatchResult::Rejected;
             sendReject(ctx, MsgReject::EReason::Other);
             return;
@@ -212,18 +219,18 @@ namespace bomberman::server
 
         if (ctx.diag)
             ctx.diag->recordPacketSent(EMsgType::LevelInfo,
-                                       playerId,
+                                       playerId.value(),
                                        static_cast<uint8_t>(EChannel::ControlReliable),
                                        kPacketHeaderSize + kMsgLevelInfoSize);
 
         flush(ctx.state.host);
         LOG_NET_CONN_INFO("Sent handshake bundle (Welcome + LevelInfo seed={}) to playerId={}",
-                          levelInfo.mapSeed, playerId);
+                          levelInfo.mapSeed, playerId.value());
 
         // Initialize per-client state in the stable-address array slot.
-        auto& slot = ctx.state.clients[playerId];
+        auto& slot = ctx.state.clients[playerId.value()];
         slot.emplace();
-        slot->playerId = playerId;
+        slot->playerId = playerId.value();
         slot->peer = ctx.peer;
         // Spawn at the center of the start tile in Q8 (center convention: col*256+128, row*256+128).
         // TODO: individual spawn points per player.
@@ -232,10 +239,10 @@ namespace bomberman::server
         // Store stable pointer in peer->data for fast lookup in handlers and disconnect path.
         ctx.peer->data = &slot.value();
 
-        recordPeerNote(ctx.diag, playerId, "player accepted",
+        recordPeerNote(ctx.diag, playerId.value(), "player accepted",
                        static_cast<uint32_t>(ctx.peer->incomingPeerID),
                        levelInfo.mapSeed);
-        ctx.diagPeerId = playerId;
+        ctx.diagPeerId = playerId.value();
         ctx.receiveResult = ReceiveDispatchResult::Ok;
     }
 

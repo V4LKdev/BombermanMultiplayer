@@ -191,14 +191,6 @@ namespace bomberman
                 if (netClient_ != nullptr && netClient_->isConnected())
                 {
                     pollNetInput();
-
-                    // Refresh debug overlay snapshot unconditionally.
-                    net::MsgSnapshot latestSnapshot{};
-                    if (netClient_->tryGetLatestSnapshot(latestSnapshot))
-                    {
-                        debugSnapshot_ = latestSnapshot;
-                        debugSnapshotValid_ = true;
-                    }
                 }
             }
 
@@ -213,52 +205,10 @@ namespace bomberman
             SDL_SetRenderDrawColor(renderer, 0x00, 0x00, 0x00, 0x00);
             SDL_RenderClear(renderer);
             sceneManager->draw();
-            drawNetDebugOverlay();
             SDL_RenderPresent(renderer);
         }
     }
 
-    void Game::drawNetDebugOverlay()
-    {
-        if (!debugSnapshotValid_ || !netClient_)
-            return;
-
-        // Only draw when a LevelScene is active.
-        auto* levelScene = dynamic_cast<LevelScene*>(sceneManager->getCurrentScene());
-        if (!levelScene)
-            return;
-
-        const LevelScene::FieldTransform ft = levelScene->getFieldTransform();
-        const SDL_Rect camera = levelScene->getCamera();
-
-        // Color palette per playerId.
-        static constexpr struct { uint8_t r, g, b; } kPlayerColors[] = {
-            {0xFF, 0x22, 0x22},  // Red
-            {0x22, 0xFF, 0x22},  // Green
-            {0x22, 0x88, 0xFF},  // Blue
-            {0xFF, 0xFF, 0x22},  // Yellow
-        };
-
-        constexpr int kDotSize = 8;
-
-        for (uint8_t i = 0; i < debugSnapshot_.playerCount; ++i)
-        {
-            const auto& p = debugSnapshot_.players[i];
-
-            // Convert tile-Q8 → screen pixels using the same transform the renderer uses.
-            const int screenX = sim::tileQToScreen(p.xQ, ft.fieldX, ft.scaledTile, camera.x);
-            const int screenY = sim::tileQToScreen(p.yQ, ft.fieldY, ft.scaledTile, camera.y);
-
-            const int colorIdx = p.playerId % 4;
-            SDL_SetRenderDrawColor(renderer,
-                                   kPlayerColors[colorIdx].r,
-                                   kPlayerColors[colorIdx].g,
-                                   kPlayerColors[colorIdx].b, 0xFF);
-
-            const SDL_Rect dot = { screenX - kDotSize / 2, screenY - kDotSize / 2, kDotSize, kDotSize };
-            SDL_RenderFillRect(renderer, &dot);
-        }
-    }
 
     void Game::pollNetInput()
     {

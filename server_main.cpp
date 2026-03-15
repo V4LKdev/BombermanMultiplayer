@@ -293,7 +293,7 @@ int main(int argc, char** argv)
                         state.clients[playerId].reset();
 
                         // Return playerId to the pool.
-                        state.playerIdPool[state.playerIdPoolSize++] = playerId;
+                        bomberman::server::releasePlayerId(state, playerId);
                     }
                     else
                     {
@@ -342,7 +342,14 @@ int main(int argc, char** argv)
     // Write diagnostics report before tearing down ENet resources.
     state.diag.endSession();
     std::filesystem::create_directories("logs");
-    state.diag.writeSessionReport("logs/server_diag.txt");
+    if(state.diag.writeSessionReport("logs/server_diag.txt"))
+    {
+        LOG_SERVER_INFO("Diagnostics report written to logs/server_diag.txt");
+    }
+    else
+    {
+        LOG_SERVER_ERROR("Failed to write diagnostics report");
+    }
 
     // Clean up.
     enet_host_destroy(server);

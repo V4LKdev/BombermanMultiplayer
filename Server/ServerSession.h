@@ -69,20 +69,25 @@ namespace bomberman::server
         /** @brief Stable-address client storage indexed by playerId. */
         std::array<std::optional<ClientState>, net::kMaxPlayers> clients{};
 
-        /** @brief Free player ID pool. Pop to allocate, push to free. */
-        uint8_t playerIdPool[net::kMaxPlayers]{};
+        uint8_t playerIdPool[net::kMaxPlayers]{}; ///< Pool of available player IDs [0, kMaxPlayers).
         uint8_t playerIdPoolSize = 0;
 
         uint32_t mapSeed = 0;
         sim::TileMap tiles{};
 
-        /** @brief Diagnostics recorder for this server session. */
-        net::NetDiagnostics diag;
+        net::NetDiagnostics diag; ///<  Diagnostics recorder for this session
     };
 
     /** @brief Initialises a ServerState to a clean pre-game state. */
     void initServerState(ServerState& state, ENetHost* host, bool diagEnabled = false,
                          bool overrideMapSeed = false, uint32_t mapSeed = 0);
+
+    /** @brief Returns the lowest available playerId and removes it from the free pool. */
+    [[nodiscard]]
+    std::optional<uint8_t> acquirePlayerId(ServerState& state);
+
+    /** @brief Returns a playerId to the free pool while keeping pool order deterministic. */
+    void releasePlayerId(ServerState& state, uint8_t playerId);
 
     /** @brief Per-dispatch context passed to handlers. */
     struct ServerContext

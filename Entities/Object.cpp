@@ -96,6 +96,13 @@ namespace bomberman
         flipping = flip;
     }
 
+    void Object::setColorMod(const Uint8 r, const Uint8 g, const Uint8 b)
+    {
+        colorModR = r;
+        colorModG = g;
+        colorModB = b;
+    }
+
     void Object::update(const unsigned int /*delta*/) {}
 
     void Object::draw(const SDL_Rect& camera) const
@@ -109,8 +116,11 @@ namespace bomberman
                 destrinationRect.x -= camera.x;
                 destrinationRect.y -= camera.y;
             }
+
+            SDL_SetTextureColorMod(texture.get(), colorModR, colorModG, colorModB);
             // draw on the screen
             SDL_RenderCopyEx(renderer, texture.get(), &clip, &destrinationRect, 0, nullptr, flipping);
+            SDL_SetTextureColorMod(texture.get(), 0xFF, 0xFF, 0xFF);
         }
     }
 } // namespace bomberman

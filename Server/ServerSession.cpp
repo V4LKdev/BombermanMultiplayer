@@ -47,6 +47,40 @@ namespace bomberman::server
         state.diag.beginSession("server", diagEnabled);
     }
 
+    std::optional<uint8_t> acquirePlayerId(ServerState& state)
+    {
+        if(state.playerIdPoolSize == 0)
+            return std::nullopt;
+
+        const uint8_t playerId = state.playerIdPool[0];
+
+        for(uint8_t i = 1; i < state.playerIdPoolSize; ++i)
+            state.playerIdPool[i - 1] = state.playerIdPool[i];
+
+        --state.playerIdPoolSize;
+        return playerId;
+    }
+
+    void releasePlayerId(ServerState& state, const uint8_t playerId)
+    {
+        if(state.playerIdPoolSize >= kMaxPlayers)
+            return;
+
+        // Keep free IDs sorted so acquirePlayerId() always returns the lowest available id.
+        uint8_t insertIndex = 0;
+        while(insertIndex < state.playerIdPoolSize && state.playerIdPool[insertIndex] < playerId)
+            ++insertIndex;
+
+        if(insertIndex < state.playerIdPoolSize && state.playerIdPool[insertIndex] == playerId)
+            return;
+
+        for(uint8_t i = state.playerIdPoolSize; i > insertIndex; --i)
+            state.playerIdPool[i] = state.playerIdPool[i - 1];
+
+        state.playerIdPool[insertIndex] = playerId;
+        ++state.playerIdPoolSize;
+    }
+
     void simulateServerTick(ServerState& state)
     {
         ++state.serverTick;
