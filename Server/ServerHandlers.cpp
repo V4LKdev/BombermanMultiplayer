@@ -24,7 +24,6 @@ namespace bomberman::server
             switch (result)
             {
                 case ReceiveDispatchResult::Ok:        return NetPacketResult::Ok;
-                case ReceiveDispatchResult::Dropped:   return NetPacketResult::Dropped;
                 case ReceiveDispatchResult::Rejected:  return NetPacketResult::Rejected;
                 case ReceiveDispatchResult::Malformed: return NetPacketResult::Malformed;
                 default:                               return NetPacketResult::Rejected;
@@ -43,19 +42,16 @@ namespace bomberman::server
             }
         }
 
-        void recordPeerNote(net::NetDiagnostics* diag, const uint8_t peerId, std::string_view note,
-                            const uint32_t valueA = 0, const uint32_t valueB = 0)
+        void recordPeerLifecycle(net::NetDiagnostics* diag,
+                                 const NetPeerLifecycleType type,
+                                 const uint8_t peerId,
+                                 const uint32_t transportPeerId,
+                                 std::string_view note = {})
         {
             if (!diag)
                 return;
 
-            NetEvent event{};
-            event.type = NetEventType::Note;
-            event.peerId = peerId;
-            event.valueA = valueA;
-            event.valueB = valueB;
-            event.note = std::string(note);
-            diag->recordEvent(event);
+            diag->recordPeerLifecycle(type, peerId, transportPeerId, note);
         }
 
         /** @brief Sends a Reject packet and initiates a graceful disconnect. */
@@ -64,6 +60,12 @@ namespace bomberman::server
             MsgReject reject{};
             reject.reason = reason;
             reject.expectedProtocolVersion = (reason == MsgReject::EReason::VersionMismatch) ? kProtocolVersion : 0;
+
+            recordPeerLifecycle(ctx.diag,
+                                NetPeerLifecycleType::PeerRejected,
+                                ctx.diagPeerId,
+                                static_cast<uint32_t>(ctx.peer->incomingPeerID),
+                                rejectReasonName(reason));
 
             const bool sent = queueReliableControl(ctx.peer, makeRejectPacket(reject));
             if (sent)
@@ -75,19 +77,15 @@ namespace bomberman::server
                 if (ctx.diag)
                 {
                     ctx.diag->recordPacketSent(EMsgType::Reject,
-                                               0xFF,
+                                               ctx.diagPeerId,
                                                static_cast<uint8_t>(EChannel::ControlReliable),
                                                kPacketHeaderSize + kMsgRejectSize);
-                    const std::string note = std::string("peer rejected: ") + std::string(rejectReasonName(reason));
-                    recordPeerNote(ctx.diag, 0xFF, note,
-                                   static_cast<uint32_t>(ctx.peer->incomingPeerID),
-                                   static_cast<uint32_t>(reason));
                 }
             }
             else if (ctx.diag)
             {
                 ctx.diag->recordPacketSent(EMsgType::Reject,
-                                           0xFF,
+                                           ctx.diagPeerId,
                                            static_cast<uint8_t>(EChannel::ControlReliable),
                                            kPacketHeaderSize + kMsgRejectSize,
                                            NetPacketResult::Dropped);
@@ -124,7 +122,7 @@ namespace bomberman::server
         if (hasClientState(ctx.peer))
         {
             LOG_NET_CONN_DEBUG("Duplicate Hello from already-handshaked peer {} - ignoring", ctx.peer->incomingPeerID);
-            ctx.receiveResult = ReceiveDispatchResult::Dropped;
+            ctx.receiveResult = ReceiveDispatchResult::Rejected;
             ctx.diagPeerId = gameplayPeerId(ctx.peer);
             return;
         }
@@ -239,9 +237,10 @@ namespace bomberman::server
         // Store stable pointer in peer->data for fast lookup in handlers and disconnect path.
         ctx.peer->data = &slot.value();
 
-        recordPeerNote(ctx.diag, playerId.value(), "player accepted",
-                       static_cast<uint32_t>(ctx.peer->incomingPeerID),
-                       levelInfo.mapSeed);
+        recordPeerLifecycle(ctx.diag,
+                            NetPeerLifecycleType::PlayerAccepted,
+                            playerId.value(),
+                            static_cast<uint32_t>(ctx.peer->incomingPeerID));
         ctx.diagPeerId = playerId.value();
         ctx.receiveResult = ReceiveDispatchResult::Ok;
     }
@@ -275,25 +274,27 @@ namespace bomberman::server
         }
         ctx.diagPeerId = client->playerId;
 
-        uint8_t lateDropCount = 0;
-        uint8_t aheadDropCount = 0;
+        uint8_t redundantCount = 0;
+        uint8_t outsideWindowCount = 0;
         uint8_t acceptedCount = 0;
-        uint32_t firstAheadSeq = 0;
-        uint32_t lastAheadSeq = 0;
+        uint32_t firstOutsideWindowSeq = 0;
+        uint32_t lastOutsideWindowSeq = 0;
         const uint32_t maxAcceptableSeq = client->lastConsumedInputSeq + kInputWindowAhead;
 
         if (ctx.diag)
-            ctx.diag->recordInputEntriesReceived(msgInput.count);
+            ctx.diag->recordInputBatchReceived(msgInput.count);
 
-        // If even the newest command in this batch is already consumed, the
-        // packet itself arrived stale. That is different from useful mixed
-        // batches that intentionally overlap older commands.
+        // If even the newest input in the batch is already consumed, the packet was still
+        // received successfully, but the entire batch is fully stale at the input-stream layer.
         if (highestSeq <= client->lastConsumedInputSeq)
         {
             if (ctx.diag)
-                ctx.diag->recordStaleInputBatch(client->playerId, highestSeq, msgInput.count);
+            {
+                ctx.diag->recordInputBatchFullyStale();
+                ctx.diag->recordInputEntriesRedundant(msgInput.count);
+            }
 
-            ctx.receiveResult = ReceiveDispatchResult::Dropped;
+            ctx.receiveResult = ReceiveDispatchResult::Ok;
             return;
         }
 
@@ -306,19 +307,17 @@ namespace bomberman::server
             // Drop late arrivals: anything already consumed is discarded.
             if (seq <= client->lastConsumedInputSeq)
             {
-                ++lateDropCount;
+                ++redundantCount;
                 continue;
             }
 
-            // Drop packets too far ahead of the consume window to prevent ring stomping.
-            if (seq > client->lastConsumedInputSeq + kInputWindowAhead)
+            // Reject entries too far ahead of the consume window to prevent ring stomping.
+            if (seq > maxAcceptableSeq)
             {
-                if (aheadDropCount == 0)
-                    firstAheadSeq = seq;
-                lastAheadSeq = seq;
-                ++aheadDropCount;
-                if (ctx.diag)
-                    ctx.diag->recordInputAnomaly(NetInputAnomalyType::OutOfOrder, client->playerId, seq, buttons);
+                if (outsideWindowCount == 0)
+                    firstOutsideWindowSeq = seq;
+                lastOutsideWindowSeq = seq;
+                ++outsideWindowCount;
                 continue;
             }
 
@@ -335,29 +334,30 @@ namespace bomberman::server
         if (ctx.diag)
         {
             ctx.diag->recordInputEntriesAccepted(acceptedCount);
-            ctx.diag->recordInputEntriesRedundant(lateDropCount);
+            ctx.diag->recordInputEntriesRedundant(redundantCount);
+            ctx.diag->recordInputEntriesRejectedOutsideWindow(outsideWindowCount);
         }
 
-        if (aheadDropCount > 0)
+        if (outsideWindowCount > 0)
         {
-            ++client->consecutiveAheadDropBatches;
-            const uint16_t streak = client->consecutiveAheadDropBatches;
+            ++client->consecutiveOutsideWindowBatches;
+            const uint16_t streak = client->consecutiveOutsideWindowBatches;
             if (streak >= kRepeatedInputWarnThreshold
-                && ctx.state.serverTick >= client->nextAheadWarnTick)
+                && ctx.state.serverTick >= client->nextOutsideWindowWarnTick)
             {
                 LOG_NET_INPUT_WARN(
-                    "Repeated ahead drops playerId={} streak={} latestAheadSeqs=[{}..{}] count={} batch=[{}..{}] maxAcceptable={} lastRecv={} lastConsumed={}",
+                    "Repeated outside-window input rejections playerId={} streak={} latestRejectedSeqs=[{}..{}] count={} batch=[{}..{}] maxAcceptable={} lastRecv={} lastConsumed={}",
                     client->playerId, streak,
-                    firstAheadSeq, lastAheadSeq, aheadDropCount,
+                    firstOutsideWindowSeq, lastOutsideWindowSeq, outsideWindowCount,
                     msgInput.baseInputSeq, highestSeq,
                     maxAcceptableSeq, client->lastReceivedInputSeq, client->lastConsumedInputSeq);
 
-                client->nextAheadWarnTick = ctx.state.serverTick + kRepeatedInputWarnCooldownTicks;
+                client->nextOutsideWindowWarnTick = ctx.state.serverTick + kRepeatedInputWarnCooldownTicks;
             }
         }
         else
         {
-            client->consecutiveAheadDropBatches = 0;
+            client->consecutiveOutsideWindowBatches = 0;
         }
 
         // Periodic logging.

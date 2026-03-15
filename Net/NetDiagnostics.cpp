@@ -2,6 +2,8 @@
 
 #include <chrono>
 #include <fstream>
+#include <iomanip>
+#include <sstream>
 #include <utility>
 
 namespace bomberman::net
@@ -16,13 +18,29 @@ namespace bomberman::net
         {
             switch (type)
             {
+                case NetEventType::Unknown:       return "Unknown";
                 case NetEventType::SessionBegin:  return "SessionBegin";
                 case NetEventType::SessionEnd:    return "SessionEnd";
+                case NetEventType::PeerLifecycle: return "PeerLifecycle";
                 case NetEventType::PacketSent:    return "PacketSent";
                 case NetEventType::PacketRecv:    return "PacketRecv";
-                case NetEventType::InputAnomaly:  return "InputAnomaly";
-                case NetEventType::Note:          return "Note";
+                case NetEventType::Simulation:    return "Simulation";
                 default:                          return "Unknown";
+            }
+        }
+
+        constexpr const char* toString(NetPeerLifecycleType type)
+        {
+            switch (type)
+            {
+                case NetPeerLifecycleType::TransportConnected:                return "TransportConnected";
+                case NetPeerLifecycleType::PlayerAccepted:                    return "PlayerAccepted";
+                case NetPeerLifecycleType::PeerRejected:                      return "PeerRejected";
+                case NetPeerLifecycleType::PeerDisconnected:                  return "PeerDisconnected";
+                case NetPeerLifecycleType::TransportDisconnectedBeforeHandshake:
+                    return "TransportDisconnectedBeforeHandshake";
+                default:
+                    return "Unknown";
             }
         }
 
@@ -38,16 +56,24 @@ namespace bomberman::net
             }
         }
 
-        constexpr const char* toString(NetInputAnomalyType type)
+        constexpr const char* toString(NetSimulationEventType type)
         {
             switch (type)
             {
-                case NetInputAnomalyType::OutOfOrder: return "OutOfOrder";
-                case NetInputAnomalyType::Duplicate:  return "Duplicate";
-                case NetInputAnomalyType::Gap:        return "Gap";
-                case NetInputAnomalyType::Count:      return "Count";
-                default:                              return "Unknown";
+                case NetSimulationEventType::Gap:              return "Gap";
+                case NetSimulationEventType::BufferedRecovery: return "BufferedRecovery";
+                default:                                       return "Unknown";
             }
+        }
+
+        std::string formatInputMask(const uint32_t mask)
+        {
+            std::ostringstream out;
+            out << "0x"
+                << std::uppercase << std::hex
+                << std::setw(2) << std::setfill('0')
+                << (mask & 0xFFu);
+            return out.str();
         }
     }
 
@@ -106,11 +132,14 @@ namespace bomberman::net
         if (stamped.timestampMs == 0)
             stamped.timestampMs = nowMs();
 
-        pushRecentEvent(std::move(stamped));
+        recordRecentEvent(std::move(stamped));
     }
 
-    void NetDiagnostics::recordPacketSent(const EMsgType type, const uint8_t peerId, const uint8_t channelId,
-                                            const std::size_t bytes, const NetPacketResult result)
+    void NetDiagnostics::recordPacketSent(const EMsgType type,
+                                          const uint8_t peerId,
+                                          const uint8_t channelId,
+                                          const std::size_t bytes,
+                                          const NetPacketResult result)
     {
         if (!enabled_ || !sessionActive_)
             return;
@@ -144,10 +173,13 @@ namespace bomberman::net
         event.channelId = channelId;
         event.msgType = static_cast<uint8_t>(type);
         event.valueA = static_cast<uint32_t>(bytes);
-        pushRecentEvent(std::move(event));
+        recordRecentEvent(std::move(event));
     }
 
-    void NetDiagnostics::recordPacketRecv(const EMsgType type, const uint8_t peerId, const uint8_t channelId, const std::size_t bytes,
+    void NetDiagnostics::recordPacketRecv(const EMsgType type,
+                                          const uint8_t peerId,
+                                          const uint8_t channelId,
+                                          const std::size_t bytes,
                                           const NetPacketResult result)
     {
         if (!enabled_ || !sessionActive_)
@@ -182,10 +214,12 @@ namespace bomberman::net
         event.channelId = channelId;
         event.msgType = static_cast<uint8_t>(type);
         event.valueA = static_cast<uint32_t>(bytes);
-        pushRecentEvent(std::move(event));
+        recordRecentEvent(std::move(event));
     }
 
-    void NetDiagnostics::recordMalformedPacketRecv(const uint8_t peerId, const uint8_t channelId, const std::size_t bytes,
+    void NetDiagnostics::recordMalformedPacketRecv(const uint8_t peerId,
+                                                   const uint8_t channelId,
+                                                   const std::size_t bytes,
                                                    std::string_view note)
     {
         if (!enabled_ || !sessionActive_)
@@ -206,49 +240,42 @@ namespace bomberman::net
         event.channelId = channelId;
         event.valueA = static_cast<uint32_t>(bytes);
         event.note = note;
-        pushRecentEvent(std::move(event));
+        recordRecentEvent(std::move(event));
     }
 
-    void NetDiagnostics::recordInputAnomaly(const NetInputAnomalyType type, const uint8_t peerId, const uint32_t inputSeq,
-                                            const uint8_t buttons, std::string_view note)
+    void NetDiagnostics::recordPeerLifecycle(const NetPeerLifecycleType type,
+                                             const uint8_t peerId,
+                                             const uint32_t transportPeerId,
+                                             std::string_view note)
     {
         if (!enabled_ || !sessionActive_)
             return;
 
-        summary_.inputAnomalyCount++;
-
-        const auto typeIndex = static_cast<std::size_t>(type);
-        if (typeIndex < summary_.anomaliesByType.size())
-            summary_.anomaliesByType[typeIndex]++;
-
-        if (!shouldEmitInputAnomalyEvent(type))
-            return;
-
         NetEvent event{};
-        event.type = NetEventType::InputAnomaly;
+        event.type = NetEventType::PeerLifecycle;
         event.timestampMs = nowMs();
-        event.anomalyType = type;
+        event.lifecycleType = type;
         event.peerId = peerId;
-        event.seq = inputSeq;
-        event.valueA = buttons;
+        event.valueA = transportPeerId;
         event.note = note;
-        pushRecentEvent(std::move(event));
+        recordRecentEvent(std::move(event));
     }
 
-    void NetDiagnostics::recordInputEntriesRedundant(const uint32_t count)
+    void NetDiagnostics::recordInputBatchReceived(const uint32_t entryCount)
+    {
+        if (!enabled_ || !sessionActive_ || entryCount == 0)
+            return;
+
+        summary_.inputBatchesReceived++;
+        summary_.inputEntriesReceivedTotal += entryCount;
+    }
+
+    void NetDiagnostics::recordInputBatchFullyStale(const uint32_t count)
     {
         if (!enabled_ || !sessionActive_ || count == 0)
             return;
 
-        summary_.inputEntriesRedundant += count;
-    }
-
-    void NetDiagnostics::recordInputEntriesReceived(const uint32_t count)
-    {
-        if (!enabled_ || !sessionActive_ || count == 0)
-            return;
-
-        summary_.inputEntriesReceivedTotal += count;
+        summary_.inputBatchesFullyStale += count;
     }
 
     void NetDiagnostics::recordInputEntriesAccepted(const uint32_t count)
@@ -259,26 +286,65 @@ namespace bomberman::net
         summary_.inputEntriesAccepted += count;
     }
 
-    void NetDiagnostics::recordStaleInputBatch(const uint8_t peerId, const uint32_t highestSeq, const uint8_t count)
+    void NetDiagnostics::recordInputEntriesRedundant(const uint32_t count)
+    {
+        if (!enabled_ || !sessionActive_ || count == 0)
+            return;
+
+        summary_.inputEntriesRedundant += count;
+    }
+
+    void NetDiagnostics::recordInputEntriesRejectedOutsideWindow(const uint32_t count)
+    {
+        if (!enabled_ || !sessionActive_ || count == 0)
+            return;
+
+        summary_.inputEntriesRejectedOutsideWindow += count;
+    }
+
+    void NetDiagnostics::recordSimulationGap(const uint8_t peerId,
+                                             const uint32_t inputSeq,
+                                             const uint8_t heldButtons,
+                                             const uint32_t serverTick)
     {
         if (!enabled_ || !sessionActive_)
             return;
 
-        summary_.staleInputBatches++;
+        summary_.simulationGaps++;
 
         NetEvent event{};
-        event.type = NetEventType::Note;
+        event.type = NetEventType::Simulation;
         event.timestampMs = nowMs();
+        event.simulationType = NetSimulationEventType::Gap;
         event.peerId = peerId;
-        event.seq = highestSeq;
-        event.valueA = count;
-        event.note = "stale input batch";
-        pushRecentEvent(std::move(event));
+        event.seq = inputSeq;
+        event.valueA = heldButtons;
+        event.valueB = serverTick;
+        recordRecentEvent(std::move(event));
     }
 
     // =================================================================================================================
-    // ===== Peer transport health sampling ============================================================================
+    // ===== Simulation continuity events ==============================================================================
     // =================================================================================================================
+
+    void NetDiagnostics::recordBufferedInputRecovery(const uint8_t peerId,
+                                                     const uint32_t inputSeq,
+                                                     const uint32_t serverTick)
+    {
+        if (!enabled_ || !sessionActive_)
+            return;
+
+        summary_.bufferedInputRecoveries++;
+
+        NetEvent event{};
+        event.type = NetEventType::Simulation;
+        event.timestampMs = nowMs();
+        event.simulationType = NetSimulationEventType::BufferedRecovery;
+        event.peerId = peerId;
+        event.seq = inputSeq;
+        event.valueB = serverTick;
+        recordRecentEvent(std::move(event));
+    }
 
     void NetDiagnostics::samplePeer(const uint8_t peerId,
                                     const uint32_t rttMs,
@@ -319,6 +385,9 @@ namespace bomberman::net
         if (filePath.empty())
             return false;
 
+        if (!summary_.enabled)
+            return false;
+
         std::ofstream out{std::string(filePath)};
         if (!out)
             return false;
@@ -326,6 +395,13 @@ namespace bomberman::net
         const uint64_t reportEndMs = summary_.active ? nowMs() : summary_.endTimestampMs;
         const uint64_t reportDurationMs =
             (reportEndMs >= summary_.beginTimestampMs) ? (reportEndMs - summary_.beginTimestampMs) : 0;
+        const uint64_t inputEntriesAccountedTotal =
+            summary_.inputEntriesAccepted +
+            summary_.inputEntriesRedundant +
+            summary_.inputEntriesRejectedOutsideWindow;
+        const int64_t inputEntriesAccountingDelta =
+            static_cast<int64_t>(summary_.inputEntriesReceivedTotal) -
+            static_cast<int64_t>(inputEntriesAccountedTotal);
 
         //  Little formatting lambdas
         const auto writeSectionHeader = [&out](const std::string_view title)
@@ -340,15 +416,7 @@ namespace bomberman::net
 
         out << "===== net_diagnostics_report =====\n";
         writeKeyValue("session_owner", ownerTag_);
-        writeKeyValue("enabled", summary_.enabled ? 1 : 0);
         out << '\n';
-
-        if (!summary_.enabled)
-        {
-            writeKeyValue("note", "diagnostics disabled for this session");
-            writeKeyValue("hint", "run with '--net-diag' to enable diagnostics and generate a full report");
-            return out.good();
-        }
 
         writeSectionHeader("Session summary");
         writeKeyValue("active", summary_.active ? 1 : 0);
@@ -356,11 +424,11 @@ namespace bomberman::net
         writeKeyValue("end_ms", reportEndMs);
         writeKeyValue("duration_ms", reportDurationMs);
         writeKeyValue("ticks", summary_.tickCount);
+        writeKeyValue("recent_events_recorded", summary_.recentEventsRecorded);
+        writeKeyValue("recent_events_evicted", summary_.recentEventsEvicted);
         out << '\n';
 
         writeSectionHeader("Packet summary");
-        writeKeyValue("events_recorded", summary_.eventsRecorded);
-        writeKeyValue("events_dropped", summary_.eventsDropped);
         writeKeyValue("packets_sent_attempts", summary_.packetsSent);
         writeKeyValue("packets_recv_attempts", summary_.packetsRecv);
         writeKeyValue("bytes_sent", summary_.packetBytesSent);
@@ -371,11 +439,15 @@ namespace bomberman::net
         writeKeyValue("malformed_packet_bytes_recv", summary_.malformedPacketBytesRecv);
         out << '\n';
 
-        writeSectionHeader("Input summary");
-        writeKeyValue("stale_input_batches", summary_.staleInputBatches);
+        writeSectionHeader("Input stream summary");
+        writeKeyValue("input_batches_received", summary_.inputBatchesReceived);
+        writeKeyValue("input_batches_fully_stale", summary_.inputBatchesFullyStale);
         writeKeyValue("input_entries_received_total", summary_.inputEntriesReceivedTotal);
         writeKeyValue("input_entries_accepted", summary_.inputEntriesAccepted);
         writeKeyValue("input_entries_redundant", summary_.inputEntriesRedundant);
+        writeKeyValue("input_entries_rejected_outside_window", summary_.inputEntriesRejectedOutsideWindow);
+        writeKeyValue("input_entries_accounted_total", inputEntriesAccountedTotal);
+        writeKeyValue("input_entries_accounting_delta", inputEntriesAccountingDelta);
 
         if (summary_.inputEntriesReceivedTotal > 0)
         {
@@ -387,16 +459,11 @@ namespace bomberman::net
             writeKeyValue("input_redundancy_ratio", redundancyRatio);
             out << std::defaultfloat;
         }
-
-        writeKeyValue("input_anomalies", summary_.inputAnomalyCount);
         out << '\n';
 
-        writeSectionHeader("Anomalies by type");
-        for (std::size_t i = 0; i < summary_.anomaliesByType.size(); ++i)
-        {
-            const auto type = static_cast<NetInputAnomalyType>(i);
-            out << "  - " << toString(type) << ": " << summary_.anomaliesByType[i] << '\n';
-        }
+        writeSectionHeader("Simulation continuity");
+        writeKeyValue("simulation_gaps", summary_.simulationGaps);
+        writeKeyValue("buffered_input_recoveries", summary_.bufferedInputRecoveries);
         out << '\n';
 
         writeSectionHeader("Latest peer samples");
@@ -467,44 +534,48 @@ namespace bomberman::net
 
                 switch (event.type)
                 {
-                case NetEventType::PacketSent:
-                case NetEventType::PacketRecv:
-                    out << " msg=0x" << std::hex << static_cast<int>(event.msgType) << std::dec
-                        << " ch=" << static_cast<int>(event.channelId)
-                        << " peer=" << static_cast<int>(event.peerId)
-                        << " result=" << toString(event.packetResult);
-                    break;
+                    case NetEventType::PacketSent:
+                    case NetEventType::PacketRecv:
+                        out << " msg=0x" << std::hex << static_cast<int>(event.msgType) << std::dec
+                            << " ch=" << static_cast<int>(event.channelId)
+                            << " peer=" << static_cast<int>(event.peerId)
+                            << " result=" << toString(event.packetResult);
+                        break;
 
-                case NetEventType::InputAnomaly:
-                    out << " peer=" << static_cast<int>(event.peerId)
-                        << " seq=" << event.seq
-                        << " anomaly=" << toString(event.anomalyType)
-                        << " buttons=" << event.valueA;
-                    break;
+                    case NetEventType::PeerLifecycle:
+                        if (event.peerId != 0xFF)
+                            out << " peer=" << static_cast<int>(event.peerId);
+                        out << " lifecycle=" << toString(event.lifecycleType)
+                            << " transport_peer=" << event.valueA;
+                        break;
 
-                case NetEventType::Note:
-                    if (event.peerId != 0xFF)
-                        out << " peer=" << static_cast<int>(event.peerId);
-                    break;
+                    case NetEventType::Simulation:
+                        out << " peer=" << static_cast<int>(event.peerId)
+                            << " seq=" << event.seq
+                            << " sim=" << toString(event.simulationType)
+                            << " server_tick=" << event.valueB;
+                        if (event.simulationType == NetSimulationEventType::Gap)
+                            out << " held_mask=" << formatInputMask(event.valueA);
+                        break;
 
-                case NetEventType::SessionBegin:
-                case NetEventType::SessionEnd:
-                    break;
+                    case NetEventType::SessionBegin:
+                    case NetEventType::SessionEnd:
+                        break;
 
-                default:
-                    if (event.peerId != 0xFF)
-                        out << " peer=" << static_cast<int>(event.peerId);
-                    if (event.channelId != 0xFF)
-                        out << " ch=" << static_cast<int>(event.channelId);
-                    if (event.msgType != 0)
-                        out << " msg=0x" << std::hex << static_cast<int>(event.msgType) << std::dec;
-                    if (event.seq != 0)
-                        out << " seq=" << event.seq;
-                    if (event.valueA != 0)
-                        out << " a=" << event.valueA;
-                    if (event.valueB != 0)
-                        out << " b=" << event.valueB;
-                    break;
+                    default:
+                        if (event.peerId != 0xFF)
+                            out << " peer=" << static_cast<int>(event.peerId);
+                        if (event.channelId != 0xFF)
+                            out << " ch=" << static_cast<int>(event.channelId);
+                        if (event.msgType != 0)
+                            out << " msg=0x" << std::hex << static_cast<int>(event.msgType) << std::dec;
+                        if (event.seq != 0)
+                            out << " seq=" << event.seq;
+                        if (event.valueA != 0)
+                            out << " a=" << event.valueA;
+                        if (event.valueB != 0)
+                            out << " b=" << event.valueB;
+                        break;
                 }
 
                 if (!event.note.empty())
@@ -527,6 +598,11 @@ namespace bomberman::net
         return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(now).count());
     }
 
+    uint64_t NetDiagnostics::recentEventDedupeCooldownMs(const NetEvent& event)
+    {
+        return kRecentEventDedupeCooldownMs;
+    }
+
     void NetDiagnostics::resetForNewSession(const std::string_view ownerTag, const bool enabled)
     {
         enabled_ = enabled;
@@ -542,22 +618,62 @@ namespace bomberman::net
         recentStart_ = 0;
         recentCount_ = 0;
         latestPeerSamples_.clear();
+        recentEventRepeatState_.clear();
 
         for (auto& item : packetAggregates_)
             item = {};
-
     }
 
     bool NetDiagnostics::shouldEmitPacketEvent(const NetPacketResult result)
     {
-        // Only emit packet events for non-OK results.
         return result != NetPacketResult::Ok;
     }
 
-    bool NetDiagnostics::shouldEmitInputAnomalyEvent([[maybe_unused]] const NetInputAnomalyType type)
+    std::string NetDiagnostics::makeRecentEventSignature(const NetEvent& event)
     {
-        // Current live anomaly types are all uncommon enough to keep in recent-event history.
-        return true;
+        std::ostringstream out;
+        out << static_cast<int>(event.type)
+            << '|' << static_cast<int>(event.peerId)
+            << '|' << static_cast<int>(event.channelId)
+            << '|' << static_cast<int>(event.msgType)
+            << '|' << static_cast<int>(event.packetDirection)
+            << '|' << static_cast<int>(event.packetResult)
+            << '|' << static_cast<int>(event.lifecycleType)
+            << '|' << static_cast<int>(event.simulationType)
+            << '|' << event.note;
+        return out.str();
+    }
+
+    bool NetDiagnostics::isAlwaysEmitEvent(const NetEvent& event)
+    {
+        return event.type == NetEventType::SessionBegin
+            || event.type == NetEventType::SessionEnd
+            || event.type == NetEventType::PeerLifecycle;
+    }
+
+    void NetDiagnostics::recordRecentEvent(NetEvent event)
+    {
+        if (event.timestampMs == 0)
+            event.timestampMs = nowMs();
+
+        if (isAlwaysEmitEvent(event))
+        {
+            pushRecentEvent(std::move(event));
+            return;
+        }
+
+        const std::string signature = makeRecentEventSignature(event);
+        auto& repeatState = recentEventRepeatState_[signature];
+        const uint64_t cooldownMs = recentEventDedupeCooldownMs(event);
+
+        if (repeatState.lastEmittedTimestampMs != 0
+            && (event.timestampMs - repeatState.lastEmittedTimestampMs) < cooldownMs)
+        {
+            return;
+        }
+
+        repeatState.lastEmittedTimestampMs = event.timestampMs;
+        pushRecentEvent(std::move(event));
     }
 
     void NetDiagnostics::pushRecentEvent(NetEvent event)
@@ -572,10 +688,10 @@ namespace bomberman::net
         {
             recentEvents_[recentStart_] = std::move(event);
             recentStart_ = (recentStart_ + 1) % kRecentEventCapacity;
-            summary_.eventsDropped++;
+            summary_.recentEventsEvicted++;
         }
 
-        summary_.eventsRecorded++;
+        summary_.recentEventsRecorded++;
     }
 
 } // namespace bomberman::net

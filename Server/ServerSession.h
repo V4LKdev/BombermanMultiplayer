@@ -8,7 +8,6 @@
 #include <enet/enet.h>
 
 #include "Const.h"
-#include "Net/NetDiagConfig.h"
 #include "Net/NetDiagnostics.h"
 #include "Net/NetCommon.h"
 #include "Sim/Movement.h"
@@ -19,7 +18,6 @@ namespace bomberman::server
     enum class ReceiveDispatchResult : uint8_t
     {
         Ok,
-        Dropped,
         Rejected,
         Malformed
     };
@@ -54,9 +52,9 @@ namespace bomberman::server
         uint8_t currentButtons  = 0;   ///< Buttons used for the current simulation tick.
 
         // ---- Input warning state ----
-        uint16_t consecutiveAheadDropBatches = 0;
+        uint16_t consecutiveOutsideWindowBatches = 0;
         uint16_t consecutiveInputGaps = 0;
-        uint32_t nextAheadWarnTick = 0;
+        uint32_t nextOutsideWindowWarnTick = 0;
         uint32_t nextGapWarnTick = 0;
     };
 
@@ -93,7 +91,7 @@ namespace bomberman::server
     struct ServerContext
     {
         ServerState&          state;
-        ENetPeer*             peer;
+        ENetPeer*             peer = nullptr;
         net::NetDiagnostics*  diag = nullptr; ///< Non-owning pointer, null-checked at each call site.
         ReceiveDispatchResult receiveResult = ReceiveDispatchResult::Rejected;
         uint8_t diagPeerId = 0xFF; ///< Gameplay peer/player ID if known, otherwise invalid sentinel.

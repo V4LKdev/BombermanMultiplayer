@@ -19,7 +19,9 @@ namespace bomberman::sim
     /// Maximum simulation steps taken within a single frame even if the accumulator exceeds the limit.
     constexpr int32_t kMaxStepsPerFrame = 8;
 
+    /// Fixed server-side input delay in ticks.
+    constexpr int32_t kServerInputBufferTicks = 0;
+
 } // namespace bomberman::sim
 
 #endif // BOMBERMAN_SIM_SIMCONFIG_H
-

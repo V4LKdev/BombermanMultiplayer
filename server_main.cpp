@@ -149,22 +149,12 @@ namespace
     }
 
 
-    void recordServerDiagNote(bomberman::server::ServerState& state,
-                            std::string_view note,
-                            std::optional<uint8_t> playerId = std::nullopt,
-                            std::optional<uint32_t> transportPeerId = std::nullopt)
+    void recordServerDiagLifecycle(bomberman::server::ServerState& state,
+                                   NetPeerLifecycleType type,
+                                   std::optional<uint8_t> playerId = std::nullopt,
+                                   uint32_t transportPeerId = 0)
     {
-        NetEvent diagEvent{};
-        diagEvent.type = NetEventType::Note;
-
-        if (playerId.has_value())
-            diagEvent.peerId = *playerId;
-
-        if (transportPeerId.has_value())
-            diagEvent.valueA = *transportPeerId;
-
-        diagEvent.note = note;
-        state.diag.recordEvent(diagEvent);
+        state.diag.recordPeerLifecycle(type, playerId.value_or(0xFF), transportPeerId);
     }
 
 } // namespace
@@ -271,7 +261,10 @@ int main(int argc, char** argv)
             {
                 case ENET_EVENT_TYPE_CONNECT:
                     LOG_SERVER_INFO("Peer connected (id={})", event.peer->incomingPeerID);
-                    recordServerDiagNote(state, "transport peer connected", std::nullopt, event.peer->incomingPeerID);
+                    recordServerDiagLifecycle(state,
+                                              NetPeerLifecycleType::TransportConnected,
+                                              std::nullopt,
+                                              event.peer->incomingPeerID);
                     break;
 
                 case ENET_EVENT_TYPE_RECEIVE:
@@ -286,7 +279,10 @@ int main(int argc, char** argv)
                     {
                         const uint8_t playerId = client->playerId;
                         LOG_SERVER_INFO("Peer disconnected (playerId={})", playerId);
-                        recordServerDiagNote(state, "peer disconnected", playerId, event.peer->incomingPeerID);
+                        recordServerDiagLifecycle(state,
+                                                  NetPeerLifecycleType::PeerDisconnected,
+                                                  playerId,
+                                                  event.peer->incomingPeerID);
 
                         // Null peer->data BEFORE resetting client state to prevent dangling reads.
                         event.peer->data = nullptr;
@@ -298,7 +294,10 @@ int main(int argc, char** argv)
                     else
                     {
                         LOG_SERVER_INFO("Peer disconnected (not handshaked, enetId={})", event.peer->incomingPeerID);
-                        recordServerDiagNote(state, "transport peer disconnected before handshake", std::nullopt, event.peer->incomingPeerID);
+                        recordServerDiagLifecycle(state,
+                                                  NetPeerLifecycleType::TransportDisconnectedBeforeHandshake,
+                                                  std::nullopt,
+                                                  event.peer->incomingPeerID);
 
                         event.peer->data = nullptr;
                     }
@@ -341,14 +340,17 @@ int main(int argc, char** argv)
 
     // Write diagnostics report before tearing down ENet resources.
     state.diag.endSession();
-    std::filesystem::create_directories("logs");
-    if(state.diag.writeSessionReport("logs/server_diag.txt"))
+    if (cli.diagnostics.netDiagEnabled)
     {
-        LOG_SERVER_INFO("Diagnostics report written to logs/server_diag.txt");
-    }
-    else
-    {
-        LOG_SERVER_ERROR("Failed to write diagnostics report");
+        std::filesystem::create_directories("logs");
+        if (state.diag.writeSessionReport("logs/server_diag.txt"))
+        {
+            LOG_SERVER_INFO("Diagnostics report written to logs/server_diag.txt");
+        }
+        else
+        {
+            LOG_SERVER_ERROR("Failed to write diagnostics report");
+        }
     }
 
     // Clean up.

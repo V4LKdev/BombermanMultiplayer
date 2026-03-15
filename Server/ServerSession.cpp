@@ -118,9 +118,11 @@ namespace bomberman::server
                     client.currentButtons = client.previousButtons;
                     ++client.consecutiveInputGaps;
 
-                    // Detection lives here; telemetry goes to diag.
-                    state.diag.recordInputAnomaly(net::NetInputAnomalyType::Gap,
-                                                  client.playerId, nextSeq, client.previousButtons, "hold");
+                    // Log the gap for diagnostics.
+                    state.diag.recordSimulationGap(client.playerId,
+                                                   nextSeq,
+                                                   client.previousButtons,
+                                                   state.serverTick);
 
                     if (client.consecutiveInputGaps >= kRepeatedInputWarnThreshold
                         && state.serverTick >= client.nextGapWarnTick)

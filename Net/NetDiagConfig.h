@@ -19,6 +19,9 @@ namespace bomberman::net
     /** @brief Maximum number of recent events retained in the NetDiagnostics ring buffer. */
     constexpr std::size_t kRecentEventCapacity = 256;
 
+    /** @brief Minimum time between repeated recent events with the same semantic signature. */
+    constexpr uint64_t kRecentEventDedupeCooldownMs = 1000;
+
     // =================================================================================================================
     // ===== Runtime Reporting cadence =================================================================================
     // =================================================================================================================
