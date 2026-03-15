@@ -63,6 +63,14 @@ namespace bomberman
         /** @brief Clears locally held movement input and resets player facing/animation state. */
         void clearLocalMovementInput();
 
+        /**
+         * @brief Returns true when this level consumes SDL key press/release events as local movement state.
+         *
+         * Singleplayer currently uses event-driven local movement. Multiplayer does not.
+         */
+        [[nodiscard]]
+        virtual bool usesEventDrivenLocalMovement() const { return true; }
+
       protected:
         /** @brief Completes shared world setup after derived state is ready. */
         void initializeLevelWorld(std::optional<uint32_t> mapSeed);

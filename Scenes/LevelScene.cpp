@@ -110,7 +110,9 @@ namespace bomberman
     {
         Scene::onEvent(event);
 
-        if((event.type == SDL_KEYDOWN || event.type == SDL_KEYUP) && event.key.repeat == 0)
+        if(usesEventDrivenLocalMovement() &&
+           (event.type == SDL_KEYDOWN || event.type == SDL_KEYUP) &&
+           event.key.repeat == 0)
         {
             updateMovement(event.type == SDL_KEYDOWN, event.key.keysym.scancode);
         }

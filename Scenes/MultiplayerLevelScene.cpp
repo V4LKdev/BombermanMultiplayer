@@ -11,6 +11,7 @@
 #include "Entities/Text.h"
 #include "Game.h"
 #include "Net/NetClient.h"
+#include "Util/Log.h"
 
 namespace bomberman
 {
@@ -79,6 +80,14 @@ namespace bomberman
 
     void MultiplayerLevelScene::updateLevel(const unsigned int delta)
     {
+        net::NetClient* netClient = game->getNetClient();
+        if(netClient == nullptr || netClient->connectState() != net::EConnectState::Connected)
+        {
+            const auto stateName = netClient ? net::connectStateName(netClient->connectState()) : std::string_view("NoClient");
+            leaveToMenu(false, stateName);
+            return;
+        }
+
         net::MsgSnapshot snapshot{};
         if(game->tryGetLatestSnapshot(snapshot))
         {
@@ -107,8 +116,7 @@ namespace bomberman
         if(scancode != SDL_SCANCODE_ESCAPE)
             return;
 
-        game->disconnectNetClientIfActive();
-        game->getSceneManager()->activateScene("menu");
+        leaveToMenu(true, "LocalLeave");
     }
 
     void MultiplayerLevelScene::applySnapshot(const net::MsgSnapshot& snapshot)
@@ -370,5 +378,26 @@ namespace bomberman
     {
         // Player IDs are zero-indexed, but for display we want them to be 1-indexed.
         return "P" + std::to_string(static_cast<unsigned int>(playerId) + 1u);
+    }
+
+    void MultiplayerLevelScene::leaveToMenu(const bool disconnectClient, const std::string_view reason)
+    {
+        if(leavingToMenu_)
+            return;
+
+        leavingToMenu_ = true;
+
+        if(disconnectClient)
+        {
+            LOG_NET_CONN_INFO("Leaving multiplayer level and disconnecting: {}", reason);
+            game->disconnectNetClientIfActive();
+        }
+        else
+        {
+            LOG_NET_CONN_WARN("Multiplayer level lost connection (state={}) - returning to menu", reason);
+        }
+
+        game->getSceneManager()->activateScene("menu");
+        game->getSceneManager()->removeScene("level");
     }
 } // namespace bomberman

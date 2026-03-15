@@ -4,6 +4,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 
 #include "Net/NetCommon.h"
@@ -32,6 +33,10 @@ namespace bomberman
         virtual void onKeyPressed(SDL_Scancode scancode) override;
         [[nodiscard]]
         bool supportsPause() const override { return false; }
+        [[nodiscard]]
+        bool usesEventDrivenLocalMovement() const override { return false; }
+        [[nodiscard]]
+        bool wantsNetworkInputPolling() const override { return true; }
 
       private:
         struct SnapshotSample
@@ -70,6 +75,7 @@ namespace bomberman
         void updateRemoteNameTagPosition(RemotePlayerView& view, uint8_t playerId);
         [[nodiscard]]
         static std::string makePlayerTagText(uint8_t playerId);
+        void leaveToMenu(bool disconnectClient, std::string_view reason);
 
         uint32_t lastAppliedSnapshotTick_ = 0;
         uint8_t localPlayerId_ = 0xFF;
@@ -80,8 +86,8 @@ namespace bomberman
         bool localIsMoving_ = false;
 
         std::unordered_map<uint8_t, RemotePlayerView> remotePlayers_;
+        bool leavingToMenu_ = false;
     };
 } // namespace bomberman
 
 #endif // BOMBERMAN_SCENES_MULTIPLAYER_LEVEL_SCENE_H
-

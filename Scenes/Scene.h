@@ -87,6 +87,12 @@ namespace bomberman
         [[nodiscard]]
         SDL_Rect getCamera() const { return camera; }
 
+        /**
+         * @brief Returns true when this scene wants Game to poll and send multiplayer input every sim tick.
+         */
+        [[nodiscard]]
+        virtual bool wantsNetworkInputPolling() const { return false; }
+
       protected:
         Game* game = nullptr; // pointer to game for use in all scenes
 

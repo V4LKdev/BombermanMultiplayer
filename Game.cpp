@@ -213,7 +213,10 @@ namespace bomberman
                 ++stepCount;
 
                 // Send input once per simulation tick.
-                if (netClient_ != nullptr && netClient_->isConnected())
+                if (netClient_ != nullptr &&
+                    netClient_->isConnected() &&
+                    sceneManager->getCurrentScene() != nullptr &&
+                    sceneManager->getCurrentScene()->wantsNetworkInputPolling())
                 {
                     pollNetInput();
                 }
@@ -270,7 +273,7 @@ namespace bomberman
             return;
 
         auto* levelScene = dynamic_cast<LevelScene*>(sceneManager->getCurrentScene());
-        if (levelScene != nullptr)
+        if (levelScene != nullptr && levelScene->usesEventDrivenLocalMovement())
             levelScene->clearLocalMovementInput();
     }
 

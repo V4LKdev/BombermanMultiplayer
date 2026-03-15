@@ -598,7 +598,7 @@ namespace bomberman::net
         return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(now).count());
     }
 
-    uint64_t NetDiagnostics::recentEventDedupeCooldownMs(const NetEvent& event)
+    uint64_t NetDiagnostics::recentEventDedupeCooldownMs(const NetEvent& /*event*/)
     {
         return kRecentEventDedupeCooldownMs;
     }
