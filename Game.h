@@ -72,6 +72,9 @@ namespace bomberman
         [[nodiscard]]
         uint16_t getServerPort() const;
 
+        /** @brief Gracefully disconnects the multiplayer client if one is active. */
+        void disconnectNetClientIfActive();
+
       private:
         // SDL pointers.
         SDL_Window* window = nullptr;

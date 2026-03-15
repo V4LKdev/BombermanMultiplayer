@@ -29,6 +29,7 @@ namespace bomberman
       protected:
         virtual void updateLevel(unsigned int delta) override;
         virtual void onExit() override;
+        virtual void onKeyPressed(SDL_Scancode scancode) override;
         [[nodiscard]]
         bool supportsPause() const override { return false; }
 
@@ -83,5 +84,4 @@ namespace bomberman
 } // namespace bomberman
 
 #endif // BOMBERMAN_SCENES_MULTIPLAYER_LEVEL_SCENE_H
-
 

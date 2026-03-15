@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <csignal>
 
 #include "Game.h"
 
@@ -20,9 +21,22 @@ namespace bomberman
         using GameClock = std::chrono::steady_clock;
         using SimDuration = std::chrono::duration<double>;
 
+        volatile std::sig_atomic_t gShutdownSignalRequested = 0;
+
         constexpr SimDuration kSimStep = SimDuration{1.0 / static_cast<double>(sim::kTickRate)};
         constexpr auto kMaxFrameClamp = std::chrono::milliseconds(sim::kMaxFrameClampMs);
         constexpr Uint32 kSceneStepMs = 1000u / static_cast<Uint32>(sim::kTickRate);
+
+        void handleShutdownSignal(int /*signal*/)
+        {
+            gShutdownSignalRequested = 1;
+        }
+
+        void installShutdownSignalHandlers()
+        {
+            std::signal(SIGINT, handleShutdownSignal);
+            std::signal(SIGTERM, handleShutdownSignal);
+        }
     }
 
     Game::Game(const std::string& windowName, const int width, const int height,
@@ -125,6 +139,7 @@ namespace bomberman
         }
 
         isRunning = true;
+        installShutdownSignalHandlers();
         // Initialize frame timing state for fixed-step simulation.
         lastTickTime = GameClock::now();
         accumulator = SimDuration{};
@@ -138,6 +153,14 @@ namespace bomberman
 
         while(isRunning)
         {
+            if(gShutdownSignalRequested != 0)
+            {
+                LOG_NET_CONN_INFO("Shutdown signal received - disconnecting multiplayer client before exit");
+                disconnectNetClientIfActive();
+                stop();
+                continue;
+            }
+
             // Process SDL events.
             while(SDL_PollEvent(&event))
             {
@@ -156,6 +179,8 @@ namespace bomberman
                 sceneManager->onEvent(event);
                 if(event.type == SDL_QUIT)
                 {
+                    LOG_NET_CONN_INFO("SDL quit requested - disconnecting multiplayer client before exit");
+                    disconnectNetClientIfActive();
                     stop();
                 }
             }
@@ -252,6 +277,19 @@ namespace bomberman
     void Game::stop()
     {
         isRunning = false;
+    }
+
+    void Game::disconnectNetClientIfActive()
+    {
+        if(netClient_ == nullptr)
+            return;
+
+        const bool wasActive = (netClient_->connectState() != net::EConnectState::Disconnected);
+        if(!wasActive)
+            return;
+
+        netClient_->disconnect();
+        LOG_NET_CONN_INFO("Multiplayer client disconnected during local shutdown/leave flow");
     }
 
     int Game::getWindowWidth() const

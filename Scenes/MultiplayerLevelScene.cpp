@@ -102,6 +102,15 @@ namespace bomberman
         LevelScene::onExit();
     }
 
+    void MultiplayerLevelScene::onKeyPressed(const SDL_Scancode scancode)
+    {
+        if(scancode != SDL_SCANCODE_ESCAPE)
+            return;
+
+        game->disconnectNetClientIfActive();
+        game->getSceneManager()->activateScene("menu");
+    }
+
     void MultiplayerLevelScene::applySnapshot(const net::MsgSnapshot& snapshot)
     {
         if(!player)
@@ -363,4 +372,3 @@ namespace bomberman
         return "P" + std::to_string(static_cast<unsigned int>(playerId) + 1u);
     }
 } // namespace bomberman
-
