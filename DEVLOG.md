@@ -998,3 +998,41 @@ Separate singleplayer gameplay logic from multiplayer presentation logic before 
 ### Result
 - Singleplayer and multiplayer scene responsibilities are now structurally separated instead of being mixed inside one class.
 - The project now has clean space for multiplayer-only work such as remote player sprites, prediction/reconciliation, authoritative bombs, and different multiplayer UI/debug systems without further bloating the singleplayer path.
+
+## 2026-03-15 (a8adf24) – Render Remote Multiplayer Players From Snapshots
+
+### Goal
+Replace the temporary multiplayer debug-dot overlay with real multiplayer player presentation inside `MultiplayerLevelScene`, while keeping the implementation simple and ready for later smoothing/prediction work.
+
+### Changes
+- Extended `MultiplayerLevelScene` to own real remote `Player` scene objects keyed by `playerId`.
+- Added structured per-player presentation state:
+  - authoritative tile-Q8 position
+  - previous/latest snapshot samples
+  - last-facing direction
+  - movement state
+  - last-seen snapshot tick
+- Updated snapshot application so it now:
+  - keeps local-player authoritative position updates
+  - upserts remote players from current snapshot membership
+  - removes remote players missing from the latest alive snapshot set
+- Added simple snapshot-delta-based direction and animation inference for both local and remote multiplayer presentation.
+- Added a clean `resolvePresentedPosition(...)` hook that currently returns authoritative position directly, leaving room for later interpolation/extrapolation without rewiring the scene.
+- Added compact overhead player tags (`P1`, `P2`, ...) and per-player tinting so multiplayer identities are easier to read in motion.
+- Added safe per-object texture color modulation support in `Object`.
+- Removed the old temporary snapshot debug-dot overlay from `Game`.
+- Centralized player ID pool allocation/release on the server with explicit helper functions so player ID reuse remains deterministic and consistent.
+
+### Validation
+- Ran a 5-client local multiplayer test.
+- Confirmed all clients could see each other:
+  - moving
+  - colorized consistently by player identity
+  - labeled with user-facing player numbers
+- Re-checked the server diagnostics report after the test:
+  - packet/sample accounting remained coherent
+  - the large `Gap` / `stale_input_batches` counts remained attributable to the local multi-window focus environment rather than to a protocol regression
+
+### Result
+- Multiplayer presentation has moved from temporary diagnostics-style visualization to real scene-owned remote player rendering.
+- The codebase now has a clean place to add interpolation, extrapolation, remote animation improvements, and later multiplayer-only presentation systems without putting that logic back into `Game`.
