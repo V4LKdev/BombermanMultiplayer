@@ -1,0 +1,303 @@
+===== net_diagnostics_report =====
+session_owner=server
+enabled=1
+
+--- Session summary ---
+active=0
+begin_ms=6443136
+end_ms=6517267
+duration_ms=74131
+ticks=4447
+
+--- Packet summary ---
+events_recorded=1665
+events_dropped=1409
+packets_sent_attempts=1337
+packets_recv_attempts=1323
+bytes_sent=42735
+bytes_recv=31749
+packets_sent_failed=0
+packets_recv_failed=553
+malformed_packets_recv=0
+malformed_packet_bytes_recv=0
+
+--- Input summary ---
+stale_input_batches=553
+input_entries_received_total=21032
+input_entries_accepted=769
+input_entries_redundant=11439
+input_redundancy_ratio=0.544
+input_anomalies=554
+
+--- Anomalies by type ---
+  - OutOfOrder: 0
+  - Duplicate: 0
+  - Gap: 554
+
+--- Latest peer samples ---
+  - peer=0 ts_ms=6514137 rtt_ms=204 rtt_var_ms=3 loss_permille=0 q_rel=0 q_unrel=0
+
+--- Packet aggregates ---
+  - msg=0x1 name=Hello out_ok=0 out_fail=0 out_bytes=0 in_ok=1 in_fail=0 in_bytes=21
+  - msg=0x2 name=Welcome out_ok=1 out_fail=0 out_bytes=8 in_ok=0 in_fail=0 in_bytes=0
+  - msg=0x4 name=LevelInfo out_ok=1 out_fail=0 out_bytes=7 in_ok=0 in_fail=0 in_bytes=0
+  - msg=0x10 name=Input out_ok=0 out_fail=0 out_bytes=0 in_ok=769 in_fail=553 in_bytes=18456
+  - msg=0x11 name=Snapshot out_ok=1335 out_fail=0 out_bytes=42720 in_ok=0 in_fail=0 in_bytes=0
+
+--- Recent events ---
+  - ts_ms=6502155 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502171 type=InputAnomaly peer=0 seq=598 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502172 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502172 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502188 type=InputAnomaly peer=0 seq=599 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502189 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502189 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502205 type=InputAnomaly peer=0 seq=600 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502205 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502205 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502221 type=InputAnomaly peer=0 seq=601 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502222 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502222 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502238 type=InputAnomaly peer=0 seq=602 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502238 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502238 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502254 type=InputAnomaly peer=0 seq=603 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502255 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502255 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502271 type=InputAnomaly peer=0 seq=604 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502272 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502272 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502288 type=InputAnomaly peer=0 seq=605 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502289 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502289 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502304 type=InputAnomaly peer=0 seq=606 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502305 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502305 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502321 type=InputAnomaly peer=0 seq=607 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502322 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502322 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502338 type=InputAnomaly peer=0 seq=608 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502339 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502339 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502355 type=InputAnomaly peer=0 seq=609 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502355 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502355 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502371 type=InputAnomaly peer=0 seq=610 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502372 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502372 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502388 type=InputAnomaly peer=0 seq=611 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502388 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502388 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502404 type=InputAnomaly peer=0 seq=612 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502405 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502405 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502421 type=InputAnomaly peer=0 seq=613 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502422 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502422 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502438 type=InputAnomaly peer=0 seq=614 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502439 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502439 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502455 type=InputAnomaly peer=0 seq=615 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502455 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502455 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502471 type=InputAnomaly peer=0 seq=616 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502472 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502472 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502488 type=InputAnomaly peer=0 seq=617 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502489 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502489 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502505 type=InputAnomaly peer=0 seq=618 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502505 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502505 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502538 type=InputAnomaly peer=0 seq=620 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502539 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502539 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502555 type=InputAnomaly peer=0 seq=621 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502555 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502555 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502571 type=InputAnomaly peer=0 seq=622 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502572 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502572 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502588 type=InputAnomaly peer=0 seq=623 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502588 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502589 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502604 type=InputAnomaly peer=0 seq=624 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502605 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502605 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502621 type=InputAnomaly peer=0 seq=625 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502622 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502622 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502638 type=InputAnomaly peer=0 seq=626 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502639 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502639 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502654 type=InputAnomaly peer=0 seq=627 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502655 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502655 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502671 type=InputAnomaly peer=0 seq=628 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502672 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502672 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502688 type=InputAnomaly peer=0 seq=629 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502689 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502689 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502704 type=InputAnomaly peer=0 seq=630 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502705 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502705 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502721 type=InputAnomaly peer=0 seq=631 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502722 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502722 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502738 type=InputAnomaly peer=0 seq=632 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502739 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502739 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502755 type=InputAnomaly peer=0 seq=633 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502755 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502755 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502772 type=InputAnomaly peer=0 seq=634 anomaly=Gap buttons=2 note="hold"
+  - ts_ms=6502772 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502772 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502805 type=InputAnomaly peer=0 seq=636 anomaly=Gap buttons=1 note="hold"
+  - ts_ms=6502805 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502805 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502821 type=InputAnomaly peer=0 seq=637 anomaly=Gap buttons=1 note="hold"
+  - ts_ms=6502822 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502822 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502838 type=InputAnomaly peer=0 seq=638 anomaly=Gap buttons=1 note="hold"
+  - ts_ms=6502839 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502839 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502855 type=InputAnomaly peer=0 seq=639 anomaly=Gap buttons=1 note="hold"
+  - ts_ms=6502855 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502855 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502871 type=InputAnomaly peer=0 seq=640 anomaly=Gap buttons=1 note="hold"
+  - ts_ms=6502872 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502872 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502888 type=InputAnomaly peer=0 seq=641 anomaly=Gap buttons=1 note="hold"
+  - ts_ms=6502889 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502889 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502905 type=InputAnomaly peer=0 seq=642 anomaly=Gap buttons=1 note="hold"
+  - ts_ms=6502905 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502905 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502922 type=InputAnomaly peer=0 seq=643 anomaly=Gap buttons=1 note="hold"
+  - ts_ms=6502922 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502922 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502938 type=InputAnomaly peer=0 seq=644 anomaly=Gap buttons=1 note="hold"
+  - ts_ms=6502938 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502938 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502955 type=InputAnomaly peer=0 seq=645 anomaly=Gap buttons=1 note="hold"
+  - ts_ms=6502964 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502964 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502971 type=InputAnomaly peer=0 seq=646 anomaly=Gap buttons=1 note="hold"
+  - ts_ms=6502972 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502972 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6502988 type=InputAnomaly peer=0 seq=647 anomaly=Gap buttons=1 note="hold"
+  - ts_ms=6502989 type=Note peer=0 note="stale input batch"
+  - ts_ms=6502989 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6503004 type=InputAnomaly peer=0 seq=648 anomaly=Gap buttons=1 note="hold"
+  - ts_ms=6503005 type=Note peer=0 note="stale input batch"
+  - ts_ms=6503005 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6503021 type=InputAnomaly peer=0 seq=649 anomaly=Gap buttons=1 note="hold"
+  - ts_ms=6503022 type=Note peer=0 note="stale input batch"
+  - ts_ms=6503022 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6503038 type=InputAnomaly peer=0 seq=650 anomaly=Gap buttons=1 note="hold"
+  - ts_ms=6503039 type=Note peer=0 note="stale input batch"
+  - ts_ms=6503039 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6503055 type=InputAnomaly peer=0 seq=651 anomaly=Gap buttons=1 note="hold"
+  - ts_ms=6503055 type=Note peer=0 note="stale input batch"
+  - ts_ms=6503055 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6503071 type=InputAnomaly peer=0 seq=652 anomaly=Gap buttons=1 note="hold"
+  - ts_ms=6503084 type=Note peer=0 note="stale input batch"
+  - ts_ms=6503084 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6503088 type=InputAnomaly peer=0 seq=653 anomaly=Gap buttons=1 note="hold"
+  - ts_ms=6503095 type=Note peer=0 note="stale input batch"
+  - ts_ms=6503095 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6503188 type=InputAnomaly peer=0 seq=659 anomaly=Gap buttons=1 note="hold"
+  - ts_ms=6503205 type=InputAnomaly peer=0 seq=660 anomaly=Gap buttons=1 note="hold"
+  - ts_ms=6503207 type=Note peer=0 note="stale input batch"
+  - ts_ms=6503207 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6503207 type=Note peer=0 note="stale input batch"
+  - ts_ms=6503207 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6503221 type=InputAnomaly peer=0 seq=661 anomaly=Gap buttons=1 note="hold"
+  - ts_ms=6503224 type=Note peer=0 note="stale input batch"
+  - ts_ms=6503224 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6503504 type=InputAnomaly peer=0 seq=678 anomaly=Gap buttons=1 note="hold"
+  - ts_ms=6503507 type=Note peer=0 note="stale input batch"
+  - ts_ms=6503507 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6504054 type=InputAnomaly peer=0 seq=711 anomaly=Gap buttons=8 note="hold"
+  - ts_ms=6504057 type=Note peer=0 note="stale input batch"
+  - ts_ms=6504057 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6504538 type=InputAnomaly peer=0 seq=740 anomaly=Gap buttons=0 note="hold"
+  - ts_ms=6504540 type=Note peer=0 note="stale input batch"
+  - ts_ms=6504540 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6504555 type=InputAnomaly peer=0 seq=741 anomaly=Gap buttons=0 note="hold"
+  - ts_ms=6504557 type=Note peer=0 note="stale input batch"
+  - ts_ms=6504557 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6504571 type=InputAnomaly peer=0 seq=742 anomaly=Gap buttons=0 note="hold"
+  - ts_ms=6504573 type=Note peer=0 note="stale input batch"
+  - ts_ms=6504573 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6504588 type=InputAnomaly peer=0 seq=743 anomaly=Gap buttons=0 note="hold"
+  - ts_ms=6504590 type=Note peer=0 note="stale input batch"
+  - ts_ms=6504590 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6504605 type=InputAnomaly peer=0 seq=744 anomaly=Gap buttons=0 note="hold"
+  - ts_ms=6504607 type=Note peer=0 note="stale input batch"
+  - ts_ms=6504607 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6504621 type=InputAnomaly peer=0 seq=745 anomaly=Gap buttons=0 note="hold"
+  - ts_ms=6504623 type=Note peer=0 note="stale input batch"
+  - ts_ms=6504623 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6504638 type=InputAnomaly peer=0 seq=746 anomaly=Gap buttons=0 note="hold"
+  - ts_ms=6504640 type=Note peer=0 note="stale input batch"
+  - ts_ms=6504640 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6504655 type=InputAnomaly peer=0 seq=747 anomaly=Gap buttons=0 note="hold"
+  - ts_ms=6504657 type=Note peer=0 note="stale input batch"
+  - ts_ms=6504657 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6504672 type=InputAnomaly peer=0 seq=748 anomaly=Gap buttons=0 note="hold"
+  - ts_ms=6504674 type=Note peer=0 note="stale input batch"
+  - ts_ms=6504674 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6504805 type=InputAnomaly peer=0 seq=756 anomaly=Gap buttons=0 note="hold"
+  - ts_ms=6504807 type=Note peer=0 note="stale input batch"
+  - ts_ms=6504807 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6505238 type=InputAnomaly peer=0 seq=782 anomaly=Gap buttons=0 note="hold"
+  - ts_ms=6505240 type=Note peer=0 note="stale input batch"
+  - ts_ms=6505240 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6505504 type=InputAnomaly peer=0 seq=798 anomaly=Gap buttons=0 note="hold"
+  - ts_ms=6505507 type=Note peer=0 note="stale input batch"
+  - ts_ms=6505507 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6505805 type=InputAnomaly peer=0 seq=816 anomaly=Gap buttons=0 note="hold"
+  - ts_ms=6505807 type=Note peer=0 note="stale input batch"
+  - ts_ms=6505807 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6506804 type=InputAnomaly peer=0 seq=876 anomaly=Gap buttons=8 note="hold"
+  - ts_ms=6506807 type=Note peer=0 note="stale input batch"
+  - ts_ms=6506807 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6507805 type=InputAnomaly peer=0 seq=936 anomaly=Gap buttons=0 note="hold"
+  - ts_ms=6507807 type=Note peer=0 note="stale input batch"
+  - ts_ms=6507807 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6508505 type=InputAnomaly peer=0 seq=978 anomaly=Gap buttons=8 note="hold"
+  - ts_ms=6508507 type=Note peer=0 note="stale input batch"
+  - ts_ms=6508507 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6508521 type=InputAnomaly peer=0 seq=979 anomaly=Gap buttons=8 note="hold"
+  - ts_ms=6508524 type=Note peer=0 note="stale input batch"
+  - ts_ms=6508524 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6508804 type=InputAnomaly peer=0 seq=996 anomaly=Gap buttons=6 note="hold"
+  - ts_ms=6508807 type=Note peer=0 note="stale input batch"
+  - ts_ms=6508807 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6509538 type=InputAnomaly peer=0 seq=1040 anomaly=Gap buttons=5 note="hold"
+  - ts_ms=6509540 type=Note peer=0 note="stale input batch"
+  - ts_ms=6509540 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6509555 type=InputAnomaly peer=0 seq=1041 anomaly=Gap buttons=5 note="hold"
+  - ts_ms=6509557 type=Note peer=0 note="stale input batch"
+  - ts_ms=6509557 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6509571 type=InputAnomaly peer=0 seq=1042 anomaly=Gap buttons=5 note="hold"
+  - ts_ms=6509573 type=Note peer=0 note="stale input batch"
+  - ts_ms=6509573 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6509588 type=InputAnomaly peer=0 seq=1043 anomaly=Gap buttons=5 note="hold"
+  - ts_ms=6509590 type=Note peer=0 note="stale input batch"
+  - ts_ms=6509590 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6509605 type=InputAnomaly peer=0 seq=1044 anomaly=Gap buttons=5 note="hold"
+  - ts_ms=6509607 type=Note peer=0 note="stale input batch"
+  - ts_ms=6509607 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6509621 type=InputAnomaly peer=0 seq=1045 anomaly=Gap buttons=5 note="hold"
+  - ts_ms=6509623 type=Note peer=0 note="stale input batch"
+  - ts_ms=6509623 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6510804 type=InputAnomaly peer=0 seq=1116 anomaly=Gap buttons=4 note="hold"
+  - ts_ms=6510807 type=Note peer=0 note="stale input batch"
+  - ts_ms=6510807 type=PacketRecv msg=0x10 ch=2 peer=0 result=Dropped
+  - ts_ms=6514254 type=InputAnomaly peer=0 seq=1323 anomaly=Gap buttons=0 note="hold"
+  - ts_ms=6514263 type=Note peer=0 note="peer disconnected"
+  - ts_ms=6517267 type=SessionEnd note="session ended"
