@@ -1189,3 +1189,31 @@ Make the first QA pass easier to run repeatedly, locally and in CI, before using
 ### Result
 - Local latency/loss testing is easier to repeat cleanly.
 - The repo is better prepared for the first SonarQube scan and for iterative QA on the prediction path.
+
+## 2026-03-16 (7906866) – Refine MP Prediction Bootstrap And Remote Smoothing
+
+### Goal
+Tighten a few correctness details around the new multiplayer prediction path before deeper QA:
+- do not bootstrap local prediction from guessed scene state
+- stop treating short gameplay silence as a hard disconnect
+- keep remote smoothing explicitly interpolation-only and make it blend more honestly
+
+### Changes
+- Changed local prediction bootstrap so prediction only arms from owner-authoritative correction state.
+- Added an explicit log when local prediction is first armed from authoritative state.
+- Before the first correction arrives, local snapshot samples may still place the local sprite visually, but they no longer start prediction.
+- Changed gameplay silence handling from a hard return-to-menu path into a soft degraded-session state.
+- Added degraded-session logging and a small multiplayer status text:
+  - `WAITING FOR GAMEPLAY UPDATES`
+- Kept transport disconnect/failure as the only hard leave condition.
+- Kept the remote presentation path interpolation-only and documented that it is not dead reckoning / extrapolation.
+- Fixed remote smoothing so a freshly received sample no longer immediately advances toward the latest state in the same update, which previously made smoothing collapse toward snap-to-latest too often.
+- Advanced remote interpolation by elapsed tick fraction instead of a hardcoded step.
+
+### Validation
+- Rebuilt the `Bomberman` client after the multiplayer scene changes.
+
+### Result
+- Local prediction now starts from real authority instead of inferred local scene state.
+- Short unreliable silence no longer kicks the player out of multiplayer prematurely.
+- Remote smoothing remains intentionally simple, but behaves more like actual interpolation and less like repeated snaps to the newest sample.
