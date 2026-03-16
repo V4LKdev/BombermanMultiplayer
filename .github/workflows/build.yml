@@ -11,7 +11,7 @@ on:
 jobs:
   build:
     name: Build and analyze
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, sonar]
 
     env:
       BUILD_WRAPPER_OUT_DIR: build_wrapper_output_directory
