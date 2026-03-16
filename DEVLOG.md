@@ -1119,3 +1119,73 @@ Remove a few remaining multiplayer scene/input mismatches now that the scene spl
 - Multiplayer input flow is now better aligned with the actual scene architecture.
 - Menu/connect/stage scenes no longer accidentally behave like online gameplay scenes.
 - The multiplayer leave/disconnect path is more robust and less stateful.
+
+## 2026-03-16 (16f9433) – Add Local Movement Prediction And Owner Corrections
+
+### Goal
+Land the first real local-movement prediction path so latency pain becomes meaningfully fixable, while keeping the server authoritative and remote players snapshot-driven.
+
+### Changes
+- Bumped the wire protocol to `v2`.
+- Added a dedicated `MsgCorrection` receive path on the client and owner-only correction send path on the server.
+- Added `Net/ClientPrediction.*` to own:
+  - local input history
+  - predicted post-state history
+  - correction replay bookkeeping
+- Renamed server/player reconciliation semantics from `lastConsumedInputSeq` to `lastProcessedInputSeq`.
+- Added a fixed server input lead policy with CLI-configurable `--input-lead-ticks`.
+- Added CLI-configurable `--snapshot-interval-ticks` on the server.
+- Split gameplay traffic onto clearer ENet channels:
+  - input
+  - snapshot
+  - correction
+  - plus channel validation on receive
+- Updated `MultiplayerLevelScene` so:
+  - local prediction is seeded from authoritative state
+  - local input is predicted immediately when enabled
+  - local player is reconciled from newer corrections
+  - local snapshot position no longer fights prediction
+  - remote players remain snapshot-authoritative
+  - remote smoothing can be toggled independently
+- Added client startup toggles for:
+  - `--no-prediction`
+  - `--no-remote-smoothing`
+- Moved snapshot build scheduling into `ServerSnapshot` and added configurable snapshot broadcast intervals.
+- Extended diagnostics with per-peer input continuity and buffered recovery reporting for the new fixed input lead model.
+- Added initial SonarQube scan wiring in the repository:
+  - GitHub Actions workflow
+  - `sonar-project.properties`
+
+### Validation
+- Rebuilt both targets after the prediction/correction integration:
+  - `Bomberman`
+  - `Bomberman_Server`
+- Confirmed the new prediction contract was documented in `Docs/PredictionContract.md`.
+- Confirmed the current code paths now support:
+  - predicted local movement
+  - owner-only corrections
+  - server-side input lead
+  - snapshot interval tuning
+
+### Result
+- The project now has a real local movement prediction baseline instead of only snapshot-driven local movement.
+- Server authority is still preserved, and remote-player presentation stays structurally separate from the local prediction path.
+- The codebase is now in a much better place for latency QA and before/after comparison under impairment.
+
+## 2026-03-16 (16f9433, 3dd635d) – Polish QA Tooling And Local Test Defaults
+
+### Goal
+Make the first QA pass easier to run repeatedly, locally and in CI, before using SonarQube and manual latency testing as feedback loops.
+
+### Changes
+- Polished the `netem` launcher with:
+  - stronger cleanup handling
+  - explicit sudo session setup
+  - optional packet-loss correlation input
+  - clearer interruption behavior
+- Raised the default logging config to a more debug-friendly baseline for current network QA.
+- Cleaned `.gitignore` and added SonarQube local artifact ignores.
+
+### Result
+- Local latency/loss testing is easier to repeat cleanly.
+- The repo is better prepared for the first SonarQube scan and for iterative QA on the prediction path.
