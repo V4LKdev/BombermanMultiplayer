@@ -46,7 +46,9 @@ packages/
 *.vcxproj
 *.vcxproj.filters
 *.vcxproj.user
-NET_PLAN.md
-NET_DAILY_STEPS.md
 logs/
 build-release/
+
+# SonarQube
+.sonar/
+.scannerwork/
