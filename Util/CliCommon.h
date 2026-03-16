@@ -24,6 +24,12 @@ namespace bomberman::cli
     inline constexpr bool kNetDiagAvailable = false;
 #endif
 
+#if defined(BOMBERMAN_ENABLE_CLIENT_NETCODE_DEBUG_OPTIONS) && BOMBERMAN_ENABLE_CLIENT_NETCODE_DEBUG_OPTIONS
+    inline constexpr bool kClientNetcodeDebugOptionsAvailable = true;
+#else
+    inline constexpr bool kClientNetcodeDebugOptionsAvailable = false;
+#endif
+
 
     struct LoggingCliOptions
     {
@@ -49,6 +55,11 @@ namespace bomberman::cli
     inline constexpr std::string_view kDiagnosticsUsageArgs{
         "[--net-diag]",
         sizeof("[--net-diag]") - 1
+    };
+
+    inline constexpr std::string_view kClientNetcodeDebugUsageArgs{
+        "[--no-prediction] [--no-remote-smoothing]",
+        sizeof("[--no-prediction] [--no-remote-smoothing]") - 1
     };
 
 
@@ -166,6 +177,46 @@ namespace bomberman::cli
             else
             {
                 outError = "--net-diag is not available in this build";
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    /** @brief Tries to parse one client-only debug netcode option. */
+    inline bool tryParseClientNetcodeDebugOption([[maybe_unused]] int argc, char** argv, int& ioIndex,
+                                                 bool& ioPredictionEnabled, bool& ioRemoteSmoothingEnabled,
+                                                 std::string& outError)
+    {
+        const std::string_view arg = argv[ioIndex];
+
+        if (arg == "--no-prediction")
+        {
+            if constexpr (kClientNetcodeDebugOptionsAvailable)
+            {
+                ioPredictionEnabled = false;
+                outError.clear();
+            }
+            else
+            {
+                outError = "--no-prediction is not available in this build";
+            }
+
+            return true;
+        }
+
+        if (arg == "--no-remote-smoothing")
+        {
+            if constexpr (kClientNetcodeDebugOptionsAvailable)
+            {
+                ioRemoteSmoothingEnabled = false;
+                outError.clear();
+            }
+            else
+            {
+                outError = "--no-remote-smoothing is not available in this build";
             }
 
             return true;

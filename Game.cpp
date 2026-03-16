@@ -40,8 +40,10 @@ namespace bomberman
     }
 
     Game::Game(const std::string& windowName, const int width, const int height,
-               net::NetClient* inNetClient, const uint16_t serverPort, const bool mute)
-        : windowWidth(width), windowHeight(height), netClient_(inNetClient), serverPort_(serverPort), mute_(mute)
+               net::NetClient* inNetClient, const uint16_t serverPort, const bool mute,
+               const MultiplayerClientConfig multiplayerConfig)
+        : windowWidth(width), windowHeight(height),
+          netClient_(inNetClient), serverPort_(serverPort), mute_(mute), multiplayerConfig_(multiplayerConfig)
     {
         // Initialize SDL.
         if(SDL_Init(SDL_INIT_VIDEO) != 0)
@@ -208,18 +210,19 @@ namespace bomberman
             int stepCount = 0;
             while(accumulator >= kSimStep && stepCount < sim::kMaxStepsPerFrame)
             {
-                sceneManager->update(kSceneStepMs);
-                accumulator -= kSimStep;
-                ++stepCount;
-
-                // Send input once per simulation tick.
+                // Send input at the start of the sim tick so prediction and transport use the same tick.
                 if (netClient_ != nullptr &&
                     netClient_->isConnected() &&
                     sceneManager->getCurrentScene() != nullptr &&
                     sceneManager->getCurrentScene()->wantsNetworkInputPolling())
                 {
                     pollNetInput();
+                    netClient_->flushOutgoing();
                 }
+
+                sceneManager->update(kSceneStepMs);
+                accumulator -= kSimStep;
+                ++stepCount;
             }
 
             // Log if the safety cap is hit.
@@ -242,7 +245,11 @@ namespace bomberman
     {
         if (!hasKeyboardFocus_)
         {
-            netClient_->sendInput(0);
+            if (const auto inputSeq = netClient_->sendInput(0);
+                inputSeq.has_value() && sceneManager->getCurrentScene() != nullptr)
+            {
+                sceneManager->getCurrentScene()->onNetworkInputSent(inputSeq.value(), 0);
+            }
             return;
         }
 
@@ -262,7 +269,11 @@ namespace bomberman
         if (right && !left)  buttons |= net::kInputRight;
         if (bomb)            buttons |= net::kInputBomb;
 
-        netClient_->sendInput(buttons);
+        if (const auto inputSeq = netClient_->sendInput(buttons);
+            inputSeq.has_value() && sceneManager->getCurrentScene() != nullptr)
+        {
+            sceneManager->getCurrentScene()->onNetworkInputSent(inputSeq.value(), buttons);
+        }
     }
 
     void Game::handleWindowFocusChanged(const bool hasFocus)
@@ -282,17 +293,31 @@ namespace bomberman
         isRunning = false;
     }
 
-    void Game::disconnectNetClientIfActive()
+    void Game::disconnectNetClientIfActive(const bool blockUntilComplete)
     {
         if(netClient_ == nullptr)
             return;
 
-        const bool wasActive = (netClient_->connectState() != net::EConnectState::Disconnected);
+        const net::EConnectState state = netClient_->connectState();
+        const bool wasActive = (state != net::EConnectState::Disconnected);
         if(!wasActive)
             return;
 
-        netClient_->disconnect();
-        LOG_NET_CONN_INFO("Multiplayer client disconnected during local shutdown/leave flow");
+        if (!blockUntilComplete)
+        {
+            netClient_->beginDisconnect();
+            return;
+        }
+
+        const bool graceful = netClient_->disconnect();
+        if (graceful)
+        {
+            LOG_NET_CONN_INFO("Multiplayer client disconnected gracefully during local shutdown/leave flow");
+        }
+        else
+        {
+            LOG_NET_CONN_WARN("Multiplayer client tore down locally before graceful disconnect completed");
+        }
     }
 
     int Game::getWindowWidth() const
@@ -335,6 +360,21 @@ namespace bomberman
     uint16_t Game::getServerPort() const
     {
         return serverPort_;
+    }
+
+    const MultiplayerClientConfig& Game::getMultiplayerClientConfig() const
+    {
+        return multiplayerConfig_;
+    }
+
+    bool Game::isPredictionEnabled() const
+    {
+        return multiplayerConfig_.predictionEnabled;
+    }
+
+    bool Game::isRemoteSmoothingEnabled() const
+    {
+        return multiplayerConfig_.remoteSmoothingEnabled;
     }
 
 } // namespace bomberman

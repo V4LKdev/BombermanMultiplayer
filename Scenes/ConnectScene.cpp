@@ -360,7 +360,9 @@ namespace bomberman
 
         // Ignore if already mid-connect or connected.
         const auto state = client->connectState();
-        if (state == net::EConnectState::Connecting || state == net::EConnectState::Handshaking)
+        if (state == net::EConnectState::Connecting ||
+            state == net::EConnectState::Handshaking ||
+            state == net::EConnectState::Disconnecting)
             return;
         if (state == net::EConnectState::Connected)
             return;
@@ -411,6 +413,9 @@ namespace bomberman
                     game->getSceneManager()->activateScene("stage");
                     game->getSceneManager()->removeScene("connect");
                 }
+                break;
+            case net::EConnectState::Disconnecting:
+                setStatusText("Disconnecting...", {180, 180, 60, 255});
                 break;
             case net::EConnectState::FailedResolve:
                 setStatusText("Could not resolve host", {220, 80, 80, 255});

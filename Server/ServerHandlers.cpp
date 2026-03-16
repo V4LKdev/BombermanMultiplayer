@@ -274,24 +274,23 @@ namespace bomberman::server
         }
         ctx.diagPeerId = client->playerId;
 
-        uint8_t redundantCount = 0;
-        uint8_t outsideWindowCount = 0;
-        uint8_t acceptedCount = 0;
-        uint32_t firstOutsideWindowSeq = 0;
-        uint32_t lastOutsideWindowSeq = 0;
-        const uint32_t maxAcceptableSeq = client->lastConsumedInputSeq + kInputWindowAhead;
+        uint8_t tooLateCount = 0;
+        uint8_t tooFarAheadCount = 0;
+        uint32_t firstTooFarAheadSeq = 0;
+        uint32_t lastTooFarAheadSeq = 0;
+        const uint32_t maxAcceptableSeq = client->lastProcessedInputSeq + kInputWindowAhead;
 
         if (ctx.diag)
-            ctx.diag->recordInputBatchReceived(msgInput.count);
+            ctx.diag->recordInputPacketReceived();
 
         // If even the newest input in the batch is already consumed, the packet was still
         // received successfully, but the entire batch is fully stale at the input-stream layer.
-        if (highestSeq <= client->lastConsumedInputSeq)
+        if (highestSeq <= client->lastProcessedInputSeq)
         {
             if (ctx.diag)
             {
-                ctx.diag->recordInputBatchFullyStale();
-                ctx.diag->recordInputEntriesRedundant(msgInput.count);
+                ctx.diag->recordInputPacketFullyStale();
+                ctx.diag->recordInputEntriesTooLate(msgInput.count);
             }
 
             ctx.receiveResult = ReceiveDispatchResult::Ok;
@@ -303,29 +302,35 @@ namespace bomberman::server
         {
             const uint32_t seq = msgInput.baseInputSeq + i;
             const uint8_t  buttons = msgInput.inputs[i];
+            const bool isDirectEntry = (seq == highestSeq);
 
             // Drop late arrivals: anything already consumed is discarded.
-            if (seq <= client->lastConsumedInputSeq)
+            if (seq <= client->lastProcessedInputSeq)
             {
-                ++redundantCount;
+                ++tooLateCount;
                 continue;
             }
 
             // Reject entries too far ahead of the consume window to prevent ring stomping.
             if (seq > maxAcceptableSeq)
             {
-                if (outsideWindowCount == 0)
-                    firstOutsideWindowSeq = seq;
-                lastOutsideWindowSeq = seq;
-                ++outsideWindowCount;
+                if (tooFarAheadCount == 0)
+                    firstTooFarAheadSeq = seq;
+                lastTooFarAheadSeq = seq;
+                ++tooFarAheadCount;
                 continue;
             }
 
             auto& slot = client->inputRing[seq % kServerInputBufferSize];
+            const bool sameSeqAlreadyBuffered = slot.valid && slot.seq == seq;
+            const bool seenDirect = sameSeqAlreadyBuffered ? slot.seenDirect : false;
+            const bool seenBuffered = sameSeqAlreadyBuffered ? slot.seenBuffered : false;
+
             slot.seq     = seq;
             slot.buttons = buttons;
             slot.valid   = true;
-            ++acceptedCount;
+            slot.seenDirect = seenDirect || isDirectEntry;
+            slot.seenBuffered = seenBuffered || !isDirectEntry;
 
             if (seq > client->lastReceivedInputSeq)
                 client->lastReceivedInputSeq = seq;
@@ -333,39 +338,38 @@ namespace bomberman::server
 
         if (ctx.diag)
         {
-            ctx.diag->recordInputEntriesAccepted(acceptedCount);
-            ctx.diag->recordInputEntriesRedundant(redundantCount);
-            ctx.diag->recordInputEntriesRejectedOutsideWindow(outsideWindowCount);
+            ctx.diag->recordInputEntriesTooLate(tooLateCount);
+            ctx.diag->recordInputEntriesTooFarAhead(tooFarAheadCount);
         }
 
-        if (outsideWindowCount > 0)
+        if (tooFarAheadCount > 0)
         {
-            ++client->consecutiveOutsideWindowBatches;
-            const uint16_t streak = client->consecutiveOutsideWindowBatches;
+            ++client->consecutiveTooFarAheadBatches;
+            const uint16_t streak = client->consecutiveTooFarAheadBatches;
             if (streak >= kRepeatedInputWarnThreshold
-                && ctx.state.serverTick >= client->nextOutsideWindowWarnTick)
+                && ctx.state.serverTick >= client->nextTooFarAheadWarnTick)
             {
                 LOG_NET_INPUT_WARN(
-                    "Repeated outside-window input rejections playerId={} streak={} latestRejectedSeqs=[{}..{}] count={} batch=[{}..{}] maxAcceptable={} lastRecv={} lastConsumed={}",
+                    "Repeated too-far-ahead input rejections playerId={} streak={} latestRejectedSeqs=[{}..{}] count={} batch=[{}..{}] maxAcceptable={} lastRecv={} lastProcessed={}",
                     client->playerId, streak,
-                    firstOutsideWindowSeq, lastOutsideWindowSeq, outsideWindowCount,
+                    firstTooFarAheadSeq, lastTooFarAheadSeq, tooFarAheadCount,
                     msgInput.baseInputSeq, highestSeq,
-                    maxAcceptableSeq, client->lastReceivedInputSeq, client->lastConsumedInputSeq);
+                    maxAcceptableSeq, client->lastReceivedInputSeq, client->lastProcessedInputSeq);
 
-                client->nextOutsideWindowWarnTick = ctx.state.serverTick + kRepeatedInputWarnCooldownTicks;
+                client->nextTooFarAheadWarnTick = ctx.state.serverTick + kRepeatedInputWarnCooldownTicks;
             }
         }
         else
         {
-            client->consecutiveOutsideWindowBatches = 0;
+            client->consecutiveTooFarAheadBatches = 0;
         }
 
         // Periodic logging.
         if (highestSeq % kInputBatchLogIntervalTicks == 0)
         {
-            LOG_NET_INPUT_DEBUG("Input playerId={} batch=[{}..{}] lastRecv={} lastConsumed={}",
+            LOG_NET_INPUT_DEBUG("Input playerId={} batch=[{}..{}] lastRecv={} lastProcessed={}",
                                 client->playerId, msgInput.baseInputSeq, highestSeq,
-                                client->lastReceivedInputSeq, client->lastConsumedInputSeq);
+                                client->lastReceivedInputSeq, client->lastProcessedInputSeq);
         }
 
         ctx.receiveResult = ReceiveDispatchResult::Ok;
@@ -407,6 +411,16 @@ namespace bomberman::server
         {
             LOG_NET_PACKET_WARN("Failed to deserialize PacketHeader (malformed or truncated, {} bytes)", dataLength);
             state.diag.recordMalformedPacketRecv(ctx.diagPeerId, channelId, dataLength, "header parse failed");
+            return;
+        }
+
+        if (!isExpectedChannelFor(header.type, channelId))
+        {
+            LOG_NET_PACKET_WARN("Rejected {} on wrong channel: got {}, expected {}",
+                                msgTypeName(header.type),
+                                channelName(channelId),
+                                channelName(static_cast<uint8_t>(expectedChannelFor(header.type))));
+            state.diag.recordPacketRecv(header.type, ctx.diagPeerId, channelId, dataLength, NetPacketResult::Rejected);
             return;
         }
 

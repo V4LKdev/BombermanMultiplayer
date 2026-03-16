@@ -9,6 +9,7 @@
 #include <optional>
 
 #include "Net/NetCommon.h"
+#include "Net/NetTransportConfig.h"
 #include "Server/ServerHandlers.h"
 #include "Server/ServerSession.h"
 #include "Util/CliCommon.h"
@@ -46,6 +47,8 @@ namespace
         bomberman::cli::DiagnosticsCliOptions diagnostics;
         uint16_t port = kDefaultServerPort;
         uint32_t seed = 0;
+        uint32_t inputLeadTicks = static_cast<uint32_t>(bomberman::sim::kDefaultServerInputLeadTicks);
+        uint32_t snapshotIntervalTicks = static_cast<uint32_t>(bomberman::sim::kDefaultServerSnapshotIntervalTicks);
         bool seedOverride = false;
     };
 
@@ -59,7 +62,9 @@ namespace
             std::cout << ' ' << bomberman::cli::kDiagnosticsUsageArgs;
 
         std::cout
-            << " [--port <port override>] [--seed <seed override>]\n"
+            << " [--port <port override>] [--seed <seed override>] [--input-lead-ticks <0-"
+            << bomberman::server::kInputWindowAhead
+            << ">] [--snapshot-interval-ticks <1-" << bomberman::sim::kTickRate << ">]\n"
             << "       Default log config location: " << bomberman::log::defaultConfigFilePath() << "\n";
     }
 
@@ -137,6 +142,55 @@ namespace
                 }
 
                 outOptions.seedOverride = true;
+                continue;
+            }
+
+            if (arg == "--input-lead-ticks")
+            {
+                if (i + 1 >= argc)
+                {
+                    std::cerr << "Missing value for --input-lead-ticks\n";
+                    printUsage();
+                    return ParseCliResult::Error;
+                }
+
+                const std::string_view value = argv[++i];
+                uint32_t parsedLeadTicks = 0;
+                if (!bomberman::cli::parseUint32(value, parsedLeadTicks) ||
+                    parsedLeadTicks > bomberman::server::kInputWindowAhead)
+                {
+                    std::cerr << "Invalid input lead ticks: " << value
+                              << " (expected 0-" << bomberman::server::kInputWindowAhead << ")\n";
+                    printUsage();
+                    return ParseCliResult::Error;
+                }
+
+                outOptions.inputLeadTicks = parsedLeadTicks;
+                continue;
+            }
+
+            if (arg == "--snapshot-interval-ticks")
+            {
+                if (i + 1 >= argc)
+                {
+                    std::cerr << "Missing value for --snapshot-interval-ticks\n";
+                    printUsage();
+                    return ParseCliResult::Error;
+                }
+
+                const std::string_view value = argv[++i];
+                uint32_t parsedIntervalTicks = 0;
+                if (!bomberman::cli::parseUint32(value, parsedIntervalTicks) ||
+                    parsedIntervalTicks == 0 ||
+                    parsedIntervalTicks > static_cast<uint32_t>(bomberman::sim::kTickRate))
+                {
+                    std::cerr << "Invalid snapshot interval ticks: " << value
+                              << " (expected 1-" << bomberman::sim::kTickRate << ")\n";
+                    printUsage();
+                    return ParseCliResult::Error;
+                }
+
+                outOptions.snapshotIntervalTicks = parsedIntervalTicks;
                 continue;
             }
 
@@ -227,10 +281,23 @@ int main(int argc, char** argv)
     LOG_SERVER_INFO("==== BOMBERMAN DEDICATED SERVER ===================================================================");
     LOG_NET_DIAG_INFO("Server diagnostics {}", cli.diagnostics.netDiagEnabled ? "enabled" : "disabled");
     LOG_SERVER_INFO("Listening on port {} with max {} peers ({} gameplay slots)", cli.port, kMaxPeers, kMaxPlayers);
+    LOG_SERVER_DEBUG("Server input lead={} tick(s)", cli.inputLeadTicks);
+    LOG_SERVER_DEBUG("Server snapshot interval={} tick(s)", cli.snapshotIntervalTicks);
+    LOG_SERVER_DEBUG("ENet peer liveness ping={}ms timeoutLimit={} timeoutRange=[{}..{}]ms",
+                     bomberman::net::kPeerPingIntervalMs,
+                     bomberman::net::kPeerTimeoutLimit,
+                     bomberman::net::kPeerTimeoutMinimumMs,
+                     bomberman::net::kPeerTimeoutMaximumMs);
 
     // Initialize server state.
     bomberman::server::ServerState state{};
-    bomberman::server::initServerState(state, server, cli.diagnostics.netDiagEnabled, cli.seedOverride, cli.seed);
+    bomberman::server::initServerState(state,
+                                       server,
+                                       cli.diagnostics.netDiagEnabled,
+                                       cli.seedOverride,
+                                       cli.seed,
+                                       cli.inputLeadTicks,
+                                       cli.snapshotIntervalTicks);
 
     auto lastTickTime = ServerClock::now();
     SimDuration accumulator{};
@@ -260,6 +327,7 @@ int main(int argc, char** argv)
             switch (event.type)
             {
                 case ENET_EVENT_TYPE_CONNECT:
+                    bomberman::net::applyDefaultPeerTransportConfig(event.peer);
                     LOG_SERVER_INFO("Peer connected (id={})", event.peer->incomingPeerID);
                     recordServerDiagLifecycle(state,
                                               NetPeerLifecycleType::TransportConnected,

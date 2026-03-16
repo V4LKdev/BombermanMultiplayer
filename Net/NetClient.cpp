@@ -1,5 +1,6 @@
 #include "NetClient.h"
 #include "NetSend.h"
+#include "NetTransportConfig.h"
 #include "PacketDispatch.h"
 
 #include "Util/Log.h"
@@ -17,6 +18,8 @@ namespace bomberman::net
     namespace
     {
         constexpr int kConnectTimeoutMs = 5000;
+        constexpr int kDisconnectTimeoutMs = 5000;
+        constexpr int kDisconnectPollTimeoutMs = 100;
 
         using SteadyClock = std::chrono::steady_clock;
         using TimePoint   = SteadyClock::time_point;
@@ -45,6 +48,11 @@ namespace bomberman::net
         std::string pendingPlayerName;
         TimePoint connectStartTime{};
         TimePoint handshakeStartTime{};
+        TimePoint disconnectStartTime{};
+        TimePoint connectedStartTime{};
+        TimePoint lastGameplayReceiveTime{};
+        TimePoint lastSnapshotReceiveTime{};
+        TimePoint lastCorrectionReceiveTime{};
 
         // ---- Session caches (populated by protocol handlers, cleared on disconnect) ----
 
@@ -54,6 +62,13 @@ namespace bomberman::net
             bool valid = false;
         };
         ReceivedSnapshotCache lastSnapshot{};
+
+        struct ReceivedCorrectionCache
+        {
+            MsgCorrection correction{};
+            bool valid = false;
+        };
+        ReceivedCorrectionCache lastCorrection{};
 
         struct ReceivedLevelInfoCache
         {
@@ -94,6 +109,14 @@ namespace bomberman::net
         {
             client.handleSnapshot(payload, payloadSize);
         }
+
+        static void onCorrection(NetClient& client,
+                                 const PacketHeader& /*header*/,
+                                 const uint8_t* payload,
+                                 std::size_t payloadSize)
+        {
+            client.handleCorrection(payload, payloadSize);
+        }
     };
 
     // =================================================================================================================
@@ -106,6 +129,7 @@ namespace bomberman::net
         impl_->dispatcher.bind(EMsgType::Reject,    &Impl::onReject);
         impl_->dispatcher.bind(EMsgType::LevelInfo, &Impl::onLevelInfo);
         impl_->dispatcher.bind(EMsgType::Snapshot,  &Impl::onSnapshot);
+        impl_->dispatcher.bind(EMsgType::Correction,&Impl::onCorrection);
     }
 
     NetClient::~NetClient()
@@ -130,7 +154,10 @@ namespace bomberman::net
         }
 
         // Already connected or in-progress: ignore duplicate calls.
-        if (isConnected() || state_ == EConnectState::Connecting || state_ == EConnectState::Handshaking)
+        if (isConnected() ||
+            state_ == EConnectState::Connecting ||
+            state_ == EConnectState::Handshaking ||
+            state_ == EConnectState::Disconnecting)
         {
             LOG_NET_CONN_DEBUG("beginConnect() called while already in state {} - ignoring", connectStateName(state_));
             return;
@@ -193,34 +220,97 @@ namespace bomberman::net
         resetState();
     }
 
-
-    void NetClient::drainGracefulDisconnect()
+    void NetClient::requestGracefulDisconnect()
     {
         if (!impl_ || !impl_->peer)
             return;
 
+        if (state_ == EConnectState::Disconnecting)
+            return;
+
         enet_peer_disconnect(impl_->peer, 0);
-
-        constexpr int kDisconnectDrainMaxIter = 50;
-        ENetEvent event{};
-        int iter = 0;
-
-        while (iter < kDisconnectDrainMaxIter
-               && enet_host_service(impl_->host, &event, 100) > 0)
-        {
-            ++iter;
-            if (event.type == ENET_EVENT_TYPE_RECEIVE)
-                enet_packet_destroy(event.packet);
-            else if (event.type == ENET_EVENT_TYPE_DISCONNECT)
-                return;
-        }
+        flush(impl_->host);
+        impl_->disconnectStartTime = SteadyClock::now();
+        state_ = EConnectState::Disconnecting;
     }
 
-    void NetClient::disconnect()
+    void NetClient::beginDisconnect()
     {
-        drainGracefulDisconnect();
+        if (!impl_)
+            return;
+
+        if (state_ == EConnectState::Disconnected)
+            return;
+
+        if (state_ == EConnectState::Connecting || state_ == EConnectState::Handshaking)
+        {
+            LOG_NET_CONN_DEBUG("Disconnect requested during {} - cancelling connect attempt", connectStateName(state_));
+            cancelConnect();
+            return;
+        }
+
+        if (state_ == EConnectState::Disconnecting)
+            return;
+
+        if (!impl_->peer || !impl_->host)
+        {
+            destroyTransport();
+            resetState();
+            return;
+        }
+
+        requestGracefulDisconnect();
+        LOG_NET_CONN_INFO("Queued graceful disconnect");
+    }
+
+    bool NetClient::drainGracefulDisconnect()
+    {
+        if (!impl_)
+            return false;
+
+        if (state_ == EConnectState::Disconnected)
+            return true;
+
+        if (state_ == EConnectState::Connecting || state_ == EConnectState::Handshaking)
+        {
+            cancelConnect();
+            return true;
+        }
+
+        if (!impl_->peer || !impl_->host)
+            return false;
+
+        requestGracefulDisconnect();
+        ENetEvent event{};
+
+        while (elapsedMs(impl_->disconnectStartTime) < kDisconnectTimeoutMs)
+        {
+            const int serviceResult = enet_host_service(impl_->host, &event, kDisconnectPollTimeoutMs);
+            if (serviceResult < 0)
+                break;
+            if (serviceResult == 0)
+                continue;
+
+            if (event.type == ENET_EVENT_TYPE_RECEIVE)
+            {
+                enet_packet_destroy(event.packet);
+                continue;
+            }
+
+            if (event.type == ENET_EVENT_TYPE_DISCONNECT)
+                return true;
+        }
+
+        LOG_NET_CONN_WARN("Graceful disconnect timed out after {}ms; tearing down transport locally", kDisconnectTimeoutMs);
+        return false;
+    }
+
+    bool NetClient::disconnect()
+    {
+        const bool graceful = drainGracefulDisconnect();
         destroyTransport();
         resetState();
+        return graceful;
     }
 
     // =================================================================================================================
@@ -252,6 +342,20 @@ namespace bomberman::net
         return false;
     }
 
+    bool NetClient::checkDisconnectTimeout()
+    {
+        if (state_ != EConnectState::Disconnecting || !impl_)
+            return false;
+
+        if (elapsedMs(impl_->disconnectStartTime) < kDisconnectTimeoutMs)
+            return false;
+
+        LOG_NET_CONN_WARN("Graceful disconnect timed out after {}ms; tearing down transport locally", kDisconnectTimeoutMs);
+        destroyTransport();
+        resetState();
+        return true;
+    }
+
     bool NetClient::handleEnetConnect()
     {
         if (state_ != EConnectState::Connecting)
@@ -259,6 +363,8 @@ namespace bomberman::net
             LOG_NET_CONN_DEBUG("Ignoring unexpected CONNECT event in state {}", connectStateName(state_));
             return false;
         }
+
+        applyDefaultPeerTransportConfig(impl_->peer);
 
         LOG_NET_CONN_DEBUG("ENet connect event received, sending Hello");
 
@@ -283,10 +389,31 @@ namespace bomberman::net
 
     bool NetClient::handleEnetReceive(const uint8_t* data, std::size_t dataLength, uint8_t channelID)
     {
-        static_cast<void>(channelID);
         LOG_NET_PACKET_TRACE("Received {} bytes on channel {}", dataLength, channelName(channelID));
 
-        dispatchPacket(impl_->dispatcher, *this, data, dataLength);
+        PacketHeader header{};
+        const uint8_t* payload = nullptr;
+        std::size_t payloadSize = 0;
+        if (!tryParsePacket(data, dataLength, header, payload, payloadSize))
+        {
+            LOG_NET_PACKET_WARN("Failed to deserialize PacketHeader (malformed or truncated, {} bytes)", dataLength);
+            return false;
+        }
+
+        if (!isExpectedChannelFor(header.type, channelID))
+        {
+            LOG_NET_PACKET_WARN("Rejected {} on wrong channel: got {}, expected {}",
+                                msgTypeName(header.type),
+                                channelName(channelID),
+                                channelName(static_cast<uint8_t>(expectedChannelFor(header.type))));
+            return false;
+        }
+
+        if (!impl_->dispatcher.dispatch(*this, header, payload, payloadSize))
+        {
+            LOG_NET_PACKET_TRACE("No handler for message type 0x{:02x}", static_cast<int>(header.type));
+            return false;
+        }
 
         // A handler may have moved us into a terminal failure state (e.g. protocol mismatch).
         if (isFailedState(state_))
@@ -300,6 +427,11 @@ namespace bomberman::net
 
     void NetClient::handleEnetDisconnect()
     {
+        if (state_ == EConnectState::Disconnecting)
+        {
+            LOG_NET_CONN_INFO("Graceful disconnect completed");
+        }
+
         destroyTransport();
         resetState();
     }
@@ -307,6 +439,9 @@ namespace bomberman::net
     void NetClient::pump(uint16_t timeoutMs)
     {
         if (!impl_ || !impl_->host)
+            return;
+
+        if (checkDisconnectTimeout())
             return;
 
         if (checkConnectTimeouts())
@@ -321,6 +456,12 @@ namespace bomberman::net
             {
             case ENET_EVENT_TYPE_RECEIVE:
             {
+                if (state_ == EConnectState::Disconnecting)
+                {
+                    enet_packet_destroy(event.packet);
+                    break;
+                }
+
                 const bool earlyOut = handleEnetReceive(event.packet->data, event.packet->dataLength, event.channelID);
                 enet_packet_destroy(event.packet);
                 if (earlyOut) return;
@@ -328,7 +469,10 @@ namespace bomberman::net
             }
 
             case ENET_EVENT_TYPE_DISCONNECT:
-                LOG_NET_CONN_INFO("Disconnected from server");
+                if (state_ != EConnectState::Disconnecting)
+                {
+                    LOG_NET_CONN_WARN("Disconnected from server (transport close or timeout)");
+                }
                 shouldDisconnect = true;
                 break;
 
@@ -353,10 +497,10 @@ namespace bomberman::net
     // ===== Public Runtime I/O ========================================================================================
     // =================================================================================================================
 
-    void NetClient::sendInput(uint8_t buttons)
+    std::optional<uint32_t> NetClient::sendInput(uint8_t buttons)
     {
         if (!impl_ || !isConnected())
-            return;
+            return std::nullopt;
 
         // Advance the monotonic input sequence.
         const uint32_t seq = ++impl_->nextInputSeq;
@@ -379,14 +523,24 @@ namespace bomberman::net
 
         const auto bytes = makeInputPacket(msg);
 
-        if (!queueUnreliableGame(impl_->peer, bytes))
-            return;
+        if (!queueUnreliableInput(impl_->peer, bytes))
+            return seq;
 
         if ((seq % kInputLogEveryN) == 0)
         {
             LOG_NET_INPUT_DEBUG("Sent Input seq={} batch=[{}..{}] buttons=0x{:02x}",
                                 seq, baseSeq, seq, buttons);
         }
+
+        return seq;
+    }
+
+    void NetClient::flushOutgoing()
+    {
+        if (!impl_ || !impl_->host)
+            return;
+
+        flush(impl_->host);
     }
 
     bool NetClient::tryGetLatestSnapshot(MsgSnapshot& out) const
@@ -404,6 +558,38 @@ namespace bomberman::net
             return 0;
 
         return impl_->lastSnapshot.snapshot.serverTick;
+    }
+
+    bool NetClient::tryGetLatestCorrection(MsgCorrection& out) const
+    {
+        if (!impl_ || !isConnected() || !impl_->lastCorrection.valid)
+            return false;
+
+        out = impl_->lastCorrection.correction;
+        return true;
+    }
+
+    uint32_t NetClient::lastCorrectionTick() const
+    {
+        if (!impl_ || !isConnected() || !impl_->lastCorrection.valid)
+            return 0;
+
+        return impl_->lastCorrection.correction.serverTick;
+    }
+
+    uint32_t NetClient::gameplaySilenceMs() const
+    {
+        if (!impl_ || !isConnected())
+            return 0;
+
+        const TimePoint since =
+            (impl_->lastGameplayReceiveTime != TimePoint{})
+                ? impl_->lastGameplayReceiveTime
+                : impl_->connectedStartTime;
+        if (since == TimePoint{})
+            return 0;
+
+        return static_cast<uint32_t>(elapsedMs(since));
     }
 
     bool NetClient::tryGetMapSeed(uint32_t& outSeed) const
@@ -494,6 +680,7 @@ namespace bomberman::net
 
         // LevelInfo is the final handshake packet - the session is now fully ready.
         state_ = EConnectState::Connected;
+        impl_->connectedStartTime = SteadyClock::now();
 
         LOG_NET_CONN_INFO("Received LevelInfo seed={} - handshake complete, session ready", msgLevelInfo.mapSeed);
     }
@@ -518,11 +705,48 @@ namespace bomberman::net
             return;
 
         impl_->lastSnapshot = {snapshot, true};
+        impl_->lastSnapshotReceiveTime = SteadyClock::now();
+        impl_->lastGameplayReceiveTime = impl_->lastSnapshotReceiveTime;
 
         if (snapshot.serverTick % kSnapshotLogEveryN == 0)
         {
             LOG_NET_SNAPSHOT_DEBUG("Received Snapshot tick={} playerCount={}",
                                    snapshot.serverTick, snapshot.playerCount);
+        }
+    }
+
+    void NetClient::handleCorrection(const uint8_t* payload, std::size_t payloadSize)
+    {
+        if (!impl_ || !isConnected())
+        {
+            LOG_NET_SNAPSHOT_DEBUG("Received Correction payload while not connected - ignoring");
+            return;
+        }
+
+        MsgCorrection correction{};
+        if (!deserializeMsgCorrection(payload, payloadSize, correction))
+        {
+            LOG_NET_PROTO_WARN("Failed to parse Correction payload");
+            return;
+        }
+
+        if (impl_->lastCorrection.valid &&
+            correction.serverTick <= impl_->lastCorrection.correction.serverTick)
+        {
+            return;
+        }
+
+        impl_->lastCorrection = {correction, true};
+        impl_->lastCorrectionReceiveTime = SteadyClock::now();
+        impl_->lastGameplayReceiveTime = impl_->lastCorrectionReceiveTime;
+
+        if (correction.serverTick % kSnapshotLogEveryN == 0)
+        {
+            LOG_NET_SNAPSHOT_DEBUG("Received Correction tick={} lastProcessed={} pos=({}, {})",
+                                   correction.serverTick,
+                                   correction.lastProcessedInputSeq,
+                                   correction.xQ,
+                                   correction.yQ);
         }
     }
 
@@ -584,8 +808,14 @@ namespace bomberman::net
             impl_->pendingPlayerName.clear();
             impl_->connectStartTime   = TimePoint{};
             impl_->handshakeStartTime = TimePoint{};
-            impl_->lastSnapshot  = {};
-            impl_->lastLevelInfo = {};
+            impl_->disconnectStartTime = TimePoint{};
+            impl_->connectedStartTime = TimePoint{};
+            impl_->lastGameplayReceiveTime = TimePoint{};
+            impl_->lastSnapshotReceiveTime = TimePoint{};
+            impl_->lastCorrectionReceiveTime = TimePoint{};
+            impl_->lastSnapshot   = {};
+            impl_->lastCorrection = {};
+            impl_->lastLevelInfo  = {};
         }
     }
 

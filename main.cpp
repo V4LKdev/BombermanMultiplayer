@@ -22,13 +22,22 @@ namespace
         bomberman::cli::LoggingCliOptions logging;
         uint16_t port = bomberman::net::kDefaultServerPort;
         bool mute = false;
+        bomberman::MultiplayerClientConfig multiplayerConfig;
     };
 
     void printUsage()
     {
         std::cout
             << "Usage: " << bomberman::cli::kLoggingUsageArgs
-            << " [--port <port override>] [--mute]\n"
+            << " [--port <port override>] [--mute]";
+
+        if constexpr (bomberman::cli::kClientNetcodeDebugOptionsAvailable)
+        {
+            std::cout << ' ' << bomberman::cli::kClientNetcodeDebugUsageArgs;
+        }
+
+        std::cout
+            << "\n"
             << "       Default log config location: " << bomberman::log::defaultConfigFilePath() << "\n";
     }
 
@@ -82,6 +91,21 @@ namespace
                 continue;
             }
 
+            if (bomberman::cli::tryParseClientNetcodeDebugOption(argc, argv, i,
+                                                                 outOptions.multiplayerConfig.predictionEnabled,
+                                                                 outOptions.multiplayerConfig.remoteSmoothingEnabled,
+                                                                 error))
+            {
+                if (!error.empty())
+                {
+                    std::cerr << error << '\n';
+                    printUsage();
+                    return ParseCliResult::Error;
+                }
+
+                continue;
+            }
+
             std::cerr << "Unknown argument: " << arg << '\n';
             printUsage();
             return ParseCliResult::Error;
@@ -130,6 +154,10 @@ int main(int argc, char** argv)
     // Initialize project-wide named loggers.
     bomberman::log::init(logConfig);
 
+    LOG_GAME_DEBUG("Client multiplayer config: prediction={}, remoteSmoothing={}",
+                  cli.multiplayerConfig.predictionEnabled ? "on" : "off",
+                  cli.multiplayerConfig.remoteSmoothingEnabled ? "on" : "off");
+
     // Initiate async connection to server.
     bomberman::net::NetClient client;
 
@@ -140,7 +168,8 @@ int main(int argc, char** argv)
         600,
         &client,
         cli.port,
-        cli.mute);
+        cli.mute,
+        cli.multiplayerConfig);
 
     game.run();
 

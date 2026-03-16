@@ -11,6 +11,7 @@
 #include "Entities/Text.h"
 #include "Game.h"
 #include "Net/NetClient.h"
+#include "Sim/SimConfig.h"
 #include "Util/Log.h"
 
 namespace bomberman
@@ -36,6 +37,9 @@ namespace bomberman
         constexpr int kNameTagOffsetPx = 6;
         constexpr int kNameTagMinPointSize = 12;
         constexpr int kNameTagMaxPointSize = 20;
+        constexpr uint32_t kGameplayStaleTimeoutMs = 1500;
+        constexpr uint32_t kLivePredictionLogIntervalMs = 1000;
+        constexpr uint32_t kPredictionTickMs = 1000u / static_cast<uint32_t>(sim::kTickRate);
 
         bool isAlive(const net::MsgSnapshot::PlayerEntry& entry)
         {
@@ -68,6 +72,24 @@ namespace bomberman
         {
             return std::clamp(scaledTileSize / 3, kNameTagMinPointSize, kNameTagMaxPointSize);
         }
+
+        MovementDirection inferDirectionFromButtons(const uint8_t buttons,
+                                                    const MovementDirection fallback)
+        {
+            const int8_t moveX = net::buttonsToMoveX(buttons);
+            const int8_t moveY = net::buttonsToMoveY(buttons);
+
+            if (moveX == 0 && moveY == 0)
+                return MovementDirection::None;
+
+            if (moveX != 0)
+                return moveX > 0 ? MovementDirection::Right : MovementDirection::Left;
+
+            if (moveY != 0)
+                return moveY > 0 ? MovementDirection::Down : MovementDirection::Up;
+
+            return fallback;
+        }
     } // namespace
 
     MultiplayerLevelScene::MultiplayerLevelScene(Game* game, const unsigned int stage,
@@ -88,19 +110,40 @@ namespace bomberman
             return;
         }
 
+        maybeHandleStaleGameplaySession(*netClient);
+        if(leavingToMenu_)
+            return;
+
+        if(game->isPredictionEnabled())
+        {
+            net::MsgCorrection correction{};
+            if(netClient->tryGetLatestCorrection(correction) &&
+               correction.serverTick > lastAppliedCorrectionTick_)
+            {
+                applyAuthoritativeCorrection(correction);
+            }
+        }
+
         net::MsgSnapshot snapshot{};
         if(game->tryGetLatestSnapshot(snapshot))
         {
             applySnapshot(snapshot);
         }
         Scene::update(delta);
+        updateRemotePresentations(delta);
         updateLocalNameTagPosition();
         updateCamera();
+        logLivePredictionTelemetry(delta);
     }
 
     void MultiplayerLevelScene::onExit()
     {
+        logPredictionDiagnosticsSummary();
         removeAllRemotePlayers();
+        localPrediction_.reset();
+        lastAppliedCorrectionTick_ = 0;
+        livePredictionTelemetry_ = {};
+        livePredictionLogAccumulatorMs_ = 0;
 
         if(localNameTag_)
         {
@@ -119,6 +162,14 @@ namespace bomberman
         leaveToMenu(true, "LocalLeave");
     }
 
+    void MultiplayerLevelScene::onNetworkInputSent(const uint32_t inputSeq, const uint8_t buttons)
+    {
+        if(!game->isPredictionEnabled())
+            return;
+
+        applyPredictedLocalInput(inputSeq, buttons);
+    }
+
     void MultiplayerLevelScene::applySnapshot(const net::MsgSnapshot& snapshot)
     {
         if(!player)
@@ -135,6 +186,204 @@ namespace bomberman
         ensureLocalPresentation(localId);
         syncRemotePlayersFromSnapshot(snapshot, localId);
         lastAppliedSnapshotTick_ = snapshot.serverTick;
+    }
+
+    void MultiplayerLevelScene::seedLocalPrediction(const sim::TilePos posQ,
+                                                    const uint32_t lastProcessedInputSeq)
+    {
+        localPrediction_.initialize(posQ, lastProcessedInputSeq);
+        playerPos_ = posQ;
+        syncPlayerSpriteToSimPosition();
+    }
+
+    void MultiplayerLevelScene::applyPredictedLocalInput(const uint32_t inputSeq, const uint8_t buttons)
+    {
+        if(!player)
+            return;
+
+        if(!localPrediction_.isInitialized())
+        {
+            const uint32_t previousSeq = (inputSeq > 0) ? (inputSeq - 1u) : 0u;
+            seedLocalPrediction(playerPos_, previousSeq);
+        }
+
+        if(!localPrediction_.applyLocalInput(inputSeq, buttons, tiles))
+            return;
+
+        updateLivePredictionPendingDepth();
+        syncLocalPresentationFromPredictedState(localPrediction_.currentState());
+    }
+
+    void MultiplayerLevelScene::applyAuthoritativeCorrection(const net::MsgCorrection& correction)
+    {
+        if(correction.serverTick <= lastAppliedCorrectionTick_)
+            return;
+
+        const auto replayResult = localPrediction_.applyCorrectionAndReplay(correction, tiles);
+        if(replayResult.missingInputHistory > 0)
+        {
+            LOG_NET_INPUT_WARN("Prediction replay truncated tick={} lastProcessed={} missingInputs={}",
+                               correction.serverTick,
+                               correction.lastProcessedInputSeq,
+                               replayResult.missingInputHistory);
+        }
+        if(replayResult.recoveryTriggered)
+        {
+            if(replayResult.recoveryRetruncated)
+            {
+                LOG_NET_INPUT_WARN(
+                    "Prediction recovery retruncated tick={} lastProcessed={} remainingDeferredInputs={} catchUpSeq={}",
+                    correction.serverTick,
+                    correction.lastProcessedInputSeq,
+                    replayResult.remainingDeferredInputs,
+                    replayResult.catchUpSeq);
+            }
+            else
+            {
+                LOG_NET_INPUT_WARN(
+                    "Prediction recovery active tick={} lastProcessed={} remainingDeferredInputs={} catchUpSeq={}",
+                    correction.serverTick,
+                    correction.lastProcessedInputSeq,
+                    replayResult.remainingDeferredInputs,
+                    replayResult.catchUpSeq);
+            }
+        }
+        if(replayResult.recoveryResolved)
+        {
+            LOG_NET_DIAG_INFO("Prediction recovery resolved tick={} lastProcessed={}",
+                              correction.serverTick,
+                              correction.lastProcessedInputSeq);
+        }
+
+        syncLocalPresentationFromPredictedState(localPrediction_.currentState());
+        livePredictionTelemetry_.lastAckedInputSeq = correction.lastProcessedInputSeq;
+        livePredictionTelemetry_.lastCorrectionServerTick = correction.serverTick;
+        livePredictionTelemetry_.lastCorrectionDeltaQ = replayResult.deltaManhattanQ;
+        livePredictionTelemetry_.lastReplayCount = replayResult.replayedInputs;
+        livePredictionTelemetry_.lastMissingInputs = replayResult.missingInputHistory;
+        livePredictionTelemetry_.lastRemainingDeferredInputs = replayResult.remainingDeferredInputs;
+        livePredictionTelemetry_.recoveryActive = replayResult.recoveryStillActive;
+        livePredictionTelemetry_.recoveryCatchUpSeq = replayResult.catchUpSeq;
+        updateLivePredictionPendingDepth();
+        lastAppliedCorrectionTick_ = correction.serverTick;
+    }
+
+    void MultiplayerLevelScene::maybeHandleStaleGameplaySession(const net::NetClient& netClient)
+    {
+        const uint32_t silenceMs = netClient.gameplaySilenceMs();
+        if(silenceMs < kGameplayStaleTimeoutMs)
+            return;
+
+        LOG_NET_CONN_WARN("Multiplayer gameplay stream stale for {}ms - returning to menu", silenceMs);
+        leaveToMenu(true, "GameplayStale");
+    }
+
+    void MultiplayerLevelScene::logLivePredictionTelemetry(const unsigned int delta)
+    {
+        if(!game->isPredictionEnabled())
+            return;
+
+        const auto& stats = localPrediction_.stats();
+        if(stats.localInputsApplied == 0 && stats.correctionsApplied == 0)
+            return;
+
+        livePredictionLogAccumulatorMs_ += delta;
+        if(livePredictionLogAccumulatorMs_ < kLivePredictionLogIntervalMs)
+            return;
+
+        livePredictionLogAccumulatorMs_ = 0;
+        updateLivePredictionPendingDepth();
+
+        const uint32_t pendingDepth = currentPendingInputDepth();
+        const uint32_t pendingAgeMs = pendingDepth * kPredictionTickMs;
+        LOG_NET_DIAG_DEBUG(
+            "Prediction live ackSeq={} corrTick={} pendingDepth={} pendingAgeMs={} lastDeltaQ={} lastReplay={} lastMissingInputs={} remainingDeferredInputs={} recoveryActive={} catchUpSeq={} maxPendingDepth={}",
+            livePredictionTelemetry_.lastAckedInputSeq,
+            livePredictionTelemetry_.lastCorrectionServerTick,
+            pendingDepth,
+            pendingAgeMs,
+            livePredictionTelemetry_.lastCorrectionDeltaQ,
+            livePredictionTelemetry_.lastReplayCount,
+            livePredictionTelemetry_.lastMissingInputs,
+            livePredictionTelemetry_.lastRemainingDeferredInputs,
+            livePredictionTelemetry_.recoveryActive ? "yes" : "no",
+            livePredictionTelemetry_.recoveryCatchUpSeq,
+            livePredictionTelemetry_.maxPendingInputDepth);
+    }
+
+    void MultiplayerLevelScene::updateLivePredictionPendingDepth()
+    {
+        livePredictionTelemetry_.maxPendingInputDepth =
+            std::max(livePredictionTelemetry_.maxPendingInputDepth, currentPendingInputDepth());
+    }
+
+    uint32_t MultiplayerLevelScene::currentPendingInputDepth() const
+    {
+        if(!localPrediction_.isInitialized())
+            return 0;
+
+        const uint32_t lastRecorded = localPrediction_.lastRecordedInputSeq();
+        if(lastRecorded <= livePredictionTelemetry_.lastAckedInputSeq)
+            return 0;
+
+        return lastRecorded - livePredictionTelemetry_.lastAckedInputSeq;
+    }
+
+    void MultiplayerLevelScene::logPredictionDiagnosticsSummary() const
+    {
+        if(!game->isPredictionEnabled())
+            return;
+
+        const auto& stats = localPrediction_.stats();
+        if(stats.localInputsApplied == 0 && stats.correctionsApplied == 0)
+            return;
+
+        const double avgCorrectionDeltaQ =
+            (stats.correctionsWithPredictedState > 0)
+                ? static_cast<double>(stats.totalCorrectionDeltaQ) /
+                    static_cast<double>(stats.correctionsWithPredictedState)
+                : 0.0;
+
+        LOG_NET_DIAG_INFO(
+            "Prediction summary localInputs={} deferredInputs={} rejectedInputs={} corrections={} mismatches={} avgDeltaQ={:.2f} maxDeltaQ={} replayedInputs={} maxReplay={} truncations={} recoveries={} recoveryResolutions={} maxMissingInputs={} maxPendingDepth={}",
+            stats.localInputsApplied,
+            stats.localInputsDeferred,
+            stats.rejectedLocalInputs,
+            stats.correctionsApplied,
+            stats.correctionsMismatched,
+            avgCorrectionDeltaQ,
+            stats.maxCorrectionDeltaQ,
+            stats.totalReplayedInputs,
+            stats.maxReplayedInputs,
+            stats.replayTruncations,
+            stats.recoveryActivations,
+            stats.recoveryResolutions,
+            stats.maxMissingInputHistory,
+            livePredictionTelemetry_.maxPendingInputDepth);
+    }
+
+    void MultiplayerLevelScene::syncLocalPresentationFromPredictedState(const net::PredictedPlayerState& predictedState)
+    {
+        if(!player)
+            return;
+
+        playerPos_ = predictedState.posQ;
+        syncPlayerSpriteToSimPosition();
+
+        localIsMoving_ = (net::buttonsToMoveX(predictedState.buttons) != 0) ||
+                         (net::buttonsToMoveY(predictedState.buttons) != 0);
+        if(localIsMoving_)
+        {
+            localLastFacing_ = inferDirectionFromButtons(predictedState.buttons, localLastFacing_);
+            player->setMovementDirection(localLastFacing_);
+        }
+        else
+        {
+            player->setMovementDirection(MovementDirection::None);
+        }
+
+        updateLocalNameTagPosition();
+        updateCamera();
     }
 
     void MultiplayerLevelScene::ensureLocalPresentation(const uint8_t localId)
@@ -175,6 +424,15 @@ namespace bomberman
                                                          const uint8_t /*localId*/,
                                                          const uint32_t tick)
     {
+        if(game->isPredictionEnabled())
+        {
+            if(!localPrediction_.isInitialized())
+            {
+                seedLocalPrediction({entry.xQ, entry.yQ}, 0);
+            }
+            return;
+        }
+
         localPreviousSample_ = localLatestSample_;
         localLatestSample_.posQ = {entry.xQ, entry.yQ};
         localLatestSample_.tick = tick;
@@ -279,6 +537,7 @@ namespace bomberman
         view.lastSeenSnapshotTick = snapshotTick;
 
         const sim::TilePos presentedPosQ = resolvePresentedPosition(view);
+        view.presentedPosQ = presentedPosQ;
         const int screenX = sim::tileQToScreenTopLeft(presentedPosQ.xQ, fieldPositionX, scaledTileSize, 0);
         const int screenY = sim::tileQToScreenTopLeft(presentedPosQ.yQ, fieldPositionY, scaledTileSize, 0);
         view.sprite->setPosition(screenX, screenY);
@@ -327,6 +586,7 @@ namespace bomberman
         view.latestSample.posQ = {xQ, yQ};
         view.latestSample.tick = tick;
         view.latestSample.valid = true;
+        view.ticksSinceLatestSample = 0.0f;
     }
 
     void MultiplayerLevelScene::updateAnimationFromSnapshotDelta(RemotePlayerView& view)
@@ -357,11 +617,61 @@ namespace bomberman
         view.sprite->setMovementDirection(view.lastFacing);
     }
 
+    void MultiplayerLevelScene::updateRemotePresentations(const unsigned int delta)
+    {
+        static_cast<void>(delta);
+        const float tickDelta = 1.0f;
+
+        for(auto& [playerId, view] : remotePlayers_)
+        {
+            if(!view.sprite)
+                continue;
+
+            view.ticksSinceLatestSample += tickDelta;
+
+            const sim::TilePos presentedPosQ = resolvePresentedPosition(view);
+            view.presentedPosQ = presentedPosQ;
+
+            const int screenX = sim::tileQToScreenTopLeft(presentedPosQ.xQ, fieldPositionX, scaledTileSize, 0);
+            const int screenY = sim::tileQToScreenTopLeft(presentedPosQ.yQ, fieldPositionY, scaledTileSize, 0);
+            view.sprite->setPosition(screenX, screenY);
+
+            updateRemoteNameTagPosition(view, playerId);
+        }
+    }
+
     sim::TilePos MultiplayerLevelScene::resolvePresentedPosition(const RemotePlayerView& view) const
     {
-        // Stub for future interpolation/extrapolation strategy.
-        // For now we present immediate authoritative positions.
-        return view.authoritativePosQ;
+        if(!game->isRemoteSmoothingEnabled())
+            return view.authoritativePosQ;
+
+        if(!view.previousSample.valid || !view.latestSample.valid)
+            return view.authoritativePosQ;
+
+        const uint32_t observedSnapshotSpacingTicks =
+            (view.latestSample.tick > view.previousSample.tick)
+                ? (view.latestSample.tick - view.previousSample.tick)
+                : 0u;
+
+        if(observedSnapshotSpacingTicks == 0)
+            return view.authoritativePosQ;
+
+        // TODO: If observed snapshot spacing becomes too noisy under loss, send the nominal
+        // snapshot interval to clients during handshake/level setup and blend against that value.
+        const float alpha = std::clamp(
+            view.ticksSinceLatestSample / static_cast<float>(observedSnapshotSpacingTicks),
+            0.0f,
+            1.0f);
+
+        sim::TilePos presentedPosQ{};
+        presentedPosQ.xQ = static_cast<int32_t>(std::lround(
+            static_cast<double>(view.previousSample.posQ.xQ) +
+            static_cast<double>(view.latestSample.posQ.xQ - view.previousSample.posQ.xQ) * alpha));
+        presentedPosQ.yQ = static_cast<int32_t>(std::lround(
+            static_cast<double>(view.previousSample.posQ.yQ) +
+            static_cast<double>(view.latestSample.posQ.yQ - view.previousSample.posQ.yQ) * alpha));
+
+        return presentedPosQ;
     }
 
     void MultiplayerLevelScene::updateRemoteNameTagPosition(RemotePlayerView& view, const uint8_t /*playerId*/)
@@ -390,7 +700,7 @@ namespace bomberman
         if(disconnectClient)
         {
             LOG_NET_CONN_INFO("Leaving multiplayer level and disconnecting: {}", reason);
-            game->disconnectNetClientIfActive();
+            game->disconnectNetClientIfActive(false);
         }
         else
         {

@@ -3,6 +3,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <string_view>
 
@@ -24,13 +25,17 @@ namespace bomberman::net
     // =================================================================================================================
 
     // -----------------------------------------------
-    constexpr uint16_t      kProtocolVersion = 1;
+    constexpr uint16_t      kProtocolVersion = 2;
     // -----------------------------------------------
 
     constexpr uint16_t      kDefaultServerPort = 12345;  ///< Default server port used by both client and server.
     constexpr std::size_t   kMaxPacketSize = 1400;       ///< Upper packet size bound (below typical 1500-byte MTU).
     constexpr uint32_t      kInputLogEveryN = 30;        ///< Input log sampling interval on client and server.
     constexpr uint32_t      kSnapshotLogEveryN = 30;     ///< Snapshot log sampling interval on client and server.
+    constexpr uint32_t      kPeerPingIntervalMs = 500;   ///< Transport heartbeat interval for connected peers.
+    constexpr uint32_t      kPeerTimeoutLimit = 8;       ///< Consecutive timeout limit before ENet drops a peer.
+    constexpr uint32_t      kPeerTimeoutMinimumMs = 5000;  ///< Lower bound for ENet peer timeout detection.
+    constexpr uint32_t      kPeerTimeoutMaximumMs = 10000; ///< Upper bound for ENet peer timeout detection.
 
     /** @note Changing these values will affect wire layout and require protocol version bump. */
     constexpr std::size_t   kPlayerNameMax = 16;
@@ -80,21 +85,25 @@ namespace bomberman::net
     /** @brief ENet channel identifiers. */
     enum class EChannel : uint8_t
     {
-        ControlReliable     = 0,
-        GameReliable        = 1,
-        GameUnreliable      = 2
+        ControlReliable      = 0,
+        GameReliable         = 1,
+        InputUnreliable      = 2,
+        SnapshotUnreliable   = 3,
+        CorrectionUnreliable = 4
     };
-    constexpr std::size_t kChannelCount = 3;
+    constexpr std::size_t kChannelCount = 5;
 
     /** @brief Returns a human-readable name for a channel ID. */
     constexpr std::string_view channelName(uint8_t id)
     {
         switch (id)
         {
-            case static_cast<uint8_t>(EChannel::ControlReliable):   return "ControlReliable";
-            case static_cast<uint8_t>(EChannel::GameReliable):      return "GameReliable";
-            case static_cast<uint8_t>(EChannel::GameUnreliable):    return "GameUnreliable";
-            default:                                                return "Unknown";
+            case static_cast<uint8_t>(EChannel::ControlReliable):      return "ControlReliable";
+            case static_cast<uint8_t>(EChannel::GameReliable):         return "GameReliable";
+            case static_cast<uint8_t>(EChannel::InputUnreliable):      return "InputUnreliable";
+            case static_cast<uint8_t>(EChannel::SnapshotUnreliable):   return "SnapshotUnreliable";
+            case static_cast<uint8_t>(EChannel::CorrectionUnreliable): return "CorrectionUnreliable";
+            default:                                                   return "Unknown";
         }
     }
 
@@ -138,7 +147,7 @@ namespace bomberman::net
 
     constexpr std::size_t kMsgCorrectionSize =
         sizeof(uint32_t) + // serverTick
-        sizeof(uint32_t) + // lastConsumedInputSeq
+        sizeof(uint32_t) + // lastProcessedInputSeq
         sizeof(int16_t) +  // xQ
         sizeof(int16_t);   // yQ
 
@@ -196,6 +205,33 @@ namespace bomberman::net
             case EMsgType::Correction: return "Correction";
             default:                   return "Unknown";
         }
+    }
+
+    /** @brief Returns the expected ENet channel for a given protocol message type. */
+    constexpr EChannel expectedChannelFor(EMsgType type)
+    {
+        switch (type)
+        {
+            case EMsgType::Hello:
+            case EMsgType::Welcome:
+            case EMsgType::Reject:
+            case EMsgType::LevelInfo:
+                return EChannel::ControlReliable;
+            case EMsgType::Input:
+                return EChannel::InputUnreliable;
+            case EMsgType::Snapshot:
+                return EChannel::SnapshotUnreliable;
+            case EMsgType::Correction:
+                return EChannel::CorrectionUnreliable;
+            default:
+                return EChannel::ControlReliable;
+        }
+    }
+
+    /** @brief Returns true when a message was received on its expected ENet channel. */
+    constexpr bool isExpectedChannelFor(EMsgType type, uint8_t channelId)
+    {
+        return channelId == static_cast<uint8_t>(expectedChannelFor(type));
     }
 
     /**
@@ -322,10 +358,10 @@ namespace bomberman::net
      */
     struct MsgCorrection
     {
-        uint32_t serverTick = 0;           ///< Server tick at which this correction applies.
-        uint32_t lastConsumedInputSeq = 0; ///< Latest input seq consumed by the server for this player.
-        int16_t xQ = 0;                    ///< Corrected X position in tile-space Q8.
-        int16_t yQ = 0;                    ///< Corrected Y position in tile-space Q8.
+        uint32_t serverTick = 0;            ///< Server tick at which this correction applies.
+        uint32_t lastProcessedInputSeq = 0; ///< Highest input seq the server has processed for this player.
+        int16_t xQ = 0;                     ///< Corrected X position in tile-space Q8.
+        int16_t yQ = 0;                     ///< Corrected Y position in tile-space Q8.
     };
 
     // =================================================================================================================
@@ -666,7 +702,7 @@ namespace bomberman::net
     inline void serializeMsgCorrection(const MsgCorrection& corr, uint8_t* out) noexcept
     {
         writeU32LE(out, corr.serverTick);
-        writeU32LE(out + 4, corr.lastConsumedInputSeq);
+        writeU32LE(out + 4, corr.lastProcessedInputSeq);
         writeU16LE(out + 8, static_cast<uint16_t>(corr.xQ));
         writeU16LE(out + 10, static_cast<uint16_t>(corr.yQ));
     }
@@ -680,7 +716,7 @@ namespace bomberman::net
             return false;
         }
         outCorr.serverTick = readU32LE(in);
-        outCorr.lastConsumedInputSeq = readU32LE(in + 4);
+        outCorr.lastProcessedInputSeq = readU32LE(in + 4);
         outCorr.xQ = static_cast<int16_t>(readU16LE(in + 8));
         outCorr.yQ = static_cast<int16_t>(readU16LE(in + 10));
         return true;

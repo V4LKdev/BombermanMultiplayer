@@ -5,6 +5,8 @@
 #include <iomanip>
 #include <sstream>
 #include <utility>
+#include <vector>
+#include <algorithm>
 
 namespace bomberman::net
 {
@@ -261,45 +263,36 @@ namespace bomberman::net
         recordRecentEvent(std::move(event));
     }
 
-    void NetDiagnostics::recordInputBatchReceived(const uint32_t entryCount)
+    void NetDiagnostics::recordInputPacketReceived()
     {
-        if (!enabled_ || !sessionActive_ || entryCount == 0)
+        if (!enabled_ || !sessionActive_)
             return;
 
-        summary_.inputBatchesReceived++;
-        summary_.inputEntriesReceivedTotal += entryCount;
+        summary_.inputPacketsReceived++;
     }
 
-    void NetDiagnostics::recordInputBatchFullyStale(const uint32_t count)
+    void NetDiagnostics::recordInputPacketFullyStale(const uint32_t count)
     {
         if (!enabled_ || !sessionActive_ || count == 0)
             return;
 
-        summary_.inputBatchesFullyStale += count;
+        summary_.inputPacketsFullyStale += count;
     }
 
-    void NetDiagnostics::recordInputEntriesAccepted(const uint32_t count)
+    void NetDiagnostics::recordInputEntriesTooLate(const uint32_t count)
     {
         if (!enabled_ || !sessionActive_ || count == 0)
             return;
 
-        summary_.inputEntriesAccepted += count;
+        summary_.inputEntriesTooLate += count;
     }
 
-    void NetDiagnostics::recordInputEntriesRedundant(const uint32_t count)
+    void NetDiagnostics::recordInputEntriesTooFarAhead(const uint32_t count)
     {
         if (!enabled_ || !sessionActive_ || count == 0)
             return;
 
-        summary_.inputEntriesRedundant += count;
-    }
-
-    void NetDiagnostics::recordInputEntriesRejectedOutsideWindow(const uint32_t count)
-    {
-        if (!enabled_ || !sessionActive_ || count == 0)
-            return;
-
-        summary_.inputEntriesRejectedOutsideWindow += count;
+        summary_.inputEntriesTooFarAhead += count;
     }
 
     void NetDiagnostics::recordSimulationGap(const uint8_t peerId,
@@ -311,6 +304,11 @@ namespace bomberman::net
             return;
 
         summary_.simulationGaps++;
+        auto& peerSummary = peerContinuitySummaries_[peerId];
+        peerSummary.peerId = peerId;
+        peerSummary.timestampMs = nowMs();
+        peerSummary.simulationGaps++;
+        peerSummary.lastProcessedInputSeq = inputSeq;
 
         NetEvent event{};
         event.type = NetEventType::Simulation;
@@ -335,6 +333,11 @@ namespace bomberman::net
             return;
 
         summary_.bufferedInputRecoveries++;
+        auto& peerSummary = peerContinuitySummaries_[peerId];
+        peerSummary.peerId = peerId;
+        peerSummary.timestampMs = nowMs();
+        peerSummary.bufferedInputRecoveries++;
+        peerSummary.lastProcessedInputSeq = inputSeq;
 
         NetEvent event{};
         event.type = NetEventType::Simulation;
@@ -368,6 +371,20 @@ namespace bomberman::net
         latestPeerSamples_[peerId] = sample;
     }
 
+    void NetDiagnostics::samplePeerInputContinuity(const uint8_t peerId,
+                                                   const uint32_t lastReceivedInputSeq,
+                                                   const uint32_t lastProcessedInputSeq)
+    {
+        if (!enabled_ || !sessionActive_)
+            return;
+
+        auto& peerSummary = peerContinuitySummaries_[peerId];
+        peerSummary.peerId = peerId;
+        peerSummary.timestampMs = nowMs();
+        peerSummary.lastReceivedInputSeq = lastReceivedInputSeq;
+        peerSummary.lastProcessedInputSeq = lastProcessedInputSeq;
+    }
+
     // =================================================================================================================
     // ===== Session maintenance and reporting =========================================================================
     // =================================================================================================================
@@ -395,14 +412,6 @@ namespace bomberman::net
         const uint64_t reportEndMs = summary_.active ? nowMs() : summary_.endTimestampMs;
         const uint64_t reportDurationMs =
             (reportEndMs >= summary_.beginTimestampMs) ? (reportEndMs - summary_.beginTimestampMs) : 0;
-        const uint64_t inputEntriesAccountedTotal =
-            summary_.inputEntriesAccepted +
-            summary_.inputEntriesRedundant +
-            summary_.inputEntriesRejectedOutsideWindow;
-        const int64_t inputEntriesAccountingDelta =
-            static_cast<int64_t>(summary_.inputEntriesReceivedTotal) -
-            static_cast<int64_t>(inputEntriesAccountedTotal);
-
         //  Little formatting lambdas
         const auto writeSectionHeader = [&out](const std::string_view title)
         {
@@ -440,30 +449,51 @@ namespace bomberman::net
         out << '\n';
 
         writeSectionHeader("Input stream summary");
-        writeKeyValue("input_batches_received", summary_.inputBatchesReceived);
-        writeKeyValue("input_batches_fully_stale", summary_.inputBatchesFullyStale);
-        writeKeyValue("input_entries_received_total", summary_.inputEntriesReceivedTotal);
-        writeKeyValue("input_entries_accepted", summary_.inputEntriesAccepted);
-        writeKeyValue("input_entries_redundant", summary_.inputEntriesRedundant);
-        writeKeyValue("input_entries_rejected_outside_window", summary_.inputEntriesRejectedOutsideWindow);
-        writeKeyValue("input_entries_accounted_total", inputEntriesAccountedTotal);
-        writeKeyValue("input_entries_accounting_delta", inputEntriesAccountingDelta);
-
-        if (summary_.inputEntriesReceivedTotal > 0)
-        {
-            const double redundancyRatio =
-                static_cast<double>(summary_.inputEntriesRedundant) /
-                static_cast<double>(summary_.inputEntriesReceivedTotal);
-
-            out << std::fixed << std::setprecision(3);
-            writeKeyValue("input_redundancy_ratio", redundancyRatio);
-            out << std::defaultfloat;
-        }
+        writeKeyValue("input_packets_received", summary_.inputPacketsReceived);
+        writeKeyValue("input_packets_fully_stale", summary_.inputPacketsFullyStale);
+        writeKeyValue("input_entries_too_late", summary_.inputEntriesTooLate);
+        writeKeyValue("input_entries_too_far_ahead", summary_.inputEntriesTooFarAhead);
         out << '\n';
 
         writeSectionHeader("Simulation continuity");
         writeKeyValue("simulation_gaps", summary_.simulationGaps);
         writeKeyValue("buffered_input_recoveries", summary_.bufferedInputRecoveries);
+        out << '\n';
+
+        writeSectionHeader("Per-peer input continuity");
+        if (peerContinuitySummaries_.empty())
+        {
+            out << "  - none\n";
+        }
+        else
+        {
+            std::vector<uint8_t> peerIds;
+            peerIds.reserve(peerContinuitySummaries_.size());
+            for (const auto& [peerId, summary] : peerContinuitySummaries_)
+            {
+                (void)summary;
+                peerIds.push_back(peerId);
+            }
+            std::sort(peerIds.begin(), peerIds.end());
+
+            for (const uint8_t peerId : peerIds)
+            {
+                const auto& peerSummary = peerContinuitySummaries_.at(peerId);
+                const uint32_t pendingInputs =
+                    (peerSummary.lastReceivedInputSeq > peerSummary.lastProcessedInputSeq)
+                        ? (peerSummary.lastReceivedInputSeq - peerSummary.lastProcessedInputSeq)
+                        : 0u;
+
+                out << "  - peer=" << static_cast<int>(peerId)
+                    << " ts_ms=" << peerSummary.timestampMs
+                    << " gaps=" << peerSummary.simulationGaps
+                    << " buffered_recoveries=" << peerSummary.bufferedInputRecoveries
+                    << " last_recv_seq=" << peerSummary.lastReceivedInputSeq
+                    << " last_processed_seq=" << peerSummary.lastProcessedInputSeq
+                    << " pending_inputs=" << pendingInputs
+                    << '\n';
+            }
+        }
         out << '\n';
 
         writeSectionHeader("Latest peer samples");
@@ -618,6 +648,7 @@ namespace bomberman::net
         recentStart_ = 0;
         recentCount_ = 0;
         latestPeerSamples_.clear();
+        peerContinuitySummaries_.clear();
         recentEventRepeatState_.clear();
 
         for (auto& item : packetAggregates_)

@@ -109,9 +109,21 @@ namespace bomberman::net
     }
 
     template<std::size_t N>
-    bool queueUnreliableGame(ENetPeer* peer, const std::array<uint8_t, N>& bytes)
+    bool queueUnreliableInput(ENetPeer* peer, const std::array<uint8_t, N>& bytes)
     {
-        return queueOnChannel(peer, EChannel::GameUnreliable, 0, bytes);
+        return queueOnChannel(peer, EChannel::InputUnreliable, 0, bytes);
+    }
+
+    template<std::size_t N>
+    bool queueUnreliableSnapshot(ENetPeer* peer, const std::array<uint8_t, N>& bytes)
+    {
+        return queueOnChannel(peer, EChannel::SnapshotUnreliable, 0, bytes);
+    }
+
+    template<std::size_t N>
+    bool queueUnreliableCorrection(ENetPeer* peer, const std::array<uint8_t, N>& bytes)
+    {
+        return queueOnChannel(peer, EChannel::CorrectionUnreliable, 0, bytes);
     }
 
     template<std::size_t N>
@@ -121,9 +133,9 @@ namespace bomberman::net
     }
 
     template<std::size_t N>
-    int broadcastQueuedUnreliableGame(ENetHost* host, const std::array<uint8_t, N>& bytes)
+    int broadcastQueuedUnreliableSnapshot(ENetHost* host, const std::array<uint8_t, N>& bytes)
     {
-        return broadcastQueueOnChannel(host, EChannel::GameUnreliable, 0, bytes);
+        return broadcastQueueOnChannel(host, EChannel::SnapshotUnreliable, 0, bytes);
     }
 
     template<std::size_t N>
@@ -135,4 +147,3 @@ namespace bomberman::net
 } // namespace bomberman::net
 
 #endif // BOMBERMAN_NET_NETSEND_H
-

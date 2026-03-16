@@ -23,6 +23,7 @@ namespace bomberman::net
         Connecting,         ///< ENet connect in progress, waiting for CONNECT event.
         Handshaking,        ///< Transport connected, Hello sent.
         Connected,          ///< Fully handshake-complete, session ready.
+        Disconnecting,      ///< Graceful disconnect requested, awaiting ENet completion.
         FailedResolve,      ///< Could not resolve host address.
         FailedConnect,      ///< ENet connect attempt timed out.
         FailedHandshake,    ///< Handshake timed out or was rejected.
@@ -45,6 +46,7 @@ namespace bomberman::net
             case EConnectState::Connecting:      return "Connecting";
             case EConnectState::Handshaking:     return "Handshaking";
             case EConnectState::Connected:       return "Connected";
+            case EConnectState::Disconnecting:   return "Disconnecting";
             case EConnectState::FailedResolve:   return "FailedResolve";
             case EConnectState::FailedConnect:   return "FailedConnect";
             case EConnectState::FailedHandshake: return "FailedHandshake";
@@ -90,7 +92,10 @@ namespace bomberman::net
         void beginConnect(const std::string& host, uint16_t port, std::string_view playerName);
 
         /** @brief Disconnects from the server and releases connection resources. */
-        void disconnect();
+        bool disconnect();
+
+        /** @brief Starts a non-blocking graceful disconnect for an active connected session. */
+        void beginDisconnect();
 
         /**
          * @brief Aborts an in-progress beginConnect() attempt.
@@ -115,8 +120,13 @@ namespace bomberman::net
          * @brief Records a button bitmask for the current tick and sends a batched input packet.
          *
          * @param buttons Button bitmask (kInput* flags).
+         * @return The local input sequence assigned to this sample, or std::nullopt if not connected.
          */
-        void sendInput(uint8_t buttons);
+        [[nodiscard]]
+        std::optional<uint32_t> sendInput(uint8_t buttons);
+
+        /** @brief Flushes any queued outgoing ENet packets immediately. */
+        void flushOutgoing();
 
         /** @brief Returns true when an active session is connected. */
         [[nodiscard]]
@@ -148,6 +158,18 @@ namespace bomberman::net
         /** @brief Returns the server tick of the last received snapshot. */
         [[nodiscard]]
         uint32_t lastSnapshotTick() const;
+
+        /** @brief Returns the most recently received owner correction from the server, if any. */
+        [[nodiscard]]
+        bool tryGetLatestCorrection(MsgCorrection& out) const;
+
+        /** @brief Returns the server tick of the last received correction. */
+        [[nodiscard]]
+        uint32_t lastCorrectionTick() const;
+
+        /** @brief Returns milliseconds since the last gameplay packet, or since connect if none arrived yet. */
+        [[nodiscard]]
+        uint32_t gameplaySilenceMs() const;
 
         /** @brief Populates `outSeed` and returns true if a LevelInfo has been received. */
         [[nodiscard]]
@@ -182,10 +204,12 @@ namespace bomberman::net
         void handleReject(const uint8_t* payload, std::size_t payloadSize);
         void handleLevelInfo(const uint8_t* payload, std::size_t payloadSize);
         void handleSnapshot(const uint8_t* payload, std::size_t payloadSize);
+        void handleCorrection(const uint8_t* payload, std::size_t payloadSize);
 
         // ---- pump() sub-helpers ----
 
         bool checkConnectTimeouts();
+        bool checkDisconnectTimeout();
         /** @brief Handles an ENet CONNECT event (sends Hello, transitions to Handshaking). Returns true if pump should return early. */
         bool handleEnetConnect();
         /** @brief Handles an ENet RECEIVE event. Returns true if pump should return early (failure state). */
@@ -196,7 +220,11 @@ namespace bomberman::net
         // ---- Resource teardown ----
 
         /** @brief Sends a polite disconnect request and drains events until server ack or iteration cap. */
-        void drainGracefulDisconnect();
+        [[nodiscard]]
+        bool drainGracefulDisconnect();
+
+        /** @brief Starts a polite disconnect request if one is not already in progress. */
+        void requestGracefulDisconnect();
 
         /** @brief Destroys ENet peer/host transport resources without modifying logical state. */
         void destroyTransport();

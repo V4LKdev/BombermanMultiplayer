@@ -7,11 +7,13 @@
 #include <string_view>
 #include <unordered_map>
 
+#include "Net/ClientPrediction.h"
 #include "Net/NetCommon.h"
 #include "Scenes/LevelScene.h"
 
 namespace bomberman
 {
+    namespace net { class NetClient; }
     class Text;
 
     /**
@@ -31,6 +33,7 @@ namespace bomberman
         virtual void updateLevel(unsigned int delta) override;
         virtual void onExit() override;
         virtual void onKeyPressed(SDL_Scancode scancode) override;
+        virtual void onNetworkInputSent(uint32_t inputSeq, uint8_t buttons) override;
         [[nodiscard]]
         bool supportsPause() const override { return false; }
         [[nodiscard]]
@@ -51,15 +54,40 @@ namespace bomberman
             std::shared_ptr<Player> sprite = nullptr;
             std::shared_ptr<Text> nameTag = nullptr;
             sim::TilePos authoritativePosQ{};
+            sim::TilePos presentedPosQ{};
             SnapshotSample previousSample{};
             SnapshotSample latestSample{};
             MovementDirection lastFacing = MovementDirection::Right;
             bool isMoving = false;
+            float ticksSinceLatestSample = 0.0f;
             uint32_t lastSeenSnapshotTick = 0;
+        };
+
+        struct LivePredictionTelemetry
+        {
+            uint32_t lastAckedInputSeq = 0;
+            uint32_t lastCorrectionServerTick = 0;
+            uint32_t lastCorrectionDeltaQ = 0;
+            uint32_t lastReplayCount = 0;
+            uint32_t lastMissingInputs = 0;
+            uint32_t lastRemainingDeferredInputs = 0;
+            uint32_t maxPendingInputDepth = 0;
+            uint32_t recoveryCatchUpSeq = 0;
+            bool recoveryActive = false;
         };
 
         void applySnapshot(const net::MsgSnapshot& snapshot);
         void ensureLocalPresentation(uint8_t localId);
+        void seedLocalPrediction(sim::TilePos posQ, uint32_t lastProcessedInputSeq);
+        void applyPredictedLocalInput(uint32_t inputSeq, uint8_t buttons);
+        void applyAuthoritativeCorrection(const net::MsgCorrection& correction);
+        void syncLocalPresentationFromPredictedState(const net::PredictedPlayerState& predictedState);
+        void maybeHandleStaleGameplaySession(const net::NetClient& netClient);
+        void logLivePredictionTelemetry(unsigned int delta);
+        void updateLivePredictionPendingDepth();
+        [[nodiscard]]
+        uint32_t currentPendingInputDepth() const;
+        void logPredictionDiagnosticsSummary() const;
         void applyLocalSnapshotSample(const net::MsgSnapshot::PlayerEntry& entry, uint8_t localId, uint32_t tick);
         void updateLocalNameTagPosition();
 
@@ -70,6 +98,7 @@ namespace bomberman
 
         void updateSnapshotHistory(RemotePlayerView& view, int16_t xQ, int16_t yQ, uint32_t tick);
         void updateAnimationFromSnapshotDelta(RemotePlayerView& view);
+        void updateRemotePresentations(unsigned int delta);
         [[nodiscard]]
         sim::TilePos resolvePresentedPosition(const RemotePlayerView& view) const;
         void updateRemoteNameTagPosition(RemotePlayerView& view, uint8_t playerId);
@@ -78,12 +107,16 @@ namespace bomberman
         void leaveToMenu(bool disconnectClient, std::string_view reason);
 
         uint32_t lastAppliedSnapshotTick_ = 0;
+        uint32_t lastAppliedCorrectionTick_ = 0;
         uint8_t localPlayerId_ = 0xFF;
         std::shared_ptr<Text> localNameTag_ = nullptr;
         SnapshotSample localPreviousSample_{};
         SnapshotSample localLatestSample_{};
+        net::ClientPrediction localPrediction_{};
+        LivePredictionTelemetry livePredictionTelemetry_{};
         MovementDirection localLastFacing_ = MovementDirection::Right;
         bool localIsMoving_ = false;
+        uint32_t livePredictionLogAccumulatorMs_ = 0;
 
         std::unordered_map<uint8_t, RemotePlayerView> remotePlayers_;
         bool leavingToMenu_ = false;

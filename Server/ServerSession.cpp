@@ -6,6 +6,7 @@
 #include <random>
 
 #include "Net/NetSend.h"
+#include "ServerSnapshot.h"
 #include "Sim/TileMapGen.h"
 #include "Util/Log.h"
 
@@ -13,10 +14,100 @@ using namespace bomberman::net;
 
 namespace bomberman::server
 {
-    void initServerState(ServerState& state, ENetHost* host, bool diagEnabled, bool overrideMapSeed, uint32_t mapSeed)
+    namespace
+    {
+        [[nodiscard]]
+        MsgCorrection buildCorrection(const ServerState& state, const ClientState& client)
+        {
+            MsgCorrection corr{};
+            corr.serverTick = state.serverTick;
+            corr.lastProcessedInputSeq = client.lastProcessedInputSeq;
+            corr.xQ = static_cast<int16_t>(std::clamp(client.pos.xQ, INT16_MIN, INT16_MAX));
+            corr.yQ = static_cast<int16_t>(std::clamp(client.pos.yQ, INT16_MIN, INT16_MAX));
+            return corr;
+        }
+
+        /** @brief Resolves which input bitmask the server should simulate for this client on the current tick. */
+        void resolveClientInputForTick(ServerState& state, ClientState& client)
+        {
+            client.currentButtons = 0;
+
+            if (client.lastReceivedInputSeq == 0)
+            {
+                // No input ever received from this client - idle.
+                return;
+            }
+
+            if (!client.inputTimelineStarted)
+            {
+                client.inputTimelineStarted = true;
+                client.nextConsumeServerTick = state.serverTick + state.inputLeadTicks;
+            }
+
+            if (state.serverTick < client.nextConsumeServerTick)
+                return;
+
+            const uint32_t nextSeq = client.lastProcessedInputSeq + 1u;
+            const std::size_t seqSlot = nextSeq % kServerInputBufferSize;
+            auto& entry = client.inputRing[seqSlot];
+            if (entry.valid && entry.seq == nextSeq)
+            {
+                // Exact match at the scheduled deadline - consume this command.
+                client.currentButtons  = entry.buttons;
+                client.previousButtons = client.currentButtons;
+                client.lastProcessedInputSeq = nextSeq;
+                client.consecutiveInputGaps = 0;
+
+                if (entry.seenBuffered && !entry.seenDirect)
+                    state.diag.recordBufferedInputRecovery(client.playerId, nextSeq, state.serverTick);
+
+                entry.valid = false;
+                entry.seenDirect = false;
+                entry.seenBuffered = false;
+                ++client.nextConsumeServerTick;
+                return;
+            }
+
+            // The consume deadline was reached and the exact sequence is still missing.
+            // Fall back to the previous buttons and advance permanently.
+            client.currentButtons = client.previousButtons;
+            client.lastProcessedInputSeq = nextSeq;
+            ++client.consecutiveInputGaps;
+            ++client.nextConsumeServerTick;
+
+            state.diag.recordSimulationGap(client.playerId,
+                                           nextSeq,
+                                           client.previousButtons,
+                                           state.serverTick);
+
+            if (client.consecutiveInputGaps >= kRepeatedInputWarnThreshold
+                && state.serverTick >= client.nextGapWarnTick)
+            {
+                LOG_NET_INPUT_WARN(
+                    "Repeated input gaps playerId={} streak={} expectedSeq={} slotValid={} slotSeq={} using previousButtons=0x{:02x} lastRecv={} lastProcessed={}",
+                    client.playerId, client.consecutiveInputGaps,
+                    nextSeq,
+                    entry.valid ? 1 : 0, entry.seq,
+                    client.previousButtons,
+                    client.lastReceivedInputSeq, client.lastProcessedInputSeq);
+
+                client.nextGapWarnTick = state.serverTick + kRepeatedInputWarnCooldownTicks;
+            }
+        }
+    } // namespace
+
+    void initServerState(ServerState& state,
+                         ENetHost* host,
+                         const bool diagEnabled,
+                         const bool overrideMapSeed,
+                         uint32_t mapSeed,
+                         const uint32_t inputLeadTicks,
+                         const uint32_t snapshotIntervalTicks)
     {
         state.host = host;
         state.serverTick = 0;
+        state.inputLeadTicks = inputLeadTicks;
+        state.snapshotIntervalTicks = snapshotIntervalTicks;
 
         // Reset all client slots.
         for (auto& slot : state.clients)
@@ -95,57 +186,10 @@ namespace bomberman::server
 
             anyClient = true;
             auto& client = slot.value();
-
-            // ---- Consume next input from ring buffer ----
-            if (client.lastReceivedInputSeq > 0)
-            {
-                // Client has sent at least one input - advance consumed seq unconditionally.
-                const uint32_t nextSeq = client.lastConsumedInputSeq + 1;
-                const std::size_t seqSlot = nextSeq % kServerInputBufferSize;
-
-                auto& entry = client.inputRing[seqSlot];
-                if (entry.valid && entry.seq == nextSeq)
-                {
-                    // Exact match - consume this command.
-                    client.currentButtons  = entry.buttons;
-                    client.previousButtons = client.currentButtons;
-                    entry.valid = false; // mark consumed
-                    client.consecutiveInputGaps = 0;
-                }
-                else
-                {
-                    // Gap or stale slot: hold previous buttons.
-                    client.currentButtons = client.previousButtons;
-                    ++client.consecutiveInputGaps;
-
-                    // Log the gap for diagnostics.
-                    state.diag.recordSimulationGap(client.playerId,
-                                                   nextSeq,
-                                                   client.previousButtons,
-                                                   state.serverTick);
-
-                    if (client.consecutiveInputGaps >= kRepeatedInputWarnThreshold
-                        && state.serverTick >= client.nextGapWarnTick)
-                    {
-                        LOG_NET_INPUT_WARN(
-                            "Repeated input gaps playerId={} streak={} expectedSeq={} slotValid={} slotSeq={} using previousButtons=0x{:02x} lastRecv={} lastConsumed={}",
-                            client.playerId, client.consecutiveInputGaps,
-                            nextSeq,
-                            entry.valid ? 1 : 0, entry.seq,
-                            client.previousButtons,
-                            client.lastReceivedInputSeq, client.lastConsumedInputSeq);
-
-                        client.nextGapWarnTick = state.serverTick + kRepeatedInputWarnCooldownTicks;
-                    }
-                }
-
-                client.lastConsumedInputSeq = nextSeq;
-            }
-            else
-            {
-                // No input ever received from this client - idle.
-                client.currentButtons = 0;
-            }
+            resolveClientInputForTick(state, client);
+            state.diag.samplePeerInputContinuity(client.playerId,
+                                                 client.lastReceivedInputSeq,
+                                                 client.lastProcessedInputSeq);
 
             // Derive movement from the button bitmask.
             const int8_t moveX = buttonsToMoveX(client.currentButtons);
@@ -153,6 +197,19 @@ namespace bomberman::server
 
             client.pos = sim::stepMovementWithCollision(
                 client.pos, moveX, moveY, state.tiles);
+
+            bool correctionQueued = false;
+            if (client.peer != nullptr)
+            {
+                const auto correction = buildCorrection(state, client);
+                const auto correctionBytes = makeCorrectionPacket(correction);
+                correctionQueued = queueUnreliableCorrection(client.peer, correctionBytes);
+            }
+            state.diag.recordPacketSent(EMsgType::Correction,
+                                        client.playerId,
+                                        static_cast<uint8_t>(EChannel::CorrectionUnreliable),
+                                        kPacketHeaderSize + kMsgCorrectionSize,
+                                        correctionQueued ? NetPacketResult::Ok : NetPacketResult::Dropped);
 
             if ((state.serverTick % kPeerSampleTicks) == 0 && client.peer != nullptr)
             {
@@ -179,6 +236,9 @@ namespace bomberman::server
         if (!anyClient)
             return;
 
+        if (!shouldBroadcastSnapshot(state))
+            return;
+
         const auto snapshot = buildSnapshot(state);
         const auto snapshotBytes = makeSnapshotPacket(snapshot);
         if ((state.serverTick % kServerSnapshotLogIntervalTicks) == 0)
@@ -191,42 +251,15 @@ namespace bomberman::server
             if (!slot.has_value() || slot->peer == nullptr)
                 continue;
 
-            const bool queued = queueUnreliableGame(slot->peer, snapshotBytes);
+            const bool queued = queueUnreliableSnapshot(slot->peer, snapshotBytes);
             state.diag.recordPacketSent(EMsgType::Snapshot,
                                         slot->playerId,
-                                        static_cast<uint8_t>(EChannel::GameUnreliable),
+                                        static_cast<uint8_t>(EChannel::SnapshotUnreliable),
                                         kPacketHeaderSize + kMsgSnapshotSize,
                                         queued ? NetPacketResult::Ok : NetPacketResult::Dropped);
         }
 
         flush(state.host);
-    }
-
-    MsgSnapshot buildSnapshot(const ServerState& state)
-    {
-        MsgSnapshot msg{};
-        msg.serverTick = state.serverTick;
-
-        uint8_t count = 0;
-        for (uint8_t i = 0; i < kMaxPlayers && count < kMaxPlayers; ++i)
-        {
-            if (!state.clients[i].has_value())
-                continue;
-
-            const auto& client = state.clients[i].value();
-            auto& slot = msg.players[count];
-
-            slot.playerId = client.playerId;
-            slot.flags = MsgSnapshot::PlayerEntry::EPlayerFlags::Alive; // TODO: replace with actual alive status
-            // Clamp int32 tile-Q8 positions to int16 wire range.
-            slot.xQ = static_cast<int16_t>(std::clamp(client.pos.xQ, INT16_MIN, INT16_MAX));
-            slot.yQ = static_cast<int16_t>(std::clamp(client.pos.yQ, INT16_MIN, INT16_MAX));
-
-            ++count;
-        }
-
-        msg.playerCount = count;
-        return msg;
     }
 
 } // namespace bomberman::server

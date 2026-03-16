@@ -13,6 +13,12 @@ namespace bomberman
 {
     namespace net { class NetClient; }
 
+    struct MultiplayerClientConfig
+    {
+        bool predictionEnabled = true;
+        bool remoteSmoothingEnabled = true;
+    };
+
     class Game
     {
       public:
@@ -25,7 +31,8 @@ namespace bomberman
          * @param inNetClient Optional multiplayer client (not owned).
          */
         Game(const std::string& windowName, int windowWidth, int windowHeight,
-             net::NetClient* inNetClient = nullptr, uint16_t serverPort = net::kDefaultServerPort, bool mute = false);
+             net::NetClient* inNetClient = nullptr, uint16_t serverPort = net::kDefaultServerPort, bool mute = false,
+             MultiplayerClientConfig multiplayerConfig = {});
 
         /** @brief Releases runtime resources and shuts down SDL subsystems. */
         ~Game();
@@ -72,8 +79,20 @@ namespace bomberman
         [[nodiscard]]
         uint16_t getServerPort() const;
 
-        /** @brief Gracefully disconnects the multiplayer client if one is active. */
-        void disconnectNetClientIfActive();
+        /** @brief Returns the multiplayer client configuration used for this run. */
+        [[nodiscard]]
+        const MultiplayerClientConfig& getMultiplayerClientConfig() const;
+
+        /** @brief Returns true when local multiplayer prediction is enabled. */
+        [[nodiscard]]
+        bool isPredictionEnabled() const;
+
+        /** @brief Returns true when remote smoothing/interpolation is enabled. */
+        [[nodiscard]]
+        bool isRemoteSmoothingEnabled() const;
+
+        /** @brief Disconnects the multiplayer client if one is active. */
+        void disconnectNetClientIfActive(bool blockUntilComplete = true);
 
       private:
         // SDL pointers.
@@ -96,6 +115,7 @@ namespace bomberman
         uint16_t serverPort_ = net::kDefaultServerPort; ///< Server port from CLI or default.
         bool mute_ = false;                             ///< When true, all audio output is silenced at startup.
         bool hasKeyboardFocus_ = true;                  ///< True while the SDL window has keyboard focus.
+        MultiplayerClientConfig multiplayerConfig_{};   ///< Startup config for client-side netcode behavior.
 
 
         /** @brief Updates internal focus state and clears local input when focus is lost. */

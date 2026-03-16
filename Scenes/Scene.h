@@ -93,6 +93,14 @@ namespace bomberman
         [[nodiscard]]
         virtual bool wantsNetworkInputPolling() const { return false; }
 
+        /**
+         * @brief Called after Game samples and sends one local multiplayer input for this tick.
+         *
+         * `inputSeq` is the local sequence assigned by NetClient. Scenes that do not care
+         * about local prediction can ignore this hook.
+         */
+        virtual void onNetworkInputSent(uint32_t inputSeq, uint8_t buttons);
+
       protected:
         Game* game = nullptr; // pointer to game for use in all scenes
 

@@ -100,6 +100,17 @@ namespace bomberman::net
         uint32_t queuedUnreliable = 0;
     };
 
+    /** @brief Aggregate input-continuity facts for one gameplay peer. */
+    struct NetPeerContinuitySummary
+    {
+        uint8_t peerId = 0xFF;
+        uint64_t timestampMs = 0;
+        uint64_t simulationGaps = 0;
+        uint64_t bufferedInputRecoveries = 0;
+        uint32_t lastReceivedInputSeq = 0;
+        uint32_t lastProcessedInputSeq = 0;
+    };
+
 
     /**
      * @brief Aggregate counters and timing collected across one diagnostics session.
@@ -129,15 +140,13 @@ namespace bomberman::net
         uint64_t malformedPacketsRecv = 0; ///< Incoming packets rejected before a typed payload could be dispatched.
         uint64_t malformedPacketBytesRecv = 0; ///< Bytes carried by malformed incoming packets.
 
-        uint64_t inputBatchesReceived = 0; ///< Total input batches received and parsed successfully.
-        uint64_t inputBatchesFullyStale = 0; ///< Batches whose newest entry was already consumed on arrival.
-        uint64_t inputEntriesReceivedTotal = 0; ///< Total input command entries seen inside incoming input batches.
-        uint64_t inputEntriesAccepted = 0;      ///< Input command entries accepted and stored for future consumption.
-        uint64_t inputEntriesRedundant = 0;     ///< Already-consumed input entries that were harmlessly redundant on arrival.
-        uint64_t inputEntriesRejectedOutsideWindow = 0; ///< Input entries rejected for being beyond the accepted receive window.
+        uint64_t inputPacketsReceived = 0;   ///< Total input packets received and parsed successfully.
+        uint64_t inputPacketsFullyStale = 0; ///< Input packets whose newest entry was already consumed on arrival.
+        uint64_t inputEntriesTooLate = 0;    ///< Input entries that arrived after their sequence had already been processed.
+        uint64_t inputEntriesTooFarAhead = 0; ///< Input entries rejected for being too far ahead of the accepted receive window.
 
-        uint64_t simulationGaps = 0; ///< Times the simulation had to fall back because exact input was unavailable.
-        uint64_t bufferedInputRecoveries = 0; ///< Times buffered input avoided a simulation gap.
+        uint64_t simulationGaps = 0; ///< Times a consume deadline was reached without the exact input, so previous buttons were reused.
+        uint64_t bufferedInputRecoveries = 0; ///< Times the exact input packet missed its deadline, but redundant batch history filled the seq before a gap occurred.
     };
 
 
@@ -189,31 +198,31 @@ namespace bomberman::net
         /** @brief Records a structured peer lifecycle event. */
         void recordPeerLifecycle(NetPeerLifecycleType type, uint8_t peerId, uint32_t transportPeerId, std::string_view note = {});
 
-        /** @brief Records an input batch that was received and parsed successfully. */
-        void recordInputBatchReceived(uint32_t entryCount);
+        /** @brief Records one input packet that was received and parsed successfully. */
+        void recordInputPacketReceived();
 
-        /** @brief Records a fully stale input batch whose newest sequence was already consumed. */
-        void recordInputBatchFullyStale(uint32_t count = 1);
+        /** @brief Records a fully stale input packet whose newest sequence was already consumed. */
+        void recordInputPacketFullyStale(uint32_t count = 1);
 
-        /** @brief Records how many input entries were accepted for buffering. */
-        void recordInputEntriesAccepted(uint32_t count);
+        /** @brief Records input entries that arrived after their sequence had already been processed. */
+        void recordInputEntriesTooLate(uint32_t count);
 
-        /** @brief Records redundant already-consumed input entries seen in a resent batch. */
-        void recordInputEntriesRedundant(uint32_t count);
+        /** @brief Records input entries rejected for being too far ahead of the accepted receive window. */
+        void recordInputEntriesTooFarAhead(uint32_t count);
 
-        /** @brief Records input entries rejected for being beyond the accepted receive window. */
-        void recordInputEntriesRejectedOutsideWindow(uint32_t count);
-
-        /** @brief Records a simulation gap that required a hold fallback for a gameplay peer. */
+        /** @brief Records a consume deadline miss that required reusing the previous buttons for a gameplay peer. */
         void recordSimulationGap(uint8_t peerId, uint32_t inputSeq, uint8_t heldButtons, uint32_t serverTick);
 
-        /** @brief Records a buffered-input recovery that avoided a simulation gap. */
+        /** @brief Records a buffered-input recovery where redundant history supplied the exact seq before consume time. */
         void recordBufferedInputRecovery(uint8_t peerId, uint32_t inputSeq, uint32_t serverTick);
 
         // ---- Peer transport health sampling ----
 
         /** @brief Stores the latest sampled transport health values for a peer. */
         void samplePeer(uint8_t peerId, uint32_t rttMs, uint32_t rttVarianceMs, uint32_t packetLossPermille, uint32_t queuedReliable, uint32_t queuedUnreliable);
+
+        /** @brief Stores the latest input progression cursors for a peer. */
+        void samplePeerInputContinuity(uint8_t peerId, uint32_t lastReceivedInputSeq, uint32_t lastProcessedInputSeq);
 
         // ---- Reporting ----
 
@@ -271,6 +280,7 @@ namespace bomberman::net
         std::size_t recentCount_ = 0;                               ///< Number of valid entries in the ring.
 
         std::unordered_map<uint8_t, NetPeerSample> latestPeerSamples_;
+        std::unordered_map<uint8_t, NetPeerContinuitySummary> peerContinuitySummaries_;
         std::unordered_map<std::string, RecentEventRepeatState> recentEventRepeatState_;
         std::array<PacketAggregate, 256> packetAggregates_{};       ///< Per-message packet aggregates by raw msg type.
     };
