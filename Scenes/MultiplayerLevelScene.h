@@ -60,6 +60,7 @@ namespace bomberman
             MovementDirection lastFacing = MovementDirection::Right;
             bool isMoving = false;
             float ticksSinceLatestSample = 0.0f;
+            bool receivedSampleThisUpdate = false;
             uint32_t lastSeenSnapshotTick = 0;
         };
 
@@ -78,11 +79,12 @@ namespace bomberman
 
         void applySnapshot(const net::MsgSnapshot& snapshot);
         void ensureLocalPresentation(uint8_t localId);
-        void seedLocalPrediction(sim::TilePos posQ, uint32_t lastProcessedInputSeq);
         void applyPredictedLocalInput(uint32_t inputSeq, uint8_t buttons);
         void applyAuthoritativeCorrection(const net::MsgCorrection& correction);
+        void applyBootstrapLocalSnapshotSample(const net::MsgSnapshot::PlayerEntry& entry, uint32_t tick);
         void syncLocalPresentationFromPredictedState(const net::PredictedPlayerState& predictedState);
-        void maybeHandleStaleGameplaySession(const net::NetClient& netClient);
+        void updateGameplaySessionHealth(const net::NetClient& netClient);
+        void setGameplayDegraded(bool degraded, uint32_t silenceMs = 0);
         void logLivePredictionTelemetry(unsigned int delta);
         void updateLivePredictionPendingDepth();
         [[nodiscard]]
@@ -110,6 +112,7 @@ namespace bomberman
         uint32_t lastAppliedCorrectionTick_ = 0;
         uint8_t localPlayerId_ = 0xFF;
         std::shared_ptr<Text> localNameTag_ = nullptr;
+        std::shared_ptr<Text> gameplayStatusText_ = nullptr;
         SnapshotSample localPreviousSample_{};
         SnapshotSample localLatestSample_{};
         net::ClientPrediction localPrediction_{};
@@ -119,6 +122,7 @@ namespace bomberman
         uint32_t livePredictionLogAccumulatorMs_ = 0;
 
         std::unordered_map<uint8_t, RemotePlayerView> remotePlayers_;
+        bool gameplayDegraded_ = false;
         bool leavingToMenu_ = false;
     };
 } // namespace bomberman

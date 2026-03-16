@@ -37,7 +37,8 @@ namespace bomberman
         constexpr int kNameTagOffsetPx = 6;
         constexpr int kNameTagMinPointSize = 12;
         constexpr int kNameTagMaxPointSize = 20;
-        constexpr uint32_t kGameplayStaleTimeoutMs = 1500;
+        constexpr uint32_t kGameplayDegradedThresholdMs = 2000;
+        constexpr int kGameplayStatusOffsetY = 12;
         constexpr uint32_t kLivePredictionLogIntervalMs = 1000;
         constexpr uint32_t kPredictionTickMs = 1000u / static_cast<uint32_t>(sim::kTickRate);
 
@@ -110,9 +111,7 @@ namespace bomberman
             return;
         }
 
-        maybeHandleStaleGameplaySession(*netClient);
-        if(leavingToMenu_)
-            return;
+        updateGameplaySessionHealth(*netClient);
 
         if(game->isPredictionEnabled())
         {
@@ -151,6 +150,12 @@ namespace bomberman
             localNameTag_.reset();
         }
 
+        if(gameplayStatusText_)
+        {
+            removeObject(gameplayStatusText_);
+            gameplayStatusText_.reset();
+        }
+
         LevelScene::onExit();
     }
 
@@ -164,7 +169,7 @@ namespace bomberman
 
     void MultiplayerLevelScene::onNetworkInputSent(const uint32_t inputSeq, const uint8_t buttons)
     {
-        if(!game->isPredictionEnabled())
+        if(!game->isPredictionEnabled() || !localPrediction_.isInitialized())
             return;
 
         applyPredictedLocalInput(inputSeq, buttons);
@@ -188,24 +193,10 @@ namespace bomberman
         lastAppliedSnapshotTick_ = snapshot.serverTick;
     }
 
-    void MultiplayerLevelScene::seedLocalPrediction(const sim::TilePos posQ,
-                                                    const uint32_t lastProcessedInputSeq)
-    {
-        localPrediction_.initialize(posQ, lastProcessedInputSeq);
-        playerPos_ = posQ;
-        syncPlayerSpriteToSimPosition();
-    }
-
     void MultiplayerLevelScene::applyPredictedLocalInput(const uint32_t inputSeq, const uint8_t buttons)
     {
         if(!player)
             return;
-
-        if(!localPrediction_.isInitialized())
-        {
-            const uint32_t previousSeq = (inputSeq > 0) ? (inputSeq - 1u) : 0u;
-            seedLocalPrediction(playerPos_, previousSeq);
-        }
 
         if(!localPrediction_.applyLocalInput(inputSeq, buttons, tiles))
             return;
@@ -218,6 +209,15 @@ namespace bomberman
     {
         if(correction.serverTick <= lastAppliedCorrectionTick_)
             return;
+
+        if(!localPrediction_.isInitialized())
+        {
+            LOG_NET_DIAG_INFO("Local prediction armed from authoritative state tick={} lastProcessed={} pos=({}, {})",
+                              correction.serverTick,
+                              correction.lastProcessedInputSeq,
+                              correction.xQ,
+                              correction.yQ);
+        }
 
         const auto replayResult = localPrediction_.applyCorrectionAndReplay(correction, tiles);
         if(replayResult.missingInputHistory > 0)
@@ -268,14 +268,45 @@ namespace bomberman
         lastAppliedCorrectionTick_ = correction.serverTick;
     }
 
-    void MultiplayerLevelScene::maybeHandleStaleGameplaySession(const net::NetClient& netClient)
+    void MultiplayerLevelScene::updateGameplaySessionHealth(const net::NetClient& netClient)
     {
         const uint32_t silenceMs = netClient.gameplaySilenceMs();
-        if(silenceMs < kGameplayStaleTimeoutMs)
+        setGameplayDegraded(silenceMs >= kGameplayDegradedThresholdMs, silenceMs);
+    }
+
+    void MultiplayerLevelScene::setGameplayDegraded(const bool degraded, const uint32_t silenceMs)
+    {
+        if(gameplayDegraded_ == degraded)
             return;
 
-        LOG_NET_CONN_WARN("Multiplayer gameplay stream stale for {}ms - returning to menu", silenceMs);
-        leaveToMenu(true, "GameplayStale");
+        gameplayDegraded_ = degraded;
+
+        if(gameplayDegraded_)
+        {
+            LOG_NET_CONN_WARN("Gameplay updates silent for {}ms - connection degraded, waiting for gameplay updates",
+                              silenceMs);
+
+            if(!gameplayStatusText_)
+            {
+                auto font = game->getAssetManager()->getFont(16);
+                gameplayStatusText_ =
+                    std::make_shared<Text>(font, game->getRenderer(), "WAITING FOR GAMEPLAY UPDATES");
+                gameplayStatusText_->fitToContent();
+                gameplayStatusText_->setColor(SDL_Color{0xFF, 0xD1, 0x66, 0xFF});
+                gameplayStatusText_->setPosition(
+                    game->getWindowWidth() / 2 - gameplayStatusText_->getWidth() / 2,
+                    kGameplayStatusOffsetY);
+                addObject(gameplayStatusText_);
+            }
+            return;
+        }
+
+        LOG_NET_CONN_INFO("Gameplay updates resumed - connection recovered");
+        if(gameplayStatusText_)
+        {
+            removeObject(gameplayStatusText_);
+            gameplayStatusText_.reset();
+        }
     }
 
     void MultiplayerLevelScene::logLivePredictionTelemetry(const unsigned int delta)
@@ -362,6 +393,25 @@ namespace bomberman
             livePredictionTelemetry_.maxPendingInputDepth);
     }
 
+    void MultiplayerLevelScene::applyBootstrapLocalSnapshotSample(const net::MsgSnapshot::PlayerEntry& entry,
+                                                                  const uint32_t tick)
+    {
+        localPreviousSample_ = localLatestSample_;
+        localLatestSample_.posQ = {entry.xQ, entry.yQ};
+        localLatestSample_.tick = tick;
+        localLatestSample_.valid = true;
+
+        // Before the first owner correction arrives, use snapshot authority only to place the
+        // local sprite visually. Prediction itself must wait for a processed-input cursor.
+        playerPos_.xQ = entry.xQ;
+        playerPos_.yQ = entry.yQ;
+        syncPlayerSpriteToSimPosition();
+        localIsMoving_ = false;
+
+        if(player)
+            player->setMovementDirection(MovementDirection::None);
+    }
+
     void MultiplayerLevelScene::syncLocalPresentationFromPredictedState(const net::PredictedPlayerState& predictedState)
     {
         if(!player)
@@ -427,9 +477,7 @@ namespace bomberman
         if(game->isPredictionEnabled())
         {
             if(!localPrediction_.isInitialized())
-            {
-                seedLocalPrediction({entry.xQ, entry.yQ}, 0);
-            }
+                applyBootstrapLocalSnapshotSample(entry, tick);
             return;
         }
 
@@ -587,6 +635,7 @@ namespace bomberman
         view.latestSample.tick = tick;
         view.latestSample.valid = true;
         view.ticksSinceLatestSample = 0.0f;
+        view.receivedSampleThisUpdate = true;
     }
 
     void MultiplayerLevelScene::updateAnimationFromSnapshotDelta(RemotePlayerView& view)
@@ -619,15 +668,24 @@ namespace bomberman
 
     void MultiplayerLevelScene::updateRemotePresentations(const unsigned int delta)
     {
-        static_cast<void>(delta);
-        const float tickDelta = 1.0f;
+        const float tickDelta =
+            static_cast<float>(delta) / static_cast<float>(kPredictionTickMs);
 
         for(auto& [playerId, view] : remotePlayers_)
         {
             if(!view.sprite)
                 continue;
 
-            view.ticksSinceLatestSample += tickDelta;
+            if(view.receivedSampleThisUpdate)
+            {
+                // Keep freshly received samples at alpha=0 for one update so interpolation
+                // actually blends from previous -> latest instead of snapping immediately.
+                view.receivedSampleThisUpdate = false;
+            }
+            else
+            {
+                view.ticksSinceLatestSample += tickDelta;
+            }
 
             const sim::TilePos presentedPosQ = resolvePresentedPosition(view);
             view.presentedPosQ = presentedPosQ;
@@ -656,6 +714,8 @@ namespace bomberman
         if(observedSnapshotSpacingTicks == 0)
             return view.authoritativePosQ;
 
+        // This path is interpolation only: blend between the two most recent authoritative
+        // snapshot samples. It intentionally does not extrapolate or dead-reckon remote players.
         // TODO: If observed snapshot spacing becomes too noisy under loss, send the nominal
         // snapshot interval to clients during handshake/level setup and blend against that value.
         const float alpha = std::clamp(
