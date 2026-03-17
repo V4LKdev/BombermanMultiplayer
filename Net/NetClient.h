@@ -1,132 +1,163 @@
 #ifndef BOMBERMAN_NET_NETCLIENT_H
 #define BOMBERMAN_NET_NETCLIENT_H
 
+/**
+ * @file NetClient.h
+ * @brief Client-side multiplayer connection lifecycle and packet endpoint.
+ */
+
 #include <memory>
 #include <optional>
-#include <string_view>
 #include <string>
+#include <string_view>
 
 #include "NetCommon.h"
 
 namespace bomberman::net
 {
-    // =================================================================================================================
-    // ===== Client Connection State ===================================================================================
-    // =================================================================================================================
+    // ----- Connection state -----
 
-    /**
-     * @brief Represents the current state of the client connection lifecycle.
-     */
+    /** @brief Client connection lifecycle state. */
     enum class EConnectState : uint8_t
     {
-        Disconnected,       ///< Not connected, no resources held.
-        Connecting,         ///< ENet connect in progress, waiting for CONNECT event.
-        Handshaking,        ///< Transport connected, Hello sent.
-        Connected,          ///< Fully handshake-complete, session ready.
-        Disconnecting,      ///< Graceful disconnect requested, awaiting ENet completion.
-        FailedResolve,      ///< Could not resolve host address.
-        FailedConnect,      ///< ENet connect attempt timed out.
-        FailedHandshake,    ///< Handshake timed out or was rejected.
-        FailedProtocol,     ///< Protocol version mismatch.
-        FailedInit,         ///< ENet or host creation failure.
+        Disconnected,    ///< Not connected and holding no transport resources.
+        Connecting,      ///< ENet connect in progress, waiting for a CONNECT event.
+        Handshaking,     ///< Transport connected and Hello sent, awaiting handshake completion.
+        Connected,       ///< Full session ready after Welcome was received and processed successfully.
+        Disconnecting,   ///< Graceful disconnect requested, awaiting ENet completion.
+        FailedResolve,   ///< Host address could not be resolved.
+        FailedConnect,   ///< Connect attempt timed out or transport failed before handshake.
+        FailedHandshake, ///< Handshake timed out or was rejected for a non-protocol reason.
+        FailedProtocol,  ///< Protocol version mismatch during handshake.
+        FailedInit,      ///< ENet initialization or host creation failed.
     };
 
     /** @brief Returns true if the state represents a terminal failure. */
-    [[nodiscard]] constexpr bool isFailedState(EConnectState s)
+    [[nodiscard]] constexpr bool isFailedState(EConnectState state)
     {
-        return s >= EConnectState::FailedResolve;
+        return state >= EConnectState::FailedResolve;
     }
 
     /** @brief Returns a human-readable label for a connection state. */
-    constexpr std::string_view connectStateName(EConnectState s)
+    constexpr std::string_view connectStateName(EConnectState state)
     {
-        switch (s)
+        switch (state)
         {
-            case EConnectState::Disconnected:    return "Disconnected";
-            case EConnectState::Connecting:      return "Connecting";
-            case EConnectState::Handshaking:     return "Handshaking";
-            case EConnectState::Connected:       return "Connected";
-            case EConnectState::Disconnecting:   return "Disconnecting";
-            case EConnectState::FailedResolve:   return "FailedResolve";
-            case EConnectState::FailedConnect:   return "FailedConnect";
-            case EConnectState::FailedHandshake: return "FailedHandshake";
-            case EConnectState::FailedProtocol:  return "FailedProtocol";
-            case EConnectState::FailedInit:      return "FailedInit";
-            default:                             return "Unknown";
+            using enum EConnectState;
+
+            case Disconnected:      return "Disconnected";
+            case Connecting:        return "Connecting";
+            case Handshaking:       return "Handshaking";
+            case Connected:         return "Connected";
+            case Disconnecting:     return "Disconnecting";
+            case FailedResolve:     return "FailedResolve";
+            case FailedConnect:     return "FailedConnect";
+            case FailedHandshake:   return "FailedHandshake";
+            case FailedProtocol:    return "FailedProtocol";
+            case FailedInit:        return "FailedInit";
+            default:                return "Unknown";
         }
     }
 
     /**
-     * @brief ENet-backed client connection and protocol endpoint.
+     * @brief ENet client connection and protocol endpoint.
      *
-     * Owns the client-side ENet host/peer lifecycle and exposes
-     * connect flow, receive pumping, and input sending for runtime gameplay.
+     * Owns the client-side ENet host and peer lifecycle, drives the async
+     * connect and handshake flow, pumps incoming packets, caches the latest
+     * session data, and sends runtime input batches during gameplay.
+     *
+     * A session is considered connected only after `Welcome` has been received successfully.
      */
     class NetClient
     {
     public:
+        /** @brief Constructs an idle client with no active transport. */
         NetClient();
-        ~NetClient();
+
+        /** @brief Disconnects locally if needed and releases ENet resources. */
+        ~NetClient() noexcept;
 
         /** @brief Non-copyable. */
         NetClient(const NetClient&) = delete;
         NetClient& operator=(const NetClient&) = delete;
 
-        /** @brief Movable. */
-        NetClient(NetClient&&) noexcept;
-        NetClient& operator=(NetClient&&) noexcept;
+        /** @brief Non-movable. */
+        NetClient(NetClient&&) = delete;
+        NetClient& operator=(NetClient&&) = delete;
 
-        // =============================================================================================================
-        // ===== Connection Lifecycle and Management ===================================================================
-        // =============================================================================================================
+        // ----- Connection lifecycle -----
 
         /**
-         * @brief Initiates non-blocking connection to the server and starts handshake process.
+         * @brief Starts a non-blocking connect attempt.
          *
          * @param host Server hostname or IP address.
          * @param port Server port.
          * @param playerName Player name sent in the Hello payload.
          *
-         * @note Use 'connectState()' to query connection progress.
+         * If transport setup succeeds, the client enters `Connecting`.
+         * `Connected` state means the full handshake is completed.
+         *
+         * @note Use @ref NetClient::connectState to observe progress or failure.
          */
         void beginConnect(const std::string& host, uint16_t port, std::string_view playerName);
 
-        /** @brief Disconnects from the server and releases connection resources. */
-        bool disconnect();
-
-        /** @brief Starts a non-blocking graceful disconnect for an active connected session. */
-        void beginDisconnect();
+        /**
+         * @brief Attempts a blocking graceful disconnect, then releases local transport resources.
+         *
+         * If called during `Connecting` or `Handshaking`, the in-progress
+         * attempt is cancelled locally and this returns `false`.
+         *
+         * @warning This function may block for up to the disconnect timeout
+         * while waiting for ENet disconnect completion.
+         *
+         * @return `true` if the remote disconnect handshake completed before local teardown.
+         */
+        bool disconnectBlocking();
 
         /**
-         * @brief Aborts an in-progress beginConnect() attempt.
+         * @brief Starts a non-blocking graceful disconnect for an active session.
          *
-         * Safe to call in any state. Releases resources and transitions to Disconnected
-         * if Connecting or Handshaking; no-op otherwise.
+         * If called during `Connecting` or `Handshaking`, the in-progress
+         * attempt is cancelled locally and state returns to `Disconnected`.
+         * Otherwise, connection state remains `Disconnecting` until
+         * @ref NetClient::pumpNetwork observes completion or timeout.
+         *
+         * @warning Callers must continue pumping the client for completion or timeout handling.
+         */
+        void disconnectAsync();
+
+        /**
+         * @brief Cancels an in-progress connect or handshake attempt.
+         *
+         * Safe to call in any state. If the client is currently `Connecting` or
+         * `Handshaking`, transport resources are released and state returns to
+         * `Disconnected`. Otherwise, this is a no-op.
          */
         void cancelConnect();
 
-        // =============================================================================================================
-        // ===== Runtime Gameplay Interface ============================================================================
-        // =============================================================================================================
+        // ----- Runtime API -----
 
         /**
-         * @brief Processes ENet events for this client host.
+         * @brief Pumps ENet events for this client host.
          *
-         * @param timeoutMs Maximum wait time in milliseconds. Defaults to non-blocking.
+         * Evaluates connect and disconnect timeouts and dispatches any received protocol packets.
+         *
+         * @param timeoutMs Maximum wait in milliseconds. Defaults to non-blocking.
          */
-        void pump(uint16_t timeoutMs = 0);
+        void pumpNetwork(uint16_t timeoutMs = 0);
 
         /**
-         * @brief Records a button bitmask for the current tick and sends a batched input packet.
+         * @brief Records a button bitmask and queues a batched input packet.
          *
-         * @param buttons Button bitmask (kInput* flags).
-         * @return The local input sequence assigned to this sample, or std::nullopt if not connected.
+         * @param buttons Button bitmask (`kInput*` flags).
+         * @return The assigned local input sequence, or `std::nullopt` if the
+         * client is not currently connected.
          */
         [[nodiscard]]
-        std::optional<uint32_t> sendInput(uint8_t buttons);
+        std::optional<uint32_t> sendInput(uint8_t buttons) const;
 
         /** @brief Flushes any queued outgoing ENet packets immediately. */
-        void flushOutgoing();
+        void flushOutgoing() const;
 
         /** @brief Returns true when an active session is connected. */
         [[nodiscard]]
@@ -140,97 +171,143 @@ namespace bomberman::net
         [[nodiscard]]
         const std::optional<MsgReject::EReason>& lastRejectReason() const { return lastRejectReason_; }
 
-        /** @brief Returns server-assigned player id, or kInvalidPlayerId before connect. */
+        /** @brief Returns the server-assigned player id, or @ref NetClient::kInvalidPlayerId before connect. */
         [[nodiscard]]
         uint8_t playerId() const { return playerId_; }
 
         /** @brief Sentinel value indicating no player id has been assigned yet. */
         static constexpr uint8_t kInvalidPlayerId = 0xFF;
 
-        /** @brief Returns negotiated server tick rate. Valid only after successful connect. */
+        /** @brief Returns negotiated server tick rate. Valid only after a successful handshake. */
         [[nodiscard]]
         uint16_t serverTickRate() const { return serverTickRate_; }
 
-        /** @brief Returns the most recently received snapshot from the server, if any. */
+        /**
+         * @brief Copies the newest cached snapshot for the current session.
+         *
+         * Returns `false` if no valid snapshot has been received since the most
+         * recent connect.
+         */
         [[nodiscard]]
         bool tryGetLatestSnapshot(MsgSnapshot& out) const;
 
-        /** @brief Returns the server tick of the last received snapshot. */
+        /** @brief Returns the server tick of the newest cached snapshot, or 0 if none is cached. */
         [[nodiscard]]
         uint32_t lastSnapshotTick() const;
 
-        /** @brief Returns the most recently received owner correction from the server, if any. */
+        /**
+         * @brief Copies the newest cached owner correction for the current session.
+         *
+         * Returns `false` if no valid correction has been received since the
+         * most recent successful connect.
+         */
         [[nodiscard]]
         bool tryGetLatestCorrection(MsgCorrection& out) const;
 
-        /** @brief Returns the server tick of the last received correction. */
+        /** @brief Returns the server tick of the newest cached correction, or 0 if none is cached. */
         [[nodiscard]]
         uint32_t lastCorrectionTick() const;
 
-        /** @brief Returns milliseconds since the last gameplay packet, or since connect if none arrived yet. */
+        /**
+         * @brief Returns milliseconds since the last snapshot or correction.
+         *
+         * If gameplay traffic has not arrived yet for the current session, the
+         * timer runs from handshake completion instead.
+         */
         [[nodiscard]]
         uint32_t gameplaySilenceMs() const;
 
-        /** @brief Populates `outSeed` and returns true if a LevelInfo has been received. */
+        /**
+         * @brief Returns the cached map seed from the current session's `LevelInfo`.
+         *
+         * The cache is cleared on disconnect or reset.
+         */
         [[nodiscard]]
         bool tryGetMapSeed(uint32_t& outSeed) const;
 
     private:
-        // =============================================================================================================
-        // ===== Internal State and Helpers ============================================================================
-        // =============================================================================================================
+        // ----- Private state -----
 
+        struct Impl;
         /**
          * @brief Opaque ENet implementation detail.
          *
-         * Keeps <enet/enet.h> out of this header. All ENet interaction
-         * happens through the Impl pointer in NetClient.cpp.
+         * Keeps `<enet/enet.h>` out of this header. All direct ENet interaction
+         * lives in `NetClient.cpp`.
+         *
+         * The Struct holds both ENet transport resources and transient session state
+         * that is cleared on disconnect or failure.
+         * This includes the protocol packet caches, which are logically part of the session.
          */
-        struct Impl;
         std::unique_ptr<Impl> impl_;
 
         bool initialized_ = false;
         EConnectState state_ = EConnectState::Disconnected;
 
         uint8_t playerId_ = kInvalidPlayerId; ///< Assigned by server during handshake [0, kMaxPlayers).
-        uint16_t serverTickRate_ = 0;   ///< Received from server during handshake.
+        uint16_t serverTickRate_ = 0; ///< Received from server during handshake.
         std::optional<MsgReject::EReason> lastRejectReason_; ///< Set only when a Reject payload is received.
+
+        // ----- ENet lifecycle -----
 
         bool initializeENet();
         void shutdownENet();
 
-        // ---- Protocol handlers ----
-        void handleWelcome(const uint8_t* payload, std::size_t payloadSize);
-        void handleReject(const uint8_t* payload, std::size_t payloadSize);
-        void handleLevelInfo(const uint8_t* payload, std::size_t payloadSize);
-        void handleSnapshot(const uint8_t* payload, std::size_t payloadSize);
-        void handleCorrection(const uint8_t* payload, std::size_t payloadSize);
+        // ----- Disconnect helpers -----
 
-        // ---- pump() sub-helpers ----
-
-        bool checkConnectTimeouts();
-        bool checkDisconnectTimeout();
-        /** @brief Handles an ENet CONNECT event (sends Hello, transitions to Handshaking). Returns true if pump should return early. */
-        bool handleEnetConnect();
-        /** @brief Handles an ENet RECEIVE event. Returns true if pump should return early (failure state). */
-        bool handleEnetReceive(const uint8_t* data, std::size_t dataLength, uint8_t channelID);
-        /** @brief Handles remote disconnect (ENet DISCONNECT event or server-initiated). */
-        void handleEnetDisconnect();
-
-        // ---- Resource teardown ----
-
-        /** @brief Sends a polite disconnect request and drains events until server ack or iteration cap. */
+        /** @brief Requests a graceful disconnect and drains until completion or timeout. */
         [[nodiscard]]
         bool drainGracefulDisconnect();
 
-        /** @brief Starts a polite disconnect request if one is not already in progress. */
-        void requestGracefulDisconnect();
+        /** @brief Starts a graceful disconnect if one is not already in progress. */
+        void startGracefulDisconnect();
 
-        /** @brief Destroys ENet peer/host transport resources without modifying logical state. */
-        void destroyTransport();
+        /** @brief Destroys ENet peer and host resources without changing logical state. */
+        void destroyTransport() const;
 
-        /** @brief Resets connection state shared by disconnect paths. */
+        /**
+         * @brief Clears per-attempt and per-session data without changing connection state.
+         * @param clearRejectReason When false, preserves the current reject reason for UI/reporting.
+         */
+        void clearSessionState(bool clearRejectReason = true);
+
+        /**
+         * @brief Tears down transport, clears stale session data, and enters a failure state.
+         * @param failureState The failure state to enter, which must be a terminal `Failed*` state.
+         * @param clearRejectReason When false, preserves the current reject reason for UI/reporting.
+         */
+        void failConnection(EConnectState failureState, bool clearRejectReason = true);
+
+        /** @brief Resets per-session state shared by disconnect and failure paths. */
         void resetState();
+
+        // ----- Protocol handlers -----
+
+        void handleWelcome(const uint8_t* payload, std::size_t payloadSize);
+        void handleReject(const uint8_t* payload, std::size_t payloadSize);
+        void handleLevelInfo(const uint8_t* payload, std::size_t payloadSize);
+        void handleSnapshot(const uint8_t* payload, std::size_t payloadSize) const;
+        void handleCorrection(const uint8_t* payload, std::size_t payloadSize) const;
+
+        // ----- pumpNetwork() helpers -----
+
+        bool checkConnectTimeouts();
+        bool checkDisconnectTimeout();
+
+        /**
+         * @brief Handles an ENet CONNECT event.
+         * @return `true` if the caller should return immediately from @ref NetClient::pumpNetwork.
+         */
+        bool handleConnectEvent();
+
+        /**
+         * @brief Handles an ENet RECEIVE event.
+         * @return `true` if the caller should return immediately from @ref NetClient::pumpNetwork.
+         */
+        bool handleReceiveEvent(const uint8_t* data, std::size_t dataLength, uint8_t channelID);
+
+        /** @brief Handles a remote disconnect or transport timeout. */
+        void handleDisconnectEvent();
     };
 
 } // namespace bomberman::net

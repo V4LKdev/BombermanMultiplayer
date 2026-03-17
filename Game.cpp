@@ -203,7 +203,7 @@ namespace bomberman
             // Drain incoming network events.
             if (netClient_ != nullptr)
             {
-                netClient_->pump(0);
+                netClient_->pumpNetwork(0);
             }
 
             // Process fixed simulation steps.
@@ -305,11 +305,11 @@ namespace bomberman
 
         if (!blockUntilComplete)
         {
-            netClient_->beginDisconnect();
+            netClient_->disconnectAsync();
             return;
         }
 
-        const bool graceful = netClient_->disconnect();
+        const bool graceful = netClient_->disconnectBlocking();
         if (graceful)
         {
             LOG_NET_CONN_INFO("Multiplayer client disconnected gracefully during local shutdown/leave flow");

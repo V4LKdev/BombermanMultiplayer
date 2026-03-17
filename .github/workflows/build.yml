@@ -38,7 +38,7 @@ jobs:
             libspdlog-dev
 
       - name: Install Build Wrapper
-        uses: SonarSource/sonarqube-scan-action/install-build-wrapper@v6
+        uses: SonarSource/sonarqube-scan-action/install-build-wrapper@fd88b7d
 
       - name: Configure CMake
         run: |
@@ -50,7 +50,7 @@ jobs:
           cmake --build build --clean-first -j2
 
       - name: SonarQube Scan
-        uses: SonarSource/sonarqube-scan-action@v6
+        uses: SonarSource/sonarqube-scan-action@fd88b7d
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:

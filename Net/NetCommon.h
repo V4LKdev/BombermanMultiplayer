@@ -296,6 +296,7 @@ namespace bomberman::net
             VersionMismatch = 0x01,
             ServerFull = 0x02,
             Banned = 0x03,
+            // TODO: Game Ongoing
             Other = 0xFF
         };
 
