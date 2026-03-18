@@ -117,11 +117,16 @@ namespace bomberman::net
         bool isRecoveryActive() const noexcept { return recoveryActive_; }
 
         /**
-         * @brief Applies one new local input to prediction and stores both input/state history.
+         * @brief Records one new local input and advances prediction when authority is available.
          *
-         * Returns false if prediction is uninitialized or if the input sequence is not the next
-         * contiguous local sequence. While recovery is active, the input is recorded but not
-         * simulated into `currentState_`.
+         * Inputs are always retained in local history once their sequence fits the current
+         * contiguous timeline. Before the first authoritative correction arrives, the helper
+         * records inputs for later bootstrap replay but does not advance `currentState_`.
+         * While recovery is active, inputs are likewise retained but not simulated until
+         * authority catches up again.
+         *
+         * Returns false only when the input sequence is invalid or breaks the contiguous
+         * local input timeline expected by prediction history.
          */
         bool applyLocalInput(uint32_t inputSeq, uint8_t buttons, const sim::TileMap& map) noexcept;
 

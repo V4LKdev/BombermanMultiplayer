@@ -169,10 +169,21 @@ namespace bomberman
 
     void MultiplayerLevelScene::onNetworkInputSent(const uint32_t inputSeq, const uint8_t buttons)
     {
-        if(!game->isPredictionEnabled() || !localPrediction_.isInitialized())
+        if(!game->isPredictionEnabled())
             return;
 
-        applyPredictedLocalInput(inputSeq, buttons);
+        if(!localPrediction_.applyLocalInput(inputSeq, buttons, tiles))
+            return;
+
+        updateLivePredictionPendingDepth();
+
+        if(!localPrediction_.isInitialized())
+        {
+            syncLocalPresentationFromInputButtons(buttons);
+            return;
+        }
+
+        syncLocalPresentationFromPredictedState(localPrediction_.currentState());
     }
 
     void MultiplayerLevelScene::applySnapshot(const net::MsgSnapshot& snapshot)
@@ -191,18 +202,6 @@ namespace bomberman
         ensureLocalPresentation(localId);
         syncRemotePlayersFromSnapshot(snapshot, localId);
         lastAppliedSnapshotTick_ = snapshot.serverTick;
-    }
-
-    void MultiplayerLevelScene::applyPredictedLocalInput(const uint32_t inputSeq, const uint8_t buttons)
-    {
-        if(!player)
-            return;
-
-        if(!localPrediction_.applyLocalInput(inputSeq, buttons, tiles))
-            return;
-
-        updateLivePredictionPendingDepth();
-        syncLocalPresentationFromPredictedState(localPrediction_.currentState());
     }
 
     void MultiplayerLevelScene::applyAuthoritativeCorrection(const net::MsgCorrection& correction)
@@ -407,9 +406,23 @@ namespace bomberman
         playerPos_.yQ = entry.yQ;
         syncPlayerSpriteToSimPosition();
         localIsMoving_ = false;
+    }
 
-        if(player)
+    void MultiplayerLevelScene::syncLocalPresentationFromInputButtons(const uint8_t buttons)
+    {
+        if(!player)
+            return;
+
+        localIsMoving_ = (net::buttonsToMoveX(buttons) != 0) || (net::buttonsToMoveY(buttons) != 0);
+        if(localIsMoving_)
+        {
+            localLastFacing_ = inferDirectionFromButtons(buttons, localLastFacing_);
+            player->setMovementDirection(localLastFacing_);
+        }
+        else
+        {
             player->setMovementDirection(MovementDirection::None);
+        }
     }
 
     void MultiplayerLevelScene::syncLocalPresentationFromPredictedState(const net::PredictedPlayerState& predictedState)

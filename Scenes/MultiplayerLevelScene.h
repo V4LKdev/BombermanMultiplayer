@@ -79,9 +79,9 @@ namespace bomberman
 
         void applySnapshot(const net::MsgSnapshot& snapshot);
         void ensureLocalPresentation(uint8_t localId);
-        void applyPredictedLocalInput(uint32_t inputSeq, uint8_t buttons);
         void applyAuthoritativeCorrection(const net::MsgCorrection& correction);
         void applyBootstrapLocalSnapshotSample(const net::MsgSnapshot::PlayerEntry& entry, uint32_t tick);
+        void syncLocalPresentationFromInputButtons(uint8_t buttons);
         void syncLocalPresentationFromPredictedState(const net::PredictedPlayerState& predictedState);
         void updateGameplaySessionHealth(const net::NetClient& netClient);
         void setGameplayDegraded(bool degraded, uint32_t silenceMs = 0);

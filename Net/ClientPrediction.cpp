@@ -34,21 +34,30 @@ namespace bomberman::net
                                            const uint8_t buttons,
                                            const sim::TileMap& map) noexcept
     {
-        if (!initialized_ || inputSeq == 0)
+        if (inputSeq == 0)
         {
             ++stats_.rejectedLocalInputs;
             return false;
         }
 
-        const uint32_t expectedNextSeq = lastRecordedInputSeq_ + 1u;
-        if (inputSeq != expectedNextSeq)
+        if (lastRecordedInputSeq_ != 0)
         {
-            ++stats_.rejectedLocalInputs;
-            return false;
+            const uint32_t expectedNextSeq = lastRecordedInputSeq_ + 1u;
+            if (inputSeq != expectedNextSeq)
+            {
+                ++stats_.rejectedLocalInputs;
+                return false;
+            }
         }
 
         storeInputHistory(inputSeq, buttons);
         lastRecordedInputSeq_ = inputSeq;
+
+        if (!initialized_)
+        {
+            ++stats_.localInputsDeferred;
+            return true;
+        }
 
         if (recoveryActive_)
         {
@@ -113,8 +122,41 @@ namespace bomberman::net
 
         if (!initialized_)
         {
-            initialize(authoritativePosQ, correction.lastProcessedInputSeq);
-            result.recoveryStillActive = false;
+            initialized_ = true;
+            recoveryActive_ = false;
+            recoveryCatchUpSeq_ = 0;
+            currentState_ = {};
+            currentState_.posQ = authoritativePosQ;
+            currentState_.buttons = 0;
+            lastAppliedStateSeq_ = correction.lastProcessedInputSeq;
+            stateHistory_ = {};
+
+            discardAcknowledgedHistory(correction.lastProcessedInputSeq);
+
+            if (lastRecordedInputSeq_ <= correction.lastProcessedInputSeq)
+            {
+                result.recoveryStillActive = false;
+                return result;
+            }
+
+            if (replayRetainedInputsAfter(correction.lastProcessedInputSeq, map, result))
+            {
+                result.recoveryStillActive = false;
+                return result;
+            }
+
+            setAppliedAuthoritativeState(authoritativePosQ, correction.lastProcessedInputSeq, 0);
+            invalidateStateHistoryRange(correction.lastProcessedInputSeq + 1u, lastRecordedInputSeq_);
+            recoveryActive_ = true;
+            recoveryCatchUpSeq_ = lastRecordedInputSeq_;
+            result.recoveryTriggered = true;
+            result.recoveryStillActive = true;
+            result.remainingDeferredInputs = countRetainedInputsAfter(correction.lastProcessedInputSeq);
+            result.catchUpSeq = recoveryCatchUpSeq_;
+            ++stats_.replayTruncations;
+            ++stats_.recoveryActivations;
+            stats_.totalMissingInputHistory += result.missingInputHistory;
+            stats_.maxMissingInputHistory = std::max(stats_.maxMissingInputHistory, result.missingInputHistory);
             return result;
         }
 
