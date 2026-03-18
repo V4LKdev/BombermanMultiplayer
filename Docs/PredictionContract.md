@@ -17,6 +17,7 @@
 - Later packets may backfill older missing sequences only until that sequence reaches its consume deadline.
 - Once a sequence reaches consume deadline, the server either uses the exact input or gaps/falls back and moves on permanently.
 - The input lead is scheduling delay only, not rollback.
+- Input sequence arithmetic currently assumes a session never approaches `uint32_t` wraparound; long-lived gameflow should reset or rotate the sequence domain before that becomes relevant.
 
 ## Ownership
 

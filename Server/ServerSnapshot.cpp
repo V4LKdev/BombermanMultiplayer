@@ -1,6 +1,11 @@
+/**
+ * @file ServerSnapshot.cpp
+ * @brief Authoritative snapshot cadence and snapshot message construction.
+ */
+
 #include "ServerSnapshot.h"
 
-#include "ServerSession.h"
+#include "ServerState.h"
 
 namespace bomberman::server
 {
@@ -18,14 +23,14 @@ namespace bomberman::server
         uint8_t count = 0;
         for (uint8_t i = 0; i < net::kMaxPlayers && count < net::kMaxPlayers; ++i)
         {
-            if (!state.clients[i].has_value())
+            if (!state.matchPlayers[i].has_value())
                 continue;
 
-            const auto& client = state.clients[i].value();
+            const auto& matchPlayer = state.matchPlayers[i].value();
             auto& outPlayer = msg.players[count++];
-            outPlayer.playerId = client.playerId;
-            outPlayer.xQ = static_cast<int16_t>(client.pos.xQ);
-            outPlayer.yQ = static_cast<int16_t>(client.pos.yQ);
+            outPlayer.playerId = matchPlayer.playerId;
+            outPlayer.xQ = static_cast<int16_t>(matchPlayer.pos.xQ);
+            outPlayer.yQ = static_cast<int16_t>(matchPlayer.pos.yQ);
             outPlayer.flags = net::MsgSnapshot::PlayerEntry::EPlayerFlags::Alive;
         }
 

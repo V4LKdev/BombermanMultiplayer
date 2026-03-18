@@ -1,3 +1,8 @@
+/**
+ * @file ServerSnapshot.h
+ * @brief Authoritative snapshot cadence and snapshot message construction helpers.
+ */
+
 #ifndef BOMBERMAN_SERVERSNAPSHOT_H
 #define BOMBERMAN_SERVERSNAPSHOT_H
 
@@ -11,7 +16,7 @@ namespace bomberman::server
     [[nodiscard]]
     bool shouldBroadcastSnapshot(const ServerState& state);
 
-    /** @brief Builds a `MsgSnapshot` from the current authoritative `ServerState`. */
+    /** @brief Builds a `MsgSnapshot` from the current authoritative in-match server state. */
     [[nodiscard]]
     net::MsgSnapshot buildSnapshot(const ServerState& state);
 } // namespace bomberman::server

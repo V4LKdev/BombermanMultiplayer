@@ -1,3 +1,8 @@
+/**
+ * @file ServerHandlers.h
+ * @brief Authoritative server receive-path entry point for typed protocol dispatch.
+ */
+
 #ifndef BOMBERMAN_SERVERHANDLERS_H
 #define BOMBERMAN_SERVERHANDLERS_H
 
@@ -7,8 +12,14 @@ namespace bomberman::server
 {
     struct ServerState;
 
-    /** @brief Parses and dispatches a received ENet packet through the server dispatcher. */
-    void handleEventReceive(const ENetEvent& event, ServerState& state);
+    /**
+     * @brief Validates and dispatches one received ENet packet for the dedicated server.
+     *
+     * Performs header parsing, channel validation, typed handler dispatch, and
+     * diagnostics classification. Packet destruction remains the caller's
+     * responsibility because ENet event ownership stays with the caller.
+     */
+    void handleReceiveEvent(const ENetEvent& event, ServerState& state);
 
 } // namespace bomberman::server
 

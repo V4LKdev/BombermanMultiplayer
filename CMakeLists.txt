@@ -67,7 +67,9 @@ set(SOURCES
 set(SERVER_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/server_main.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Server/ServerSession.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/Server/ServerSimulation.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Server/ServerHandlers.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/Server/ServerEvents.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Server/ServerSnapshot.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Net/NetDiagnostics.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Util/Log.cpp

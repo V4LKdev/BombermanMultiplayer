@@ -189,7 +189,7 @@ Move server message handling from hardcoded `if` checks to a reusable dispatch m
   - explicit `bind(...)` and `dispatch(...)`
 - Added minimum payload-size coherence checks in header deserialization path.
 - Refactored `server_main.cpp` to:
-  - define `ServerContext`
+  - define `PacketDispatchContext`
   - implement `onHello(...)` handler
   - bind handlers through dispatcher setup
   - dispatch validated packets via one receive entrypoint
@@ -239,7 +239,7 @@ Separate packet dispatching from protocol definitions and introduce a typed disp
     - `EChannel::GameState`
     - `kChannelCount`
 - Refactored `server_main.cpp`:
-  - server dispatcher now uses `PacketDispatcher<ServerContext>`
+  - server dispatcher now uses `PacketDispatcher<PacketDispatchContext>`
   - `onHello(...)` now receives typed context directly
   - receive path now calls `dispatchPacket(...)`
   - welcome send now uses `EChannel::Control`
@@ -287,7 +287,7 @@ Implement the first gameplay-relevant message path after handshake: client `Inpu
   - added `kMsgInputSize` and `minPayloadSize(EMsgType::Input)` coverage
   - added `serializeMsgInput(...)` / `deserializeMsgInput(...)` with axis validation
 - Updated `server_main.cpp`:
-  - added `ClientInputState` and per-client latest-input cache in `ServerContext`
+  - added `ClientInputState` and per-client latest-input cache in `PacketDispatchContext`
   - implemented `onInput(...)` handler (parse + store + log)
   - bound `EMsgType::Input` in server dispatcher
   - cleaned disconnect handling to erase only that client's cached input
@@ -503,11 +503,12 @@ Reduce `server_main.cpp` complexity by moving networking and server-state respon
 
 ### Changes
 - Added server module stubs and integration:
-  - `Server/ServerSession.h/.cpp`
+  - `Server/ServerState.h`
+  - `Server/ServerSession.cpp`
   - `Server/ServerHandlers.h/.cpp`
   - `Server/ServerSnapshot.h/.cpp` (placeholder)
-- Moved server-owned state (`ServerState`, `ServerContext`) into `ServerSession`.
-- Moved packet handling and dispatch path (`onHello`, `onInput`, dispatcher, `handleEventReceive`) into `ServerHandlers`.
+- Moved server-owned state (`ServerState`, `PacketDispatchContext`) into the server state module.
+- Moved packet handling and dispatch path (`onHello`, `onInput`, dispatcher, `handleReceiveEvent`) into `ServerHandlers`.
 - Kept `server_main.cpp` focused on process orchestration:
   - CLI parsing
   - ENet host lifecycle
@@ -638,7 +639,7 @@ Grow the runtime protocol beyond connect-only handshake and let the client recei
 Move the server from “input logger + placeholder snapshot sender” to a real authority over map state and player movement.
 
 ### Changes
-- Replaced separate per-client maps with a unified `ClientState`.
+- Replaced separate per-client maps with a unified `GameplayClientState`.
 - Added server-side authoritative tile map + `mapSeed` to `ServerState`.
 - Added `initServerState(...)` to generate or override a session seed and build the authoritative map.
 - Updated `onHello(...)` to send `Welcome` plus `LevelInfo`, then initialize per-client authoritative state.

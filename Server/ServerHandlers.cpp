@@ -1,3 +1,8 @@
+/**
+ * @file ServerHandlers.cpp
+ * @brief Authoritative server receive-path validation and typed packet handling.
+ */
+
 #include "ServerHandlers.h"
 
 #include <optional>
@@ -6,7 +11,7 @@
 #include "Const.h"
 #include "Net/NetSend.h"
 #include "Net/PacketDispatch.h"
-#include "ServerSession.h"
+#include "ServerState.h"
 #include "Util/Log.h"
 
 using namespace bomberman::net;
@@ -14,39 +19,41 @@ using namespace bomberman::net;
 namespace bomberman::server
 {
     // =================================================================================================================
-    // ==== Internal Helpers ===========================================================================================
+    // ===== Internal Helpers ==========================================================================================
     // =================================================================================================================
 
     namespace
     {
-        constexpr NetPacketResult toNetPacketResult(const ReceiveDispatchResult result)
-        {
-            switch (result)
-            {
-                case ReceiveDispatchResult::Ok:        return NetPacketResult::Ok;
-                case ReceiveDispatchResult::Rejected:  return NetPacketResult::Rejected;
-                case ReceiveDispatchResult::Malformed: return NetPacketResult::Malformed;
-                default:                               return NetPacketResult::Rejected;
-            }
-        }
+        // ----- Temporary match bootstrap constants -----
+
+        /** @brief Current temporary authoritative spawn used for newly accepted peers. */
+        constexpr sim::TilePos kDefaultSpawnPos{
+            playerStartX * 256 + 128,
+            playerStartY * 256 + 128
+        };
+
+        // ----- Diagnostics helpers -----
 
         constexpr std::string_view rejectReasonName(const MsgReject::EReason reason)
         {
+            using enum MsgReject::EReason;
+
             switch (reason)
             {
-                case MsgReject::EReason::VersionMismatch: return "version mismatch";
-                case MsgReject::EReason::ServerFull:      return "server full";
-                case MsgReject::EReason::Banned:          return "banned";
-                case MsgReject::EReason::Other:           return "other";
-                default:                                  return "unknown";
+                case VersionMismatch: return "version mismatch";
+                case ServerFull:      return "server full";
+                case Banned:          return "banned";
+                case Other:           return "other";
+                default:              return "unknown";
             }
         }
 
-        void recordPeerLifecycle(net::NetDiagnostics* diag,
+        /** @brief Records a peer lifecycle event when server diagnostics are enabled. */
+        void recordPeerLifecycle(NetDiagnostics* diag,
                                  const NetPeerLifecycleType type,
                                  const uint8_t peerId,
                                  const uint32_t transportPeerId,
-                                 std::string_view note = {})
+                                 const std::string_view note = {})
         {
             if (!diag)
                 return;
@@ -54,87 +61,424 @@ namespace bomberman::server
             diag->recordPeerLifecycle(type, peerId, transportPeerId, note);
         }
 
-        /** @brief Sends a Reject packet and initiates a graceful disconnect. */
-        void sendReject(ServerContext& ctx, MsgReject::EReason reason)
+        /** @brief Records one reliable control-packet send attempt for diagnostics. */
+        void recordControlPacketSent(const PacketDispatchContext& ctx,
+                                     const EMsgType type,
+                                     const uint8_t peerId,
+                                     const std::size_t payloadSize,
+                                     const NetPacketResult result = NetPacketResult::Ok)
+        {
+            if (!ctx.diag)
+            {
+                return;
+            }
+
+            ctx.diag->recordPacketSent(type,
+                                       peerId,
+                                       static_cast<uint8_t>(EChannel::ControlReliable),
+                                       kPacketHeaderSize + payloadSize,
+                                       result);
+        }
+
+        // ----- Handshake helpers -----
+
+        /**
+         * @brief Sends a Reject packet and starts a graceful disconnect.
+         *
+         * @warning Use this only before any handshake-accept packet has been
+         * queued for the peer. Once `Welcome` has been queued, the peer must be
+         * reset instead so a partial handshake is not delivered.
+         */
+        void sendReject(const PacketDispatchContext& ctx, MsgReject::EReason reason)
         {
             MsgReject reject{};
             reject.reason = reason;
-            reject.expectedProtocolVersion = (reason == MsgReject::EReason::VersionMismatch) ? kProtocolVersion : 0;
+            reject.expectedProtocolVersion = reason == MsgReject::EReason::VersionMismatch ? kProtocolVersion : 0;
 
             recordPeerLifecycle(ctx.diag,
                                 NetPeerLifecycleType::PeerRejected,
-                                ctx.diagPeerId,
-                                static_cast<uint32_t>(ctx.peer->incomingPeerID),
+                                ctx.recordedPlayerId.value_or(0xFF),
+                                ctx.peer->incomingPeerID,
                                 rejectReasonName(reason));
 
-            const bool sent = queueReliableControl(ctx.peer, makeRejectPacket(reject));
-            if (sent)
+            if (const bool sent = queueReliableControl(ctx.peer, makeRejectPacket(reject)); sent)
             {
                 flush(ctx.state.host);
                 LOG_NET_CONN_INFO("Sent Reject (reason={}) to peer {}",
                                   static_cast<int>(reason), ctx.peer->incomingPeerID);
-
-                if (ctx.diag)
-                {
-                    ctx.diag->recordPacketSent(EMsgType::Reject,
-                                               ctx.diagPeerId,
-                                               static_cast<uint8_t>(EChannel::ControlReliable),
-                                               kPacketHeaderSize + kMsgRejectSize);
-                }
+                recordControlPacketSent(ctx, EMsgType::Reject, ctx.recordedPlayerId.value_or(0xFF), kMsgRejectSize);
             }
-            else if (ctx.diag)
+            else
             {
-                ctx.diag->recordPacketSent(EMsgType::Reject,
-                                           ctx.diagPeerId,
-                                           static_cast<uint8_t>(EChannel::ControlReliable),
-                                           kPacketHeaderSize + kMsgRejectSize,
-                                           NetPacketResult::Dropped);
+                recordControlPacketSent(ctx,
+                                        EMsgType::Reject,
+                                        ctx.recordedPlayerId.value_or(0xFF),
+                                        kMsgRejectSize,
+                                        NetPacketResult::Dropped);
             }
 
             enet_peer_disconnect_later(ctx.peer, 0);
         }
 
-        bool hasClientState(const ENetPeer* peer)
+        /**
+         * @brief Resets a peer after `Welcome` was already queued but the full handshake could not be completed.
+         *
+         * This intentionally avoids sending `Reject`, because `Welcome` may
+         * already be queued on the reliable channel and a later reject would
+         * produce a contradictory partial handshake on the client.
+         */
+        void abortPartialHandshake(PacketDispatchContext& ctx,
+                                   const uint8_t playerId,
+                                   const EMsgType failedType,
+                                   const std::size_t failedPayloadSize,
+                                   std::string_view failedLabel)
         {
-            return peer && peer->data != nullptr;
+            recordControlPacketSent(ctx, failedType, playerId, failedPayloadSize, NetPacketResult::Dropped);
+            releasePlayerId(ctx.state, playerId);
+            ctx.receiveResult = NetPacketResult::Rejected;
+
+            LOG_NET_CONN_ERROR(
+                "Failed to queue {} for peer {} after Welcome was already queued; resetting peer to drop the partial handshake",
+                failedLabel,
+                ctx.peer->incomingPeerID);
+
+            enet_peer_reset(ctx.peer);
         }
 
-        ClientState* getClientState(ENetPeer* peer)
+        /** @brief Returns true once a live peer session exists and Hello has been accepted for it. */
+        bool hasAcceptedPlayer(const ENetPeer* peer)
         {
-            return peer ? static_cast<ClientState*>(peer->data) : nullptr;
+            const auto* session = getPeerSession(peer);
+            return session != nullptr && session->playerId.has_value();
         }
 
-        uint8_t gameplayPeerId(ENetPeer* peer)
+        /** @brief Returns the active in-match authoritative state for an accepted peer session, if any. */
+        MatchPlayerState* getAcceptedMatchPlayerState(ServerState& state, const PeerSession& session)
         {
-            const auto* client = getClientState(peer);
-            return client ? client->playerId : 0xFF;
+            if (!session.playerId.has_value())
+                return nullptr;
+
+            auto& matchEntry = state.matchPlayers[session.playerId.value()];
+            return matchEntry.has_value() ? &matchEntry.value() : nullptr;
+        }
+
+        /** @brief Returns the accepted player seat for a peer, if Hello has already been accepted. */
+        std::optional<uint8_t> acceptedPlayerId(const ENetPeer* peer)
+        {
+            const auto* session = getPeerSession(peer);
+            return (session != nullptr) ? session->playerId : std::nullopt;
+        }
+
+        struct BufferedInputStats
+        {
+            uint8_t tooLateCount = 0;
+            uint8_t tooFarAheadCount = 0;
+            uint32_t firstTooFarAheadSeq = 0;
+            uint32_t lastTooFarAheadSeq = 0;
+        };
+
+        /** @brief Reserves a player id for a validated Hello or rejects the peer if no slot is available. */
+        [[nodiscard]]
+        std::optional<uint8_t> reserveHelloPlayerId(PacketDispatchContext& ctx)
+        {
+            if (ctx.state.playerIdPoolSize == 0)
+            {
+                LOG_NET_CONN_WARN("Server full ({}/{}) - rejecting peer {}",
+                                  static_cast<int>(kMaxPlayers),
+                                  static_cast<int>(kMaxPlayers),
+                                  ctx.peer->incomingPeerID);
+                ctx.receiveResult = NetPacketResult::Rejected;
+                sendReject(ctx, MsgReject::EReason::ServerFull);
+                return std::nullopt;
+            }
+
+            const auto reservedPlayerId = acquirePlayerId(ctx.state);
+            if (!reservedPlayerId.has_value())
+            {
+                ctx.receiveResult = NetPacketResult::Rejected;
+                sendReject(ctx, MsgReject::EReason::ServerFull);
+                return std::nullopt;
+            }
+
+            ctx.recordedPlayerId = reservedPlayerId.value();
+            return reservedPlayerId;
+        }
+
+        /** @brief Queues the authoritative Welcome response for a validated Hello. */
+        [[nodiscard]]
+        bool queueWelcomeForHello(PacketDispatchContext& ctx, const uint8_t playerId)
+        {
+            MsgWelcome welcome{};
+            welcome.protocolVersion = kProtocolVersion;
+            welcome.playerId = playerId;
+            welcome.serverTickRate = sim::kTickRate;
+
+            if (!queueReliableControl(ctx.peer, makeWelcomePacket(welcome)))
+            {
+                LOG_NET_CONN_ERROR("Failed to send Welcome to peer {} - rejecting", ctx.peer->incomingPeerID);
+                recordControlPacketSent(ctx,
+                                        EMsgType::Welcome,
+                                        playerId,
+                                        kMsgWelcomeSize,
+                                        NetPacketResult::Dropped);
+                releasePlayerId(ctx.state, playerId);
+                ctx.receiveResult = NetPacketResult::Rejected;
+                sendReject(ctx, MsgReject::EReason::Other);
+                return false;
+            }
+
+            LOG_NET_CONN_INFO("Queued Welcome to playerId={}", playerId);
+            recordControlPacketSent(ctx, EMsgType::Welcome, playerId, kMsgWelcomeSize);
+            return true;
+        }
+
+        /**
+         * @brief Queues the temporary immediate `LevelInfo` bootstrap after a successful Welcome.
+         *
+         * This is intentionally separate from acceptance semantics so the later
+         * lobby/gameflow state machine can move the call site without
+         * reworking Hello validation and Welcome handling again.
+         */
+        [[nodiscard]]
+        bool queueImmediateLevelBootstrap(PacketDispatchContext& ctx, const uint8_t playerId)
+        {
+            MsgLevelInfo levelInfo{};
+            levelInfo.mapSeed = ctx.state.mapSeed;
+            if (!queueReliableControl(ctx.peer, makeLevelInfoPacket(levelInfo)))
+            {
+                abortPartialHandshake(ctx, playerId, EMsgType::LevelInfo, kMsgLevelInfoSize, "LevelInfo");
+                return false;
+            }
+
+            recordControlPacketSent(ctx, EMsgType::LevelInfo, playerId, kMsgLevelInfoSize);
+            return true;
+        }
+
+        /** @brief Commits the accepted peer into stable server storage and records the acceptance lifecycle event. */
+        void finalizeAcceptedHello(PacketDispatchContext& ctx, const uint8_t playerId, std::string_view playerName)
+        {
+            auto* session = getPeerSession(ctx.peer);
+            if (session == nullptr)
+            {
+                LOG_NET_CONN_ERROR("Peer {} lost its live session before Hello accept finalization", ctx.peer->incomingPeerID);
+                releasePlayerId(ctx.state, playerId);
+                ctx.receiveResult = NetPacketResult::Rejected;
+                enet_peer_reset(ctx.peer);
+                return;
+            }
+
+            // TODO: individual spawn points per player.
+            acceptPeerSession(ctx.state, *session, playerId, playerName);
+            createMatchPlayerState(ctx.state, playerId, kDefaultSpawnPos);
+
+            recordPeerLifecycle(ctx.diag,
+                                NetPeerLifecycleType::PlayerAccepted,
+                                playerId,
+                                static_cast<uint32_t>(ctx.peer->incomingPeerID));
+            ctx.receiveResult = NetPacketResult::Ok;
+        }
+
+        // ----- Input receive helpers -----
+
+        /** @brief Returns the accepted in-match player state for an Input packet or classifies the packet as rejected. */
+        [[nodiscard]]
+        MatchPlayerState* requireAcceptedMatchPlayer(PacketDispatchContext& ctx)
+        {
+            auto* session = getPeerSession(ctx.peer);
+            if (session == nullptr)
+            {
+                LOG_NET_INPUT_ERROR("Input peer {} has no live peer session - ignoring", ctx.peer->incomingPeerID);
+                ctx.receiveResult = NetPacketResult::Rejected;
+                return nullptr;
+            }
+
+            if (!session->playerId.has_value())
+            {
+                LOG_NET_INPUT_WARN("Input from non-handshaked peer {} - ignoring", ctx.peer->incomingPeerID);
+                ctx.receiveResult = NetPacketResult::Rejected;
+                return nullptr;
+            }
+
+            auto* matchPlayer = getAcceptedMatchPlayerState(ctx.state, *session);
+            if (matchPlayer == nullptr)
+            {
+                LOG_NET_INPUT_ERROR("Input playerId={} has no active match state - ignoring", session->playerId.value());
+                ctx.receiveResult = NetPacketResult::Rejected;
+                return nullptr;
+            }
+
+            ctx.recordedPlayerId = session->playerId.value();
+            return matchPlayer;
+        }
+
+        /**
+         * @brief Parses a fixed-size Input payload or classifies the packet as malformed.
+         *
+         * @note Successful parse guarantees `msgInput.count >= 1`, so helpers
+         * that derive the newest batch sequence can safely subtract one.
+         */
+        [[nodiscard]]
+        bool parseInputMessage(PacketDispatchContext& ctx, const uint8_t* payload, const std::size_t size, MsgInput& msgInput)
+        {
+            if (!deserializeMsgInput(payload, size, msgInput))
+            {
+                LOG_NET_PROTO_WARN("Failed to parse Input payload from peer {}", ctx.peer->incomingPeerID);
+                ctx.receiveResult = NetPacketResult::Malformed;
+                return false;
+            }
+
+            return true;
+        }
+
+        /** @brief Returns the newest absolute input sequence carried by one successfully parsed batch. */
+        [[nodiscard]]
+        uint32_t highestSeqInBatch(const MsgInput& msgInput)
+        {
+            return msgInput.baseInputSeq + static_cast<uint32_t>(msgInput.count) - 1u;
+        }
+
+        /** @brief Records and consumes a fully stale batch whose newest sequence was already processed. */
+        [[nodiscard]]
+        bool handleFullyStaleBatch(PacketDispatchContext& ctx,
+                                   const MatchPlayerState& matchPlayer,
+                                   const MsgInput& msgInput,
+                                   const uint32_t highestSeq)
+        {
+            if (highestSeq > matchPlayer.lastProcessedInputSeq)
+                return false;
+
+            if (ctx.diag)
+            {
+                ctx.diag->recordInputPacketFullyStale();
+                ctx.diag->recordInputEntriesTooLate(msgInput.count);
+            }
+
+            ctx.receiveResult = NetPacketResult::Ok;
+            return true;
+        }
+
+        /** @brief Stores accepted input entries into the authoritative ring while counting discarded ones. */
+        [[nodiscard]]
+        BufferedInputStats bufferInputBatch(MatchPlayerState& matchPlayer,
+                                            const MsgInput& msgInput,
+                                            const uint32_t highestSeq,
+                                            const uint32_t maxAcceptableSeq)
+        {
+            BufferedInputStats stats{};
+
+            for (uint8_t i = 0; i < msgInput.count; ++i)
+            {
+                const uint32_t seq = msgInput.baseInputSeq + i;
+                const uint8_t buttons = msgInput.inputs[i];
+                const bool isDirectEntry = (seq == highestSeq);
+
+                if (seq <= matchPlayer.lastProcessedInputSeq)
+                {
+                    ++stats.tooLateCount;
+                    continue;
+                }
+
+                if (seq > maxAcceptableSeq)
+                {
+                    if (stats.tooFarAheadCount == 0)
+                        stats.firstTooFarAheadSeq = seq;
+                    stats.lastTooFarAheadSeq = seq;
+                    ++stats.tooFarAheadCount;
+                    continue;
+                }
+
+                auto& slot = matchPlayer.inputRing[seq % kServerInputBufferSize];
+                const bool sameSeqAlreadyBuffered = slot.valid && slot.seq == seq;
+                const bool seenDirect = sameSeqAlreadyBuffered ? slot.seenDirect : false;
+                const bool seenBuffered = sameSeqAlreadyBuffered ? slot.seenBuffered : false;
+
+                slot.seq = seq;
+                slot.buttons = buttons;
+                slot.valid = true;
+                slot.seenDirect = seenDirect || isDirectEntry;
+                slot.seenBuffered = seenBuffered || !isDirectEntry;
+
+                if (seq > matchPlayer.lastReceivedInputSeq)
+                    matchPlayer.lastReceivedInputSeq = seq;
+            }
+
+            return stats;
+        }
+
+        /** @brief Records per-batch discard counts for diagnostics. */
+        void recordBufferedInputDiagnostics(PacketDispatchContext& ctx, const BufferedInputStats& stats)
+        {
+            if (!ctx.diag)
+                return;
+
+            ctx.diag->recordInputEntriesTooLate(stats.tooLateCount);
+            ctx.diag->recordInputEntriesTooFarAhead(stats.tooFarAheadCount);
+        }
+
+        /** @brief Updates the repeated too-far-ahead warning state after one accepted Input batch. */
+        void updateTooFarAheadBatchWarning(PacketDispatchContext& ctx,
+                                           MatchPlayerState& matchPlayer,
+                                           const MsgInput& msgInput,
+                                           const uint32_t highestSeq,
+                                           const uint32_t maxAcceptableSeq,
+                                           const BufferedInputStats& stats)
+        {
+            if (stats.tooFarAheadCount == 0)
+            {
+                matchPlayer.consecutiveTooFarAheadBatches = 0;
+                return;
+            }
+
+            ++matchPlayer.consecutiveTooFarAheadBatches;
+            const uint16_t streak = matchPlayer.consecutiveTooFarAheadBatches;
+            if (streak >= kRepeatedInputWarnThreshold
+                && ctx.state.serverTick >= matchPlayer.nextTooFarAheadWarnTick)
+            {
+                LOG_NET_INPUT_WARN(
+                    "Repeated too-far-ahead input rejections playerId={} streak={} latestRejectedSeqs=[{}..{}] count={} batch=[{}..{}] maxAcceptable={} lastRecv={} lastProcessed={}",
+                    matchPlayer.playerId,
+                    streak,
+                    stats.firstTooFarAheadSeq,
+                    stats.lastTooFarAheadSeq,
+                    stats.tooFarAheadCount,
+                    msgInput.baseInputSeq,
+                    highestSeq,
+                    maxAcceptableSeq,
+                    matchPlayer.lastReceivedInputSeq,
+                    matchPlayer.lastProcessedInputSeq);
+
+                matchPlayer.nextTooFarAheadWarnTick = ctx.state.serverTick + kRepeatedInputWarnCooldownTicks;
+            }
+        }
+
+        /** @brief Emits the periodic accepted-input trace for one match-player batch. */
+        void logAcceptedInputBatch(const MatchPlayerState& matchPlayer, const MsgInput& msgInput, const uint32_t highestSeq)
+        {
+            if ((highestSeq % kInputBatchLogIntervalTicks) != 0)
+                return;
+
+            LOG_NET_INPUT_DEBUG("Input playerId={} batch=[{}..{}] lastRecv={} lastProcessed={}",
+                                matchPlayer.playerId,
+                                msgInput.baseInputSeq,
+                                highestSeq,
+                                matchPlayer.lastReceivedInputSeq,
+                                matchPlayer.lastProcessedInputSeq);
         }
 
     } // namespace
 
     // =================================================================================================================
-    // ==== Message Handlers ===========================================================================================
+    // ===== Message Handlers ==========================================================================================
     // =================================================================================================================
 
-    void onHello(ServerContext& ctx, const PacketHeader& /*header*/, const uint8_t* payload, std::size_t payloadSize)
+    void onHello(PacketDispatchContext& ctx, const PacketHeader& /*header*/, const uint8_t* payload, std::size_t payloadSize)
     {
         // Ignore duplicate Hello from an already-handshaked peer.
-        if (hasClientState(ctx.peer))
+        if (hasAcceptedPlayer(ctx.peer))
         {
             LOG_NET_CONN_DEBUG("Duplicate Hello from already-handshaked peer {} - ignoring", ctx.peer->incomingPeerID);
-            ctx.receiveResult = ReceiveDispatchResult::Rejected;
-            ctx.diagPeerId = gameplayPeerId(ctx.peer);
-            return;
-        }
-
-        // Reject if the session is full (no player IDs available).
-        if (ctx.state.playerIdPoolSize == 0)
-        {
-            LOG_NET_CONN_WARN("Server full ({}/{}) – rejecting peer {}",
-                              static_cast<int>(kMaxPlayers), static_cast<int>(kMaxPlayers),
-                              ctx.peer->incomingPeerID);
-            ctx.receiveResult = ReceiveDispatchResult::Rejected;
-            sendReject(ctx, MsgReject::EReason::ServerFull);
+            ctx.receiveResult = NetPacketResult::Rejected;
+            ctx.recordedPlayerId = acceptedPlayerId(ctx.peer);
             return;
         }
 
@@ -142,7 +486,7 @@ namespace bomberman::server
         if (!deserializeMsgHello(payload, payloadSize, msgHello))
         {
             LOG_NET_PROTO_WARN("Failed to parse Hello payload from peer {}", ctx.peer->incomingPeerID);
-            ctx.receiveResult = ReceiveDispatchResult::Malformed;
+            ctx.receiveResult = NetPacketResult::Malformed;
             return;
         }
 
@@ -151,7 +495,7 @@ namespace bomberman::server
         {
             LOG_NET_PROTO_ERROR("Protocol mismatch: peer {} sent version {}, expected {}",
                                 ctx.peer->incomingPeerID, msgHello.protocolVersion, kProtocolVersion);
-            ctx.receiveResult = ReceiveDispatchResult::Rejected;
+            ctx.receiveResult = NetPacketResult::Rejected;
             sendReject(ctx, MsgReject::EReason::VersionMismatch);
             return;
         }
@@ -159,249 +503,80 @@ namespace bomberman::server
         const std::string_view playerName(msgHello.name, boundedStrLen(msgHello.name, kPlayerNameMax));
         LOG_NET_CONN_INFO("Hello from \"{}\" (peer {})", playerName, ctx.peer->incomingPeerID);
 
-        // Allocate a player ID from the pool.
-        const std::optional<uint8_t> playerId = acquirePlayerId(ctx.state);
-        if(!playerId.has_value())
-        {
-            ctx.receiveResult = ReceiveDispatchResult::Rejected;
-            sendReject(ctx, MsgReject::EReason::ServerFull);
+        const std::optional<uint8_t> reservedPlayerId = reserveHelloPlayerId(ctx);
+        if (!reservedPlayerId.has_value())
             return;
-        }
 
-        // Build and send Welcome response.
-        MsgWelcome welcome{};
-        welcome.protocolVersion = kProtocolVersion;
-        welcome.playerId        = playerId.value();
-        welcome.serverTickRate  = sim::kTickRate;
+        const auto playerId = reservedPlayerId.value();
 
-        if (!queueReliableControl(ctx.peer, makeWelcomePacket(welcome)))
-        {
-            LOG_NET_CONN_ERROR("Failed to send Welcome to peer {} - rejecting", ctx.peer->incomingPeerID);
-            if (ctx.diag)
-                ctx.diag->recordPacketSent(EMsgType::Welcome,
-                                           playerId.value(),
-                                           static_cast<uint8_t>(EChannel::ControlReliable),
-                                           kPacketHeaderSize + kMsgWelcomeSize,
-                                           NetPacketResult::Dropped);
-            // Return playerId to pool on failure.
-            releasePlayerId(ctx.state, playerId.value());
-            ctx.receiveResult = ReceiveDispatchResult::Rejected;
-            sendReject(ctx, MsgReject::EReason::Other);
+        if (!queueWelcomeForHello(ctx, playerId))
             return;
-        }
-        LOG_NET_CONN_INFO("Queued Welcome to playerId={}", playerId.value());
 
-        if (ctx.diag)
-            ctx.diag->recordPacketSent(EMsgType::Welcome,
-                                       playerId.value(),
-                                       static_cast<uint8_t>(EChannel::ControlReliable),
-                                       kPacketHeaderSize + kMsgWelcomeSize);
-
-        // Temporarily, the level info packet is considered part of the handshake, will be separated later.
-        MsgLevelInfo levelInfo{};
-        levelInfo.mapSeed = ctx.state.mapSeed;
-        if (!queueReliableControl(ctx.peer, makeLevelInfoPacket(levelInfo)))
-        {
-            LOG_NET_CONN_ERROR("Failed to send LevelInfo to peer {} - rejecting", ctx.peer->incomingPeerID);
-            if (ctx.diag)
-                ctx.diag->recordPacketSent(EMsgType::LevelInfo,
-                                           playerId.value(),
-                                           static_cast<uint8_t>(EChannel::ControlReliable),
-                                           kPacketHeaderSize + kMsgLevelInfoSize,
-                                           NetPacketResult::Dropped);
-            releasePlayerId(ctx.state, playerId.value());
-            ctx.receiveResult = ReceiveDispatchResult::Rejected;
-            sendReject(ctx, MsgReject::EReason::Other);
+        if (!queueImmediateLevelBootstrap(ctx, playerId))
             return;
-        }
-
-        if (ctx.diag)
-            ctx.diag->recordPacketSent(EMsgType::LevelInfo,
-                                       playerId.value(),
-                                       static_cast<uint8_t>(EChannel::ControlReliable),
-                                       kPacketHeaderSize + kMsgLevelInfoSize);
 
         flush(ctx.state.host);
-        LOG_NET_CONN_INFO("Sent handshake bundle (Welcome + LevelInfo seed={}) to playerId={}",
-                          levelInfo.mapSeed, playerId.value());
+        LOG_NET_CONN_INFO("Sent immediate post-accept LevelInfo bootstrap (seed={}) to playerId={}",
+                          ctx.state.mapSeed,
+                          playerId);
 
-        // Initialize per-client state in the stable-address array slot.
-        auto& slot = ctx.state.clients[playerId.value()];
-        slot.emplace();
-        slot->playerId = playerId.value();
-        slot->peer = ctx.peer;
-        // Spawn at the center of the start tile in Q8 (center convention: col*256+128, row*256+128).
-        // TODO: individual spawn points per player.
-        slot->pos = { playerStartX * 256 + 128, playerStartY * 256 + 128 };
-
-        // Store stable pointer in peer->data for fast lookup in handlers and disconnect path.
-        ctx.peer->data = &slot.value();
-
-        recordPeerLifecycle(ctx.diag,
-                            NetPeerLifecycleType::PlayerAccepted,
-                            playerId.value(),
-                            static_cast<uint32_t>(ctx.peer->incomingPeerID));
-        ctx.diagPeerId = playerId.value();
-        ctx.receiveResult = ReceiveDispatchResult::Ok;
+        finalizeAcceptedHello(ctx, playerId, playerName);
     }
 
-    void onInput(ServerContext& ctx, const PacketHeader& /*header*/, const uint8_t* payload, std::size_t size)
+    void onInput(PacketDispatchContext& ctx, const PacketHeader& /*header*/, const uint8_t* payload, std::size_t size)
     {
-        // Ignore input from peers that haven't completed the handshake yet.
-        if (!hasClientState(ctx.peer))
-        {
-            LOG_NET_INPUT_WARN("Input from non-handshaked peer {} - ignoring", ctx.peer->incomingPeerID);
-            ctx.receiveResult = ReceiveDispatchResult::Rejected;
+        auto* matchPlayer = requireAcceptedMatchPlayer(ctx);
+        if (matchPlayer == nullptr)
             return;
-        }
 
         MsgInput msgInput{};
-        if (!deserializeMsgInput(payload, size, msgInput))
-        {
-            LOG_NET_PROTO_WARN("Failed to parse Input payload from peer {}", ctx.peer->incomingPeerID);
-            ctx.receiveResult = ReceiveDispatchResult::Malformed;
+        if (!parseInputMessage(ctx, payload, size, msgInput))
             return;
-        }
 
-        const uint32_t highestSeq = msgInput.baseInputSeq + msgInput.count - 1;
-
-        auto* client = getClientState(ctx.peer);
-        if (client == nullptr)
-        {
-            LOG_NET_INPUT_ERROR("Input peer {} has no client state after guard - ignoring", ctx.peer->incomingPeerID);
-            ctx.receiveResult = ReceiveDispatchResult::Rejected;
-            return;
-        }
-        ctx.diagPeerId = client->playerId;
-
-        uint8_t tooLateCount = 0;
-        uint8_t tooFarAheadCount = 0;
-        uint32_t firstTooFarAheadSeq = 0;
-        uint32_t lastTooFarAheadSeq = 0;
-        const uint32_t maxAcceptableSeq = client->lastProcessedInputSeq + kInputWindowAhead;
+        const uint32_t highestSeq = highestSeqInBatch(msgInput);
+        const uint32_t maxAcceptableSeq = matchPlayer->lastProcessedInputSeq + kMaxBufferedInputLead;
 
         if (ctx.diag)
             ctx.diag->recordInputPacketReceived();
 
-        // If even the newest input in the batch is already consumed, the packet was still
-        // received successfully, but the entire batch is fully stale at the input-stream layer.
-        if (highestSeq <= client->lastProcessedInputSeq)
-        {
-            if (ctx.diag)
-            {
-                ctx.diag->recordInputPacketFullyStale();
-                ctx.diag->recordInputEntriesTooLate(msgInput.count);
-            }
-
-            ctx.receiveResult = ReceiveDispatchResult::Ok;
+        if (handleFullyStaleBatch(ctx, *matchPlayer, msgInput, highestSeq))
             return;
-        }
 
-        // Store each entry from the batch into the ring buffer.
-        for (uint8_t i = 0; i < msgInput.count; ++i)
-        {
-            const uint32_t seq = msgInput.baseInputSeq + i;
-            const uint8_t  buttons = msgInput.inputs[i];
-            const bool isDirectEntry = (seq == highestSeq);
+        const BufferedInputStats stats = bufferInputBatch(*matchPlayer, msgInput, highestSeq, maxAcceptableSeq);
+        recordBufferedInputDiagnostics(ctx, stats);
+        updateTooFarAheadBatchWarning(ctx, *matchPlayer, msgInput, highestSeq, maxAcceptableSeq, stats);
+        logAcceptedInputBatch(*matchPlayer, msgInput, highestSeq);
 
-            // Drop late arrivals: anything already consumed is discarded.
-            if (seq <= client->lastProcessedInputSeq)
-            {
-                ++tooLateCount;
-                continue;
-            }
-
-            // Reject entries too far ahead of the consume window to prevent ring stomping.
-            if (seq > maxAcceptableSeq)
-            {
-                if (tooFarAheadCount == 0)
-                    firstTooFarAheadSeq = seq;
-                lastTooFarAheadSeq = seq;
-                ++tooFarAheadCount;
-                continue;
-            }
-
-            auto& slot = client->inputRing[seq % kServerInputBufferSize];
-            const bool sameSeqAlreadyBuffered = slot.valid && slot.seq == seq;
-            const bool seenDirect = sameSeqAlreadyBuffered ? slot.seenDirect : false;
-            const bool seenBuffered = sameSeqAlreadyBuffered ? slot.seenBuffered : false;
-
-            slot.seq     = seq;
-            slot.buttons = buttons;
-            slot.valid   = true;
-            slot.seenDirect = seenDirect || isDirectEntry;
-            slot.seenBuffered = seenBuffered || !isDirectEntry;
-
-            if (seq > client->lastReceivedInputSeq)
-                client->lastReceivedInputSeq = seq;
-        }
-
-        if (ctx.diag)
-        {
-            ctx.diag->recordInputEntriesTooLate(tooLateCount);
-            ctx.diag->recordInputEntriesTooFarAhead(tooFarAheadCount);
-        }
-
-        if (tooFarAheadCount > 0)
-        {
-            ++client->consecutiveTooFarAheadBatches;
-            const uint16_t streak = client->consecutiveTooFarAheadBatches;
-            if (streak >= kRepeatedInputWarnThreshold
-                && ctx.state.serverTick >= client->nextTooFarAheadWarnTick)
-            {
-                LOG_NET_INPUT_WARN(
-                    "Repeated too-far-ahead input rejections playerId={} streak={} latestRejectedSeqs=[{}..{}] count={} batch=[{}..{}] maxAcceptable={} lastRecv={} lastProcessed={}",
-                    client->playerId, streak,
-                    firstTooFarAheadSeq, lastTooFarAheadSeq, tooFarAheadCount,
-                    msgInput.baseInputSeq, highestSeq,
-                    maxAcceptableSeq, client->lastReceivedInputSeq, client->lastProcessedInputSeq);
-
-                client->nextTooFarAheadWarnTick = ctx.state.serverTick + kRepeatedInputWarnCooldownTicks;
-            }
-        }
-        else
-        {
-            client->consecutiveTooFarAheadBatches = 0;
-        }
-
-        // Periodic logging.
-        if (highestSeq % kInputBatchLogIntervalTicks == 0)
-        {
-            LOG_NET_INPUT_DEBUG("Input playerId={} batch=[{}..{}] lastRecv={} lastProcessed={}",
-                                client->playerId, msgInput.baseInputSeq, highestSeq,
-                                client->lastReceivedInputSeq, client->lastProcessedInputSeq);
-        }
-
-        ctx.receiveResult = ReceiveDispatchResult::Ok;
+        ctx.receiveResult = NetPacketResult::Ok;
     }
 
     // =================================================================================================================
-    // ==== Packet Dispatcher ==========================================================================================
+    // ===== Packet Dispatcher =========================================================================================
     // =================================================================================================================
 
     namespace
     {
-        PacketDispatcher<ServerContext> makeServerDispatcher()
+        PacketDispatcher<PacketDispatchContext> makeServerDispatcher()
         {
-            PacketDispatcher<ServerContext> d{};
+            PacketDispatcher<PacketDispatchContext> d{};
             d.bind(EMsgType::Hello, &onHello);
             d.bind(EMsgType::Input, &onInput);
             return d;
         }
 
-        const PacketDispatcher<ServerContext> gDispatcher = makeServerDispatcher();
+        const PacketDispatcher<PacketDispatchContext> gDispatcher = makeServerDispatcher();
     } // namespace
 
-    void handleEventReceive(const ENetEvent& event, ServerState& state)
+    void handleReceiveEvent(const ENetEvent& event, ServerState& state)
     {
         const std::size_t dataLength = event.packet->dataLength;
         const uint8_t channelId = event.channelID;
 
         LOG_NET_PACKET_TRACE("Received {} bytes on channel {}", dataLength, channelName(channelId));
 
-        ServerContext ctx{state, event.peer, &state.diag};
-        ctx.receiveResult = ReceiveDispatchResult::Rejected;
-        ctx.diagPeerId = gameplayPeerId(event.peer);
+        PacketDispatchContext ctx{state, event.peer, &state.diag};
+        ctx.receiveResult = NetPacketResult::Rejected;
+        ctx.recordedPlayerId = acceptedPlayerId(event.peer);
 
         PacketHeader header{};
         const uint8_t* payload = nullptr;
@@ -410,7 +585,7 @@ namespace bomberman::server
         if (!tryParsePacket(event.packet->data, dataLength, header, payload, payloadSize))
         {
             LOG_NET_PACKET_WARN("Failed to deserialize PacketHeader (malformed or truncated, {} bytes)", dataLength);
-            state.diag.recordMalformedPacketRecv(ctx.diagPeerId, channelId, dataLength, "header parse failed");
+            state.diag.recordMalformedPacketRecv(ctx.recordedPlayerId.value_or(0xFF), channelId, dataLength, "header parse failed");
             return;
         }
 
@@ -420,19 +595,18 @@ namespace bomberman::server
                                 msgTypeName(header.type),
                                 channelName(channelId),
                                 channelName(static_cast<uint8_t>(expectedChannelFor(header.type))));
-            state.diag.recordPacketRecv(header.type, ctx.diagPeerId, channelId, dataLength, NetPacketResult::Rejected);
+            state.diag.recordPacketRecv(header.type, ctx.recordedPlayerId.value_or(0xFF), channelId, dataLength, NetPacketResult::Rejected);
             return;
         }
 
         if (!gDispatcher.dispatch(ctx, header, payload, payloadSize))
         {
             LOG_NET_PACKET_TRACE("No handler for message type 0x{:02x}", static_cast<int>(header.type));
-            state.diag.recordPacketRecv(header.type, ctx.diagPeerId, channelId, dataLength, NetPacketResult::Rejected);
+            state.diag.recordPacketRecv(header.type, ctx.recordedPlayerId.value_or(0xFF), channelId, dataLength, NetPacketResult::Rejected);
             return;
         }
 
-        state.diag.recordPacketRecv(header.type, ctx.diagPeerId, channelId, dataLength,
-                                    toNetPacketResult(ctx.receiveResult));
+        state.diag.recordPacketRecv(header.type, ctx.recordedPlayerId.value_or(0xFF), channelId, dataLength, ctx.receiveResult);
     }
 
 } // namespace bomberman::server

@@ -280,7 +280,12 @@ namespace bomberman::net
         char name[kPlayerNameMax];
     };
 
-    /** @brief Welcome payload sent by server in response to Hello. */
+    /**
+     * @brief Welcome payload sent by server in response to Hello.
+     *
+     * @todo Extend this message with a reconnect token once the server keeps
+     * durable player reservations across in-match disconnects.
+     */
     struct MsgWelcome
     {
         uint16_t protocolVersion; ///< Server protocol version.
