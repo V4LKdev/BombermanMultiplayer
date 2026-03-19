@@ -170,7 +170,10 @@ namespace bomberman
     void MultiplayerLevelScene::onNetworkInputSent(const uint32_t inputSeq, const uint8_t buttons)
     {
         if(!game->isPredictionEnabled())
+        {
+            syncLocalPresentationFromInputButtons(buttons);
             return;
+        }
 
         if(!localPrediction_.applyLocalInput(inputSeq, buttons, tiles))
             return;
@@ -183,7 +186,7 @@ namespace bomberman
             return;
         }
 
-        syncLocalPresentationFromPredictedState(localPrediction_.currentState());
+        syncLocalPresentationFromLocalState(localPrediction_.currentState());
     }
 
     void MultiplayerLevelScene::applySnapshot(const net::MsgSnapshot& snapshot)
@@ -218,7 +221,18 @@ namespace bomberman
                               correction.yQ);
         }
 
-        const auto replayResult = localPrediction_.applyCorrectionAndReplay(correction, tiles);
+        const auto replayResult = localPrediction_.reconcileAndReplay(correction, tiles);
+        if(replayResult.ignoredStaleCorrection)
+        {
+            LOG_NET_DIAG_DEBUG("Ignored stale local correction tick={} lastProcessed={} lastAppliedTick={}",
+                               correction.serverTick,
+                               correction.lastProcessedInputSeq,
+                               lastAppliedCorrectionTick_);
+            livePredictionTelemetry_.lastCorrectionServerTick = correction.serverTick;
+            lastAppliedCorrectionTick_ = correction.serverTick;
+            return;
+        }
+
         if(replayResult.missingInputHistory > 0)
         {
             LOG_NET_INPUT_WARN("Prediction replay truncated tick={} lastProcessed={} missingInputs={}",
@@ -228,23 +242,23 @@ namespace bomberman
         }
         if(replayResult.recoveryTriggered)
         {
-            if(replayResult.recoveryRetruncated)
+            if(replayResult.recoveryRestarted)
             {
                 LOG_NET_INPUT_WARN(
-                    "Prediction recovery retruncated tick={} lastProcessed={} remainingDeferredInputs={} catchUpSeq={}",
+                    "Prediction recovery retruncated tick={} lastProcessed={} remainingDeferredInputs={} recoveryCatchUpSeq={}",
                     correction.serverTick,
                     correction.lastProcessedInputSeq,
                     replayResult.remainingDeferredInputs,
-                    replayResult.catchUpSeq);
+                    replayResult.recoveryCatchUpSeq);
             }
             else
             {
                 LOG_NET_INPUT_WARN(
-                    "Prediction recovery active tick={} lastProcessed={} remainingDeferredInputs={} catchUpSeq={}",
+                    "Prediction recovery active tick={} lastProcessed={} remainingDeferredInputs={} recoveryCatchUpSeq={}",
                     correction.serverTick,
                     correction.lastProcessedInputSeq,
                     replayResult.remainingDeferredInputs,
-                    replayResult.catchUpSeq);
+                    replayResult.recoveryCatchUpSeq);
             }
         }
         if(replayResult.recoveryResolved)
@@ -254,7 +268,7 @@ namespace bomberman
                               correction.lastProcessedInputSeq);
         }
 
-        syncLocalPresentationFromPredictedState(localPrediction_.currentState());
+        syncLocalPresentationFromLocalState(localPrediction_.currentState());
         livePredictionTelemetry_.lastAckedInputSeq = correction.lastProcessedInputSeq;
         livePredictionTelemetry_.lastCorrectionServerTick = correction.serverTick;
         livePredictionTelemetry_.lastCorrectionDeltaQ = replayResult.deltaManhattanQ;
@@ -262,7 +276,7 @@ namespace bomberman
         livePredictionTelemetry_.lastMissingInputs = replayResult.missingInputHistory;
         livePredictionTelemetry_.lastRemainingDeferredInputs = replayResult.remainingDeferredInputs;
         livePredictionTelemetry_.recoveryActive = replayResult.recoveryStillActive;
-        livePredictionTelemetry_.recoveryCatchUpSeq = replayResult.catchUpSeq;
+        livePredictionTelemetry_.recoveryCatchUpSeq = replayResult.recoveryCatchUpSeq;
         updateLivePredictionPendingDepth();
         lastAppliedCorrectionTick_ = correction.serverTick;
     }
@@ -314,7 +328,10 @@ namespace bomberman
             return;
 
         const auto& stats = localPrediction_.stats();
-        if(stats.localInputsApplied == 0 && stats.correctionsApplied == 0)
+        if(stats.localInputsApplied == 0 &&
+           stats.localInputsDeferred == 0 &&
+           stats.rejectedLocalInputs == 0 &&
+           stats.correctionsApplied == 0)
             return;
 
         livePredictionLogAccumulatorMs_ += delta;
@@ -327,7 +344,7 @@ namespace bomberman
         const uint32_t pendingDepth = currentPendingInputDepth();
         const uint32_t pendingAgeMs = pendingDepth * kPredictionTickMs;
         LOG_NET_DIAG_DEBUG(
-            "Prediction live ackSeq={} corrTick={} pendingDepth={} pendingAgeMs={} lastDeltaQ={} lastReplay={} lastMissingInputs={} remainingDeferredInputs={} recoveryActive={} catchUpSeq={} maxPendingDepth={}",
+            "Prediction live ackSeq={} corrTick={} pendingDepth={} pendingAgeMs={} lastDeltaQ={} lastReplay={} lastMissingInputs={} remainingDeferredInputs={} recoveryActive={} recoveryCatchUpSeq={} maxPendingDepth={}",
             livePredictionTelemetry_.lastAckedInputSeq,
             livePredictionTelemetry_.lastCorrectionServerTick,
             pendingDepth,
@@ -349,9 +366,6 @@ namespace bomberman
 
     uint32_t MultiplayerLevelScene::currentPendingInputDepth() const
     {
-        if(!localPrediction_.isInitialized())
-            return 0;
-
         const uint32_t lastRecorded = localPrediction_.lastRecordedInputSeq();
         if(lastRecorded <= livePredictionTelemetry_.lastAckedInputSeq)
             return 0;
@@ -365,13 +379,16 @@ namespace bomberman
             return;
 
         const auto& stats = localPrediction_.stats();
-        if(stats.localInputsApplied == 0 && stats.correctionsApplied == 0)
+        if(stats.localInputsApplied == 0 &&
+           stats.localInputsDeferred == 0 &&
+           stats.rejectedLocalInputs == 0 &&
+           stats.correctionsApplied == 0)
             return;
 
         const double avgCorrectionDeltaQ =
-            (stats.correctionsWithPredictedState > 0)
+            (stats.correctionsWithRetainedPredictedState > 0)
                 ? static_cast<double>(stats.totalCorrectionDeltaQ) /
-                    static_cast<double>(stats.correctionsWithPredictedState)
+                    static_cast<double>(stats.correctionsWithRetainedPredictedState)
                 : 0.0;
 
         LOG_NET_DIAG_INFO(
@@ -400,12 +417,11 @@ namespace bomberman
         localLatestSample_.tick = tick;
         localLatestSample_.valid = true;
 
-        // Before the first owner correction arrives, use snapshot authority only to place the
-        // local sprite visually. Prediction itself must wait for a processed-input cursor.
+        // Before the first owner correction arrives, keep local position authoritative from
+        // snapshots while leaving facing/animation driven by the latest local input buttons.
         playerPos_.xQ = entry.xQ;
         playerPos_.yQ = entry.yQ;
         syncPlayerSpriteToSimPosition();
-        localIsMoving_ = false;
     }
 
     void MultiplayerLevelScene::syncLocalPresentationFromInputButtons(const uint8_t buttons)
@@ -425,19 +441,19 @@ namespace bomberman
         }
     }
 
-    void MultiplayerLevelScene::syncLocalPresentationFromPredictedState(const net::PredictedPlayerState& predictedState)
+    void MultiplayerLevelScene::syncLocalPresentationFromLocalState(const net::LocalPlayerState& localState)
     {
         if(!player)
             return;
 
-        playerPos_ = predictedState.posQ;
+        playerPos_ = localState.posQ;
         syncPlayerSpriteToSimPosition();
 
-        localIsMoving_ = (net::buttonsToMoveX(predictedState.buttons) != 0) ||
-                         (net::buttonsToMoveY(predictedState.buttons) != 0);
+        localIsMoving_ = (net::buttonsToMoveX(localState.buttons) != 0) ||
+                         (net::buttonsToMoveY(localState.buttons) != 0);
         if(localIsMoving_)
         {
-            localLastFacing_ = inferDirectionFromButtons(predictedState.buttons, localLastFacing_);
+            localLastFacing_ = inferDirectionFromButtons(localState.buttons, localLastFacing_);
             player->setMovementDirection(localLastFacing_);
         }
         else
@@ -499,27 +515,11 @@ namespace bomberman
         localLatestSample_.tick = tick;
         localLatestSample_.valid = true;
 
+        // Without prediction, keep local position authoritative from snapshots but let
+        // direct local input own facing/animation for responsive local presentation.
         playerPos_.xQ = entry.xQ;
         playerPos_.yQ = entry.yQ;
         syncPlayerSpriteToSimPosition();
-
-        if(!localPreviousSample_.valid || !player)
-            return;
-
-        const int dxQ = localLatestSample_.posQ.xQ - localPreviousSample_.posQ.xQ;
-        const int dyQ = localLatestSample_.posQ.yQ - localPreviousSample_.posQ.yQ;
-        const int absDx = std::abs(dxQ);
-        const int absDy = std::abs(dyQ);
-
-        localIsMoving_ = (absDx >= kMovementDeltaThresholdQ) || (absDy >= kMovementDeltaThresholdQ);
-        if(!localIsMoving_)
-        {
-            player->setMovementDirection(MovementDirection::None);
-            return;
-        }
-
-        localLastFacing_ = inferDirectionFromDelta(dxQ, dyQ, localLastFacing_);
-        player->setMovementDirection(localLastFacing_);
     }
 
     void MultiplayerLevelScene::updateLocalNameTagPosition()

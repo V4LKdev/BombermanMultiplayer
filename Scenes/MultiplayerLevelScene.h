@@ -82,7 +82,7 @@ namespace bomberman
         void applyAuthoritativeCorrection(const net::MsgCorrection& correction);
         void applyBootstrapLocalSnapshotSample(const net::MsgSnapshot::PlayerEntry& entry, uint32_t tick);
         void syncLocalPresentationFromInputButtons(uint8_t buttons);
-        void syncLocalPresentationFromPredictedState(const net::PredictedPlayerState& predictedState);
+        void syncLocalPresentationFromLocalState(const net::LocalPlayerState& localState);
         void updateGameplaySessionHealth(const net::NetClient& netClient);
         void setGameplayDegraded(bool degraded, uint32_t silenceMs = 0);
         void logLivePredictionTelemetry(unsigned int delta);

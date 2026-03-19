@@ -153,13 +153,15 @@ namespace bomberman::net
 
     NetClient::NetClient()
     {
+        using enum EMsgType;
+
         impl_ = std::make_unique<Impl>();
 
-        impl_->dispatcher.bind(EMsgType::Welcome, &Impl::onWelcome);
-        impl_->dispatcher.bind(EMsgType::Reject, &Impl::onReject);
-        impl_->dispatcher.bind(EMsgType::LevelInfo, &Impl::onLevelInfo);
-        impl_->dispatcher.bind(EMsgType::Snapshot, &Impl::onSnapshot);
-        impl_->dispatcher.bind(EMsgType::Correction, &Impl::onCorrection);
+        impl_->dispatcher.bind(Welcome, &Impl::onWelcome);
+        impl_->dispatcher.bind(Reject, &Impl::onReject);
+        impl_->dispatcher.bind(LevelInfo, &Impl::onLevelInfo);
+        impl_->dispatcher.bind(Snapshot, &Impl::onSnapshot);
+        impl_->dispatcher.bind(Correction, &Impl::onCorrection);
     }
 
     NetClient::~NetClient() noexcept
@@ -376,16 +378,18 @@ namespace bomberman::net
 
     bool NetClient::checkConnectTimeouts()
     {
-        if (state_ == EConnectState::Connecting && elapsedMs(impl_->connectStartTime) >= kConnectTimeoutMs)
+        using enum EConnectState;
+
+        if (state_ == Connecting && elapsedMs(impl_->connectStartTime) >= kConnectTimeoutMs)
         {
             LOG_NET_CONN_WARN("Async connect timeout ({}ms)", kConnectTimeoutMs);
-            failConnection(EConnectState::FailedConnect);
+            failConnection(FailedConnect);
             return true;
         }
-        if (state_ == EConnectState::Handshaking && elapsedMs(impl_->handshakeStartTime) >= kConnectTimeoutMs)
+        if (state_ == Handshaking && elapsedMs(impl_->handshakeStartTime) >= kConnectTimeoutMs)
         {
             LOG_NET_CONN_WARN("Async handshake timeout ({}ms)", kConnectTimeoutMs);
-            failConnection(EConnectState::FailedHandshake);
+            failConnection(FailedHandshake);
             return true;
         }
         return false;
@@ -422,14 +426,15 @@ namespace bomberman::net
 
         LOG_NET_CONN_DEBUG("ENet connect event received, sending Hello");
 
-        const auto helloPacket = makeHelloPacket(impl_->pendingPlayerName, kProtocolVersion);
-
-        if (!queueReliableControl(impl_->peer, helloPacket))
+        if (const auto helloPacket =
+            makeHelloPacket(impl_->pendingPlayerName, kProtocolVersion);
+            !queueReliableControl(impl_->peer, helloPacket))
         {
             LOG_NET_CONN_ERROR("Failed to send Hello packet");
             failConnection(EConnectState::FailedHandshake);
             return true;
         }
+
         flush(impl_->host);
 
         state_ = EConnectState::Handshaking;
@@ -498,23 +503,25 @@ namespace bomberman::net
 
     void NetClient::handleDisconnectEvent()
     {
-        if (state_ == EConnectState::Disconnecting)
+        using enum EConnectState;
+
+        if (state_ == Disconnecting)
         {
             LOG_NET_CONN_INFO("Graceful disconnect completed");
             destroyTransport();
             resetState();
             return;
         }
-        if (state_ == EConnectState::Connecting)
+        if (state_ == Connecting)
         {
             LOG_NET_CONN_WARN("Remote close/timeout during Connecting");
-            failConnection(EConnectState::FailedConnect);
+            failConnection(FailedConnect);
             return;
         }
-        if (state_ == EConnectState::Handshaking)
+        if (state_ == Handshaking)
         {
             LOG_NET_CONN_WARN("Remote close/timeout during Handshaking");
-            failConnection(EConnectState::FailedHandshake);
+            failConnection(FailedHandshake);
             return;
         }
         destroyTransport();
@@ -576,13 +583,15 @@ namespace bomberman::net
         {
             LOG_NET_CONN_ERROR("ENet host service error: result={} - tearing down transport", serviceResult);
 
-            if (state_ == EConnectState::Handshaking)
+            using enum EConnectState;
+
+            if (state_ == Handshaking)
             {
-                failConnection(EConnectState::FailedHandshake);
+                failConnection(FailedHandshake);
             }
-            else if (state_ == EConnectState::Connecting)
+            else if (state_ == Connecting)
             {
-                failConnection(EConnectState::FailedConnect);
+                failConnection(FailedConnect);
             }
             else
             {

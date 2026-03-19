@@ -1,3 +1,8 @@
+/**
+ * @file ClientPrediction.cpp
+ * @brief Implementation of client-side local prediction, replay, and recovery helpers.
+ */
+
 #include "ClientPrediction.h"
 
 #include <algorithm>
@@ -5,30 +10,26 @@
 
 namespace bomberman::net
 {
+    // =================================================================================================================
+    // ===== Lifecycle =================================================================================================
+    // =================================================================================================================
+
     void ClientPrediction::reset() noexcept
     {
-        initialized_ = false;
+        phase_ = PredictionPhase::AwaitingBaseline;
+
         lastRecordedInputSeq_ = 0;
-        lastAppliedStateSeq_ = 0;
+        lastAuthoritativeInputSeq_ = 0;
         recoveryCatchUpSeq_ = 0;
-        recoveryActive_ = false;
         currentState_ = {};
         stats_ = {};
+
         clearHistory();
     }
 
-    void ClientPrediction::initialize(const sim::TilePos startPosQ, const uint32_t lastProcessedInputSeq) noexcept
-    {
-        initialized_ = true;
-        lastRecordedInputSeq_ = lastProcessedInputSeq;
-        lastAppliedStateSeq_ = lastProcessedInputSeq;
-        recoveryCatchUpSeq_ = 0;
-        recoveryActive_ = false;
-        currentState_ = {};
-        currentState_.posQ = startPosQ;
-        currentState_.buttons = 0;
-        clearHistory();
-    }
+    // =================================================================================================================
+    // ===== Local Input Path ==========================================================================================
+    // =================================================================================================================
 
     bool ClientPrediction::applyLocalInput(const uint32_t inputSeq,
                                            const uint8_t buttons,
@@ -53,26 +54,34 @@ namespace bomberman::net
         storeInputHistory(inputSeq, buttons);
         lastRecordedInputSeq_ = inputSeq;
 
-        if (!initialized_)
+        if (phase_ == PredictionPhase::AwaitingBaseline)
         {
+            /* Keep the local input suffix so the first correction can seed
+             * prediction and replay it right away. */
             ++stats_.localInputsDeferred;
             return true;
         }
 
-        if (recoveryActive_)
+        if (phase_ == PredictionPhase::Recovering)
         {
+            /* During recovery, keep recording local intent, but keep presenting
+             * authoritative state until replay can resume safely. */
             ++stats_.localInputsDeferred;
             return true;
         }
 
-        currentState_ = simulateStateFromInput(currentState_, buttons, map);
+        // Prediction is active, so simulate the new input immediately.
+        currentState_ = simulateNextStateFromInput(currentState_, buttons, map);
         storeStateHistory(inputSeq, currentState_);
-        lastAppliedStateSeq_ = inputSeq;
         ++stats_.localInputsApplied;
         return true;
     }
 
-    bool ClientPrediction::tryGetPredictedState(const uint32_t inputSeq, PredictedPlayerState& outState) const noexcept
+    // =================================================================================================================
+    // ===== State Lookup ==============================================================================================
+    // =================================================================================================================
+
+    bool ClientPrediction::tryGetPredictedStateAtSeq(const uint32_t inputSeq, LocalPlayerState& outState) const noexcept
     {
         const StateHistoryEntry* entry = findStateHistory(inputSeq);
         if (entry == nullptr)
@@ -82,165 +91,226 @@ namespace bomberman::net
         return true;
     }
 
-    bool ClientPrediction::hasPendingInputsAfter(const uint32_t inputSeq) const noexcept
-    {
-        return initialized_ && lastRecordedInputSeq_ > inputSeq;
-    }
+    // =================================================================================================================
+    // ===== Correction and Replay =====================================================================================
+    // =================================================================================================================
 
-    CorrectionReplayResult ClientPrediction::applyCorrectionAndReplay(const MsgCorrection& correction,
-                                                                      const sim::TileMap& map) noexcept
+    CorrectionReplayResult ClientPrediction::reconcileAndReplay(const MsgCorrection& correction,
+                                                                const sim::TileMap& map) noexcept
     {
+        /*
+         * Correction and replay flow:
+         * 1) Reject stale corrections that do not advance authority.
+         * 2) Measure correction delta against any retained predicted state at the acked seq.
+         * 3) If still awaiting a baseline, seed from the correction and replay the retained suffix after it.
+         * 4) If recovering, wait until authority catches through the unresolved suffix, then try replay again.
+         * 5) If active, replay from the new correction baseline or fall back into recovery.
+         */
         CorrectionReplayResult result{};
-        const bool wasRecovering = recoveryActive_;
-        ++stats_.correctionsApplied;
 
-        PredictedPlayerState predictedAtAck{};
-        result.hadPredictedStateAtAck =
-            tryGetPredictedState(correction.lastProcessedInputSeq, predictedAtAck);
+        // The prediction core rejects duplicate or older corrections.
+        if (phase_ != PredictionPhase::AwaitingBaseline &&
+            correction.lastProcessedInputSeq <= lastAuthoritativeInputSeq_)
+        {
+            result.ignoredStaleCorrection = true;
+            result.recoveryStillActive = phase_ == PredictionPhase::Recovering;
+            result.recoveryCatchUpSeq = recoveryCatchUpSeq_;
+            return result;
+        }
+
+        ++stats_.correctionsApplied;
+        lastAuthoritativeInputSeq_ = correction.lastProcessedInputSeq;
+        uint8_t predictedButtonsAtAck = 0;
 
         const sim::TilePos authoritativePosQ{
             correction.xQ,
             correction.yQ
         };
 
-        if (result.hadPredictedStateAtAck)
+        measureCorrectionAtAck(correction.lastProcessedInputSeq, authoritativePosQ, predictedButtonsAtAck, result);
+
+        if (phase_ == PredictionPhase::AwaitingBaseline)
         {
-            ++stats_.correctionsWithPredictedState;
-            result.deltaXQ = static_cast<int32_t>(authoritativePosQ.xQ) - static_cast<int32_t>(predictedAtAck.posQ.xQ);
-            result.deltaYQ = static_cast<int32_t>(authoritativePosQ.yQ) - static_cast<int32_t>(predictedAtAck.posQ.yQ);
-            result.deltaManhattanQ =
-                static_cast<uint32_t>(std::abs(result.deltaXQ) + std::abs(result.deltaYQ));
-            result.correctionMatchedPrediction =
-                predictedAtAck.posQ.xQ == authoritativePosQ.xQ &&
-                predictedAtAck.posQ.yQ == authoritativePosQ.yQ;
-            if (!result.correctionMatchedPrediction)
-                ++stats_.correctionsMismatched;
-        }
-
-        stats_.totalCorrectionDeltaQ += result.deltaManhattanQ;
-        stats_.maxCorrectionDeltaQ = std::max(stats_.maxCorrectionDeltaQ, result.deltaManhattanQ);
-
-        if (!initialized_)
-        {
-            initialized_ = true;
-            recoveryActive_ = false;
-            recoveryCatchUpSeq_ = 0;
-            currentState_ = {};
-            currentState_.posQ = authoritativePosQ;
-            currentState_.buttons = 0;
-            lastAppliedStateSeq_ = correction.lastProcessedInputSeq;
-            stateHistory_ = {};
-
-            discardAcknowledgedHistory(correction.lastProcessedInputSeq);
-
-            if (lastRecordedInputSeq_ <= correction.lastProcessedInputSeq)
-            {
-                result.recoveryStillActive = false;
-                return result;
-            }
-
-            if (replayRetainedInputsAfter(correction.lastProcessedInputSeq, map, result))
-            {
-                result.recoveryStillActive = false;
-                return result;
-            }
-
-            setAppliedAuthoritativeState(authoritativePosQ, correction.lastProcessedInputSeq, 0);
-            invalidateStateHistoryRange(correction.lastProcessedInputSeq + 1u, lastRecordedInputSeq_);
-            recoveryActive_ = true;
-            recoveryCatchUpSeq_ = lastRecordedInputSeq_;
-            result.recoveryTriggered = true;
-            result.recoveryStillActive = true;
-            result.remainingDeferredInputs = countRetainedInputsAfter(correction.lastProcessedInputSeq);
-            result.catchUpSeq = recoveryCatchUpSeq_;
-            ++stats_.replayTruncations;
-            ++stats_.recoveryActivations;
-            stats_.totalMissingInputHistory += result.missingInputHistory;
-            stats_.maxMissingInputHistory = std::max(stats_.maxMissingInputHistory, result.missingInputHistory);
+            handleAwaitingBaselineCorrection(correction.lastProcessedInputSeq, authoritativePosQ, map, result);
             return result;
         }
 
         discardAcknowledgedHistory(correction.lastProcessedInputSeq);
 
-        if (recoveryActive_)
+        if (phase_ == PredictionPhase::Recovering)
         {
-            setAppliedAuthoritativeState(authoritativePosQ, correction.lastProcessedInputSeq, 0);
-
-            if (correction.lastProcessedInputSeq < recoveryCatchUpSeq_)
-            {
-                result.recoveryStillActive = true;
-                result.remainingDeferredInputs = countRetainedInputsAfter(correction.lastProcessedInputSeq);
-                result.catchUpSeq = recoveryCatchUpSeq_;
-                return result;
-            }
-
-            invalidateStateHistoryRange(correction.lastProcessedInputSeq + 1u, lastRecordedInputSeq_);
-            if (replayRetainedInputsAfter(correction.lastProcessedInputSeq, map, result))
-            {
-                recoveryActive_ = false;
-                recoveryCatchUpSeq_ = 0;
-                result.recoveryResolved = true;
-                result.recoveryStillActive = false;
-                ++stats_.recoveryResolutions;
-                return result;
-            }
-
-            setAppliedAuthoritativeState(authoritativePosQ, correction.lastProcessedInputSeq, 0);
-            invalidateStateHistoryRange(correction.lastProcessedInputSeq + 1u, lastRecordedInputSeq_);
-            recoveryActive_ = true;
-            recoveryCatchUpSeq_ = lastRecordedInputSeq_;
-            result.recoveryTriggered = true;
-            result.recoveryRetruncated = true;
-            result.recoveryStillActive = true;
-            result.remainingDeferredInputs = countRetainedInputsAfter(correction.lastProcessedInputSeq);
-            result.catchUpSeq = recoveryCatchUpSeq_;
-            ++stats_.replayTruncations;
-            stats_.totalMissingInputHistory += result.missingInputHistory;
-            stats_.maxMissingInputHistory = std::max(stats_.maxMissingInputHistory, result.missingInputHistory);
+            handleRecoveringCorrection(correction.lastProcessedInputSeq, authoritativePosQ, map, result);
             return result;
         }
 
         const uint8_t authoritativeButtons =
-            result.hadPredictedStateAtAck ? predictedAtAck.buttons : 0;
-        setAppliedAuthoritativeState(authoritativePosQ, correction.lastProcessedInputSeq, authoritativeButtons);
+            result.hadRetainedPredictedStateAtAck ? predictedButtonsAtAck : 0;
 
-        if (lastRecordedInputSeq_ <= correction.lastProcessedInputSeq)
-        {
-            result.recoveryStillActive = false;
-            return result;
-        }
+        handleActiveCorrection(correction.lastProcessedInputSeq, authoritativePosQ, authoritativeButtons, map, result);
 
-        invalidateStateHistoryRange(correction.lastProcessedInputSeq + 1u, lastRecordedInputSeq_);
-        if (replayRetainedInputsAfter(correction.lastProcessedInputSeq, map, result))
-        {
-            result.recoveryStillActive = false;
-            return result;
-        }
-
-        setAppliedAuthoritativeState(authoritativePosQ, correction.lastProcessedInputSeq, 0);
-        invalidateStateHistoryRange(correction.lastProcessedInputSeq + 1u, lastRecordedInputSeq_);
-        recoveryActive_ = true;
-        recoveryCatchUpSeq_ = lastRecordedInputSeq_;
-        result.recoveryTriggered = true;
-        result.recoveryStillActive = true;
-        result.remainingDeferredInputs = countRetainedInputsAfter(correction.lastProcessedInputSeq);
-        result.catchUpSeq = recoveryCatchUpSeq_;
-        ++stats_.replayTruncations;
-        stats_.totalMissingInputHistory += result.missingInputHistory;
-        stats_.maxMissingInputHistory = std::max(stats_.maxMissingInputHistory, result.missingInputHistory);
-        if (!wasRecovering)
-            ++stats_.recoveryActivations;
         return result;
     }
 
-    void ClientPrediction::setAppliedAuthoritativeState(const sim::TilePos posQ,
-                                                        const uint32_t seq,
+    // =================================================================================================================
+    // ===== Correction Helpers ========================================================================================
+    // =================================================================================================================
+
+    void ClientPrediction::setCurrentAuthoritativeState(const sim::TilePos posQ,
                                                         const uint8_t buttons) noexcept
     {
         currentState_.posQ = posQ;
         currentState_.buttons = buttons;
-        lastAppliedStateSeq_ = seq;
     }
+
+    void ClientPrediction::enterRecoveryFromReplayFailure(const sim::TilePos authoritativePosQ,
+                                                          const uint32_t lastProcessedInputSeq,
+                                                          CorrectionReplayResult& result,
+                                                          const bool wasRecovering) noexcept
+    {
+        /*
+         * The retained suffix is no longer complete enough to rebuild safely.
+         * Fall back to authoritative presentation until a later correction catches up.
+         */
+        setCurrentAuthoritativeState(authoritativePosQ, 0);
+        invalidateStateHistoryRange(lastProcessedInputSeq + 1u, lastRecordedInputSeq_);
+
+        phase_ = PredictionPhase::Recovering;
+        recoveryCatchUpSeq_ = lastRecordedInputSeq_;
+        result.recoveryTriggered = true;
+        result.recoveryRestarted = wasRecovering;
+        result.recoveryStillActive = true;
+
+        result.remainingDeferredInputs = countRetainedInputSuffixAfter(lastProcessedInputSeq);
+        result.recoveryCatchUpSeq = recoveryCatchUpSeq_;
+
+        ++stats_.replayTruncations;
+        stats_.totalMissingInputHistory += result.missingInputHistory;
+        stats_.maxMissingInputHistory = std::max(stats_.maxMissingInputHistory, result.missingInputHistory);
+
+        if (!wasRecovering)
+            ++stats_.recoveryActivations;
+    }
+
+    bool ClientPrediction::replayFromAuthoritativeBaseline(const uint32_t lastProcessedInputSeq,
+                                                           const sim::TilePos authoritativePosQ,
+                                                           const uint8_t authoritativeButtons,
+                                                           const sim::TileMap& map,
+                                                           CorrectionReplayResult& result) noexcept
+    {
+        setCurrentAuthoritativeState(authoritativePosQ, authoritativeButtons);
+
+        if (lastRecordedInputSeq_ <= lastProcessedInputSeq)
+        {
+            result.recoveryStillActive = false;
+            return true;
+        }
+
+        invalidateStateHistoryRange(lastProcessedInputSeq + 1u, lastRecordedInputSeq_);
+        if (replayRetainedInputSuffixAfter(lastProcessedInputSeq, map, result))
+        {
+            result.recoveryStillActive = false;
+            return true;
+        }
+
+        return false;
+    }
+
+    void ClientPrediction::handleAwaitingBaselineCorrection(const uint32_t lastProcessedInputSeq,
+                                                            const sim::TilePos authoritativePosQ,
+                                                            const sim::TileMap& map,
+                                                            CorrectionReplayResult& result) noexcept
+    {
+        /*
+         * The first correction seeds prediction from a real authoritative baseline,
+         * then immediately tries to replay any retained local inputs after it.
+         */
+        phase_ = PredictionPhase::Active;
+        recoveryCatchUpSeq_ = 0;
+        stateHistory_ = {};
+
+        discardAcknowledgedHistory(lastProcessedInputSeq);
+
+        if (replayFromAuthoritativeBaseline(lastProcessedInputSeq, authoritativePosQ, 0, map, result))
+            return;
+
+        /* If replay fails here, the retained input suffix is incomplete. */
+        enterRecoveryFromReplayFailure(authoritativePosQ, lastProcessedInputSeq, result, false);
+    }
+
+    void ClientPrediction::handleRecoveringCorrection(const uint32_t lastProcessedInputSeq,
+                                                      const sim::TilePos authoritativePosQ,
+                                                      const sim::TileMap& map,
+                                                      CorrectionReplayResult& result) noexcept
+    {
+        if (lastProcessedInputSeq < recoveryCatchUpSeq_)
+        {
+            setCurrentAuthoritativeState(authoritativePosQ, 0);
+            result.recoveryStillActive = true;
+            result.remainingDeferredInputs = countRetainedInputSuffixAfter(lastProcessedInputSeq);
+            result.recoveryCatchUpSeq = recoveryCatchUpSeq_;
+            return;
+        }
+
+        if (replayFromAuthoritativeBaseline(lastProcessedInputSeq, authoritativePosQ, 0, map, result))
+        {
+            phase_ = PredictionPhase::Active;
+            recoveryCatchUpSeq_ = 0;
+            result.recoveryResolved = true;
+            ++stats_.recoveryResolutions;
+            return;
+        }
+
+        enterRecoveryFromReplayFailure(authoritativePosQ, lastProcessedInputSeq, result, true);
+    }
+
+    void ClientPrediction::handleActiveCorrection(const uint32_t lastProcessedInputSeq,
+                                                  const sim::TilePos authoritativePosQ,
+                                                  const uint8_t authoritativeButtons,
+                                                  const sim::TileMap& map,
+                                                  CorrectionReplayResult& result) noexcept
+    {
+        if (replayFromAuthoritativeBaseline(lastProcessedInputSeq,
+                                            authoritativePosQ,
+                                            authoritativeButtons,
+                                            map,
+                                            result))
+            return;
+
+        enterRecoveryFromReplayFailure(authoritativePosQ, lastProcessedInputSeq, result, false);
+    }
+
+    void ClientPrediction::measureCorrectionAtAck(const uint32_t lastProcessedInputSeq,
+                                                  const sim::TilePos authoritativePosQ,
+                                                  uint8_t& predictedButtonsAtAck,
+                                                  CorrectionReplayResult& result) noexcept
+    {
+        LocalPlayerState predictedAtAck{};
+        result.hadRetainedPredictedStateAtAck = tryGetPredictedStateAtSeq(lastProcessedInputSeq, predictedAtAck);
+
+        if (result.hadRetainedPredictedStateAtAck)
+        {
+            predictedButtonsAtAck = predictedAtAck.buttons;
+            ++stats_.correctionsWithRetainedPredictedState;
+
+            result.deltaXQ = static_cast<int32_t>(authoritativePosQ.xQ) - predictedAtAck.posQ.xQ;
+            result.deltaYQ = static_cast<int32_t>(authoritativePosQ.yQ) - predictedAtAck.posQ.yQ;
+            result.deltaManhattanQ = static_cast<uint32_t>(std::abs(result.deltaXQ) + std::abs(result.deltaYQ));
+
+            result.correctionMatchedRetainedPrediction =
+                predictedAtAck.posQ.xQ == authoritativePosQ.xQ &&
+                predictedAtAck.posQ.yQ == authoritativePosQ.yQ;
+
+            if (!result.correctionMatchedRetainedPrediction)
+                ++stats_.correctionsMismatched;
+        }
+
+        stats_.totalCorrectionDeltaQ += result.deltaManhattanQ;
+        stats_.maxCorrectionDeltaQ = std::max(stats_.maxCorrectionDeltaQ, result.deltaManhattanQ);
+    }
+
+    // =================================================================================================================
+    // ===== History Storage ===========================================================================================
+    // =================================================================================================================
 
     void ClientPrediction::clearHistory() noexcept
     {
@@ -256,7 +326,7 @@ namespace bomberman::net
         slot.valid = true;
     }
 
-    void ClientPrediction::storeStateHistory(const uint32_t seq, const PredictedPlayerState& state) noexcept
+    void ClientPrediction::storeStateHistory(const uint32_t seq, const LocalPlayerState& state) noexcept
     {
         auto& slot = stateHistory_[historySlot(seq)];
         slot.seq = seq;
@@ -294,7 +364,7 @@ namespace bomberman::net
         }
     }
 
-    uint32_t ClientPrediction::countRetainedInputsAfter(const uint32_t inputSeq) const noexcept
+    uint32_t ClientPrediction::countRetainedInputSuffixAfter(const uint32_t inputSeq) const noexcept
     {
         uint32_t count = 0;
         for (const auto& inputSlot : inputHistory_)
@@ -305,9 +375,9 @@ namespace bomberman::net
         return count;
     }
 
-    bool ClientPrediction::replayRetainedInputsAfter(const uint32_t lastProcessedInputSeq,
-                                                     const sim::TileMap& map,
-                                                     CorrectionReplayResult& result) noexcept
+    bool ClientPrediction::replayRetainedInputSuffixAfter(const uint32_t lastProcessedInputSeq,
+                                                          const sim::TileMap& map,
+                                                          CorrectionReplayResult& result) noexcept
     {
         if (lastRecordedInputSeq_ <= lastProcessedInputSeq)
             return true;
@@ -317,16 +387,17 @@ namespace bomberman::net
             const InputHistoryEntry* inputEntry = findInputHistory(seq);
             if (inputEntry == nullptr)
             {
+                // Replay needs a contiguous retained suffix. Once one input is
+                // missing, the rest of the suffix can no longer be rebuilt safely.
                 result.missingInputHistory = lastRecordedInputSeq_ - seq + 1u;
                 stats_.totalReplayedInputs += result.replayedInputs;
                 stats_.maxReplayedInputs = std::max(stats_.maxReplayedInputs, result.replayedInputs);
-                result.remainingDeferredInputs = countRetainedInputsAfter(lastProcessedInputSeq);
+                result.remainingDeferredInputs = countRetainedInputSuffixAfter(lastProcessedInputSeq);
                 return false;
             }
 
-            currentState_ = simulateStateFromInput(currentState_, inputEntry->buttons, map);
+            currentState_ = simulateNextStateFromInput(currentState_, inputEntry->buttons, map);
             storeStateHistory(seq, currentState_);
-            lastAppliedStateSeq_ = seq;
             ++result.replayedInputs;
         }
 
@@ -335,6 +406,10 @@ namespace bomberman::net
         result.remainingDeferredInputs = 0;
         return true;
     }
+
+    // =================================================================================================================
+    // ===== Ring Lookups and Simulation ===============================================================================
+    // =================================================================================================================
 
     const ClientPrediction::InputHistoryEntry* ClientPrediction::findInputHistory(const uint32_t seq) const noexcept
     {
@@ -354,11 +429,11 @@ namespace bomberman::net
         return &slot;
     }
 
-    PredictedPlayerState ClientPrediction::simulateStateFromInput(const PredictedPlayerState& baseState,
+    LocalPlayerState ClientPrediction::simulateNextStateFromInput(const LocalPlayerState& baseState,
                                                                   const uint8_t buttons,
                                                                   const sim::TileMap& map) const noexcept
     {
-        PredictedPlayerState nextState = baseState;
+        LocalPlayerState nextState = baseState;
         nextState.buttons = buttons;
         nextState.posQ = sim::stepMovementWithCollision(
             baseState.posQ,

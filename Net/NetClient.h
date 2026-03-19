@@ -1,10 +1,10 @@
-#ifndef BOMBERMAN_NET_NETCLIENT_H
-#define BOMBERMAN_NET_NETCLIENT_H
-
 /**
- * @file NetClient.h
+* @file NetClient.h
  * @brief Client-side multiplayer connection lifecycle and packet endpoint.
  */
+
+#ifndef BOMBERMAN_NET_NETCLIENT_H
+#define BOMBERMAN_NET_NETCLIENT_H
 
 #include <memory>
 #include <optional>
