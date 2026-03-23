@@ -7,13 +7,14 @@
 #include "Sim/SimConfig.h"
 
 /**
- * @brief Diagnostics policy constants shared by client- and server-side networking code.
+ * @file NetDiagConfig.h
+ * @brief Shared policy constants for lightweight multiplayer diagnostics.
  */
 
 namespace bomberman::net
 {
     // =================================================================================================================
-    // ===== Storage policy ============================================================================================
+    // ===== Recent-event storage policy ===============================================================================
     // =================================================================================================================
 
     /** @brief Maximum number of recent events retained in the NetDiagnostics ring buffer. */
@@ -23,26 +24,26 @@ namespace bomberman::net
     constexpr uint64_t kRecentEventDedupeCooldownMs = 1000;
 
     // =================================================================================================================
-    // ===== Runtime Reporting cadence =================================================================================
+    // ===== Current server runtime cadence ============================================================================
     // =================================================================================================================
 
-    /** @brief Per-batch input sequence log interval. */
-    constexpr uint32_t kInputBatchLogIntervalTicks = static_cast<uint32_t>(sim::kTickRate) * 2u; ///< Every 2 seconds.
+    /** @brief Accepted-input debug log cadence in authoritative server ticks. */
+    constexpr uint32_t kServerInputBatchLogIntervalTicks = static_cast<uint32_t>(sim::kTickRate) * 2u; ///< Every 2 seconds.
 
-    /** @brief Server snapshot summary log interval in server simulation ticks. */
+    /** @brief Snapshot summary debug log cadence in authoritative server ticks. */
     constexpr uint32_t kServerSnapshotLogIntervalTicks = static_cast<uint32_t>(sim::kTickRate) * 2u; ///< Every 2 seconds.
 
-    /** @brief ENet peer transport sample interval in server simulation ticks. */
-    constexpr uint32_t kPeerSampleTicks = static_cast<uint32_t>(sim::kTickRate); ///< Once per second.
+    /** @brief ENet transport-health sampling cadence in authoritative server ticks. */
+    constexpr uint32_t kPeerTransportSampleTicks = static_cast<uint32_t>(sim::kTickRate); ///< Once per second.
 
     // =================================================================================================================
-    // ===== Anomaly detection policy ==================================================================================
+    // ===== Repeated anomaly warn throttling ==========================================================================
     // =================================================================================================================
 
-    /** @brief Consecutive anomaly streak that triggers a WARN log (ahead drops and input gaps). */
+    /** @brief Consecutive anomaly streak that triggers a WARN log for repeated ahead drops or input gaps. */
     constexpr uint16_t kRepeatedInputWarnThreshold = 6;
 
-    /** @brief Minimum tick spacing between repeated anomaly WARN log lines. */
+    /** @brief Minimum authoritative tick spacing between repeated anomaly WARN lines for the same peer. */
     constexpr uint32_t kRepeatedInputWarnCooldownTicks = static_cast<uint32_t>(sim::kTickRate) * 2u;
 
 } // namespace bomberman::net

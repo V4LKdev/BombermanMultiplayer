@@ -37,7 +37,7 @@ namespace bomberman::server
      * Currently two times the size of @ref net::kMaxInputBatchSize to allow one full batch
      * of buffered input history in addition to the next expected input sequence.
      */
-    constexpr std::size_t kServerInputBufferSize = net::kMaxInputBatchSize * 2;
+    constexpr std::size_t kServerInputBufferSize = static_cast<std::size_t>(net::kMaxInputBatchSize) * 2u;
 
     /**
      * @brief Maximum distance ahead of lastProcessedInputSeq that a received input is allowed to be.

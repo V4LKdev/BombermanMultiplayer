@@ -49,7 +49,7 @@ namespace bomberman
         }
     }
 
-    void Scene::onNetworkInputSent(const uint32_t /*inputSeq*/, const uint8_t /*buttons*/) {}
+    void Scene::onNetInputQueued(const uint32_t /*inputSeq*/, const uint8_t /*buttons*/) {}
 
     void Scene::draw() const
     {

@@ -1,5 +1,62 @@
 # Bomberman Multiplayer – Dev Log
 
+## 2026-03-23 (pending) – Finish Multiplayer QA Cleanup Pass
+
+### Goal
+Finish the practical QA/cleanup pass on the active multiplayer code before shifting from refactor work back to feature completion.
+
+### Cleanup scope
+- Cleaned the client connection/runtime path:
+  - `NetClient.*`
+  - `ConnectScene.*`
+- Cleaned the authoritative server core:
+  - `ServerState.h`
+  - `ServerEvents.*`
+  - `ServerHandlers.*`
+  - `ServerSession.cpp`
+  - `ServerSimulation.cpp`
+  - `ServerSnapshot.*`
+- Cleaned the owner prediction / multiplayer presentation path:
+  - `ClientPrediction.*`
+  - `MultiplayerLevelScene.*`
+  - the shared scene input hook used by `Game` / `Scene`
+- Cleaned the protocol and diagnostics support layer:
+  - `NetCommon.h`
+  - `PacketDispatch.h`
+  - `NetSend.h`
+  - `NetDiagnostics.*`
+  - `NetDiagConfig.h`
+
+### What improved
+- Clarified ownership, authority, and lifecycle boundaries across the multiplayer stack.
+- Removed stale helper surfaces and dead internal state that no longer matched the real flow.
+- Tightened Doxygen/header comments so public declarations explain contract semantics instead of narrating implementation details.
+- Reduced cognitive complexity in the longest/highest-risk files without redesigning the architecture.
+- Made connect/disconnect, handshake/bootstrap, prediction/recovery, and snapshot ownership rules more truthful and easier to follow.
+- Tightened protocol and diagnostics semantics so logs/reports better match actual runtime behavior.
+
+### Correctness fixes folded into the pass
+- Fixed local prediction bootstrap so pre-baseline inputs are retained and replayed correctly once authority arrives.
+- Preserved responsive local facing/animation before first authority instead of letting bootstrap snapshots clobber presentation.
+- Fixed recent-event dedupe in diagnostics so distinct simulation incidents are not merged just because they occur close together.
+- Improved connect-scene status handling so generic failed-connect cases are no longer mislabeled as timeouts.
+
+### Validation
+- Rebuilt both client and server during the pass across the active build trees:
+  - `cmake --build build`
+  - `cmake --build cmake-build-debug`
+
+### Result
+- The multiplayer codebase is materially more professional, coherent, and easier to present.
+- The highest-risk QA/cleanup work is done without large architecture churn.
+- Remaining work can now shift to feature completion:
+  - lobby / ready / match flow
+  - move `LevelInfo` out of handshake
+  - spawn handling and game flow
+  - reconnect policy
+  - bomb/enemy replication as needed
+  - runtime/client diagnostics presentation
+
 ## 2026-02-18 (e893f17) – Initial Linux setup + movement bugfix
 
 ### Goal

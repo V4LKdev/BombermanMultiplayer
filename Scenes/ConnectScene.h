@@ -1,3 +1,8 @@
+/**
+ * @file ConnectScene.h
+ * @brief Multiplayer connect scene interface for the pre-game join flow.
+ */
+
 #ifndef _BOMBERMAN_SCENES_CONNECT_SCENE_H_
 #define _BOMBERMAN_SCENES_CONNECT_SCENE_H_
 
@@ -14,7 +19,11 @@
 namespace bomberman
 {
     /**
-     * @brief Scene for connecting to a multiplayer server, allowing the user to input player name and server IP address.
+     * @brief Pre-game multiplayer connect scene.
+     *
+     * Owns the user-facing form for player name and server address entry,
+     * displays async connection progress/failure status from `NetClient`,
+     * and transitions into the multiplayer stage flow once the session is ready.
      */
     class ConnectScene : public Scene
     {
@@ -27,16 +36,21 @@ namespace bomberman
          */
         ConnectScene(Game* game, uint16_t port);
 
-        virtual void onEnter() override;
-        virtual void onExit() override;
-        virtual void onEvent(const SDL_Event& event) override;
-        virtual void update(unsigned int delta) override;
+        /** @brief Enables SDL text input while the connect form is active. */
+        void onEnter() override;
+        /** @brief Disables SDL text input when leaving the connect form. */
+        void onExit() override;
+        /** @brief Handles field editing, connect submission, and local leave/cancel input. */
+        void onEvent(const SDL_Event& event) override;
+        /** @brief Polls `NetClient` connection state and updates status/scene flow. */
+        void update(unsigned int delta) override;
 
       private:
-        // Default placeholder values, also used as fallback when fields are empty at connect time.
+        // Placeholder text also reused as fallback connect values when a field is left empty.
         static constexpr std::string_view kDefaultPlayerName = "Player";
         static constexpr std::string_view kDefaultHost       = "127.0.0.1";
 
+        /** @brief Keyboard focus target within the three-step connect form. */
         enum class FocusField : uint8_t
         {
             PlayerName = 0,
@@ -44,9 +58,39 @@ namespace bomberman
             ConnectButton = 2
         };
 
-        void refreshFormText();
-        void advanceFocus(int direction);
-        void appendSanitizedText(std::string& target, std::string_view chunk, bool isHostField);
+        // ----- Scene Flow and Status -----
+
+        /** @brief Validates inputs and kicks off an async connect via NetClient.
+         *
+         * No-ops if already connecting/connected. Sets status text on validation failure.
+         */
+        void tryStartConnect();
+
+        /**
+         * @brief Sets the connect-status text content and color in one call.
+         *
+         * @param message Text to display.
+         * @param color Text color.
+         */
+        void setConnectStatus(std::string_view message, SDL_Color color);
+
+        /** @brief Returns the player name to use, falling back to kDefaultPlayerName if the field is empty. */
+        [[nodiscard]]
+        std::string_view effectivePlayerName() const;
+        /** @brief Returns the host to use, falling back to kDefaultHost if the field is empty. */
+        [[nodiscard]]
+        std::string_view effectiveHost() const;
+        /** @brief Restores the idle status text after host editing once no connect attempt is active. */
+        void restoreIdleStatusAfterHostEdit();
+
+        // ----- Form Helpers -----
+
+        /** @brief Refreshes field text, placeholder rendering, and focus highlighting. */
+        void refreshFieldPresentation();
+        /** @brief Moves keyboard focus through the form controls with wraparound. */
+        void cycleFocus(int direction);
+        /** @brief Filters and appends user text for either the player-name or IPv4 host field. */
+        void appendSanitizedFieldText(std::string& target, std::string_view chunk, bool isHostField);
 
         /** @brief Returns the pixel width of the given text using the form font. */
         [[nodiscard]]
@@ -58,56 +102,39 @@ namespace bomberman
         [[nodiscard]]
         static bool isValidIPv4(std::string_view ip);
 
-        void recenterValueText();
+        /** @brief Recenters editable field values inside their fixed-width form slots. */
+        void recenterFieldValues();
 
-        /** @brief Returns the player name to use, falling back to kDefaultPlayerName if the field is empty. */
-        [[nodiscard]]
-        std::string_view effectivePlayerName() const;
-        /** @brief Returns the host to use, falling back to kDefaultHost if the field is empty. */
-        [[nodiscard]]
-        std::string_view effectiveHost() const;
+        // ----- UI Objects -----
 
-        /**
-         * @brief Validates inputs and kicks off an async connect via NetClient.
-         *
-         * No-ops if already connecting/connected. Sets status text on validation failure.
-         */
-        void tryStartConnect();
+        std::shared_ptr<Text> titleText_ = nullptr;
+        std::shared_ptr<Text> playerNameLabelText_ = nullptr;
+        std::shared_ptr<Text> playerNameValueText_ = nullptr;
+        std::shared_ptr<Text> hostLabelText_ = nullptr;
+        std::shared_ptr<Text> hostValueText_ = nullptr;
+        std::shared_ptr<Text> portValueText_ = nullptr;
+        std::shared_ptr<Text> connectButtonText_ = nullptr;
+        std::shared_ptr<Text> statusText_ = nullptr;
 
-        /**
-         * @brief Sets connectStateText content and color in one call.
-         *
-         * @param message  Text to display.
-         * @param color    Text color.
-         */
-        void setStatusText(std::string_view message, SDL_Color color);
+        // ----- Scene and Form State -----
 
-        std::shared_ptr<Text> titleText          = nullptr;
-        std::shared_ptr<Text> playerNameLabelText = nullptr;
-        std::shared_ptr<Text> playerNameValueText = nullptr;
-        std::shared_ptr<Text> hostLabelText       = nullptr;
-        std::shared_ptr<Text> hostValueText       = nullptr;
-        std::shared_ptr<Text> portValueText       = nullptr;
-        std::shared_ptr<Text> connectButtonText   = nullptr;
-        std::shared_ptr<Text> connectStateText    = nullptr;
-
-        FocusField focusField_ = FocusField::PlayerName;
+        FocusField focusedField_ = FocusField::PlayerName;
         std::string playerName_;
         std::string host_;
         bool playerNameTouched_ = false; ///< True once the player name field has received its first keystroke.
         bool hostTouched_       = false; ///< True once the host field has received its first keystroke.
         uint16_t port_ = 0; ///< Read-only server port, displayed for info only.
-
-        bool enteredOnlineFlow_ = false;
-
-        int playerNameFieldX_ = 0;
-        int playerNameFieldY_ = 0;
-        int playerNameFieldW_ = 0;
-        int hostFieldX_ = 0;
-        int hostFieldY_ = 0;
-        int hostFieldW_ = 0;
-
+        bool transitionedToStage_ = false; ///< Guards the one-time scene handoff after a successful connection.
         net::EConnectState lastConnectState_ = net::EConnectState::Disconnected; ///< Cached state to avoid redundant status text updates.
+
+        // ----- Cached Layout -----
+
+        int playerNameFieldX_ = 0; ///< Left edge of the player-name value area.
+        int playerNameFieldY_ = 0; ///< Top edge of the player-name value area.
+        int playerNameFieldW_ = 0; ///< Width of the player-name value area.
+        int hostFieldX_ = 0;       ///< Left edge of the host value area.
+        int hostFieldY_ = 0;       ///< Top edge of the host value area.
+        int hostFieldW_ = 0;       ///< Width of the host value area.
     };
 } // namespace bomberman
 

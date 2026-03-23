@@ -5,36 +5,45 @@
 
 #include "ServerSnapshot.h"
 
+#include <algorithm>
+
 #include "ServerState.h"
 
 namespace bomberman::server
 {
+    // =================================================================================================================
+    // ===== Snapshot Broadcast ========================================================================================
+    // =================================================================================================================
+
     bool shouldBroadcastSnapshot(const ServerState& state)
     {
         return state.snapshotIntervalTicks > 0 &&
-               (state.serverTick % state.snapshotIntervalTicks) == 0;
+               state.serverTick % state.snapshotIntervalTicks == 0;
     }
 
     net::MsgSnapshot buildSnapshot(const ServerState& state)
     {
-        net::MsgSnapshot msg{};
-        msg.serverTick = state.serverTick;
+        net::MsgSnapshot snapshot{};
+        snapshot.serverTick = state.serverTick;
 
-        uint8_t count = 0;
-        for (uint8_t i = 0; i < net::kMaxPlayers && count < net::kMaxPlayers; ++i)
+        uint8_t playerCount = 0;
+        for (uint8_t i = 0; i < net::kMaxPlayers && playerCount < net::kMaxPlayers; ++i)
         {
-            if (!state.matchPlayers[i].has_value())
+            const auto& slot = state.matchPlayers[i];
+            if (!slot.has_value())
                 continue;
 
-            const auto& matchPlayer = state.matchPlayers[i].value();
-            auto& outPlayer = msg.players[count++];
-            outPlayer.playerId = matchPlayer.playerId;
-            outPlayer.xQ = static_cast<int16_t>(matchPlayer.pos.xQ);
-            outPlayer.yQ = static_cast<int16_t>(matchPlayer.pos.yQ);
-            outPlayer.flags = net::MsgSnapshot::PlayerEntry::EPlayerFlags::Alive;
+            // Pack active match players in stable player-id slot order.
+            const auto& matchPlayer = *slot;
+            auto& entry = snapshot.players[playerCount++];
+            entry.playerId = matchPlayer.playerId;
+            entry.xQ = static_cast<int16_t>(std::clamp(matchPlayer.pos.xQ, INT16_MIN, INT16_MAX));
+            entry.yQ = static_cast<int16_t>(std::clamp(matchPlayer.pos.yQ, INT16_MIN, INT16_MAX));
+            // Death/respawn and temporary invulnerability are not replicated yet.
+            entry.flags = net::MsgSnapshot::PlayerEntry::EPlayerFlags::Alive;
         }
 
-        msg.playerCount = count;
-        return msg;
+        snapshot.playerCount = playerCount;
+        return snapshot;
     }
 } // namespace bomberman::server

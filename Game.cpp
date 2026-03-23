@@ -248,7 +248,7 @@ namespace bomberman
             if (const auto inputSeq = netClient_->sendInput(0);
                 inputSeq.has_value() && sceneManager->getCurrentScene() != nullptr)
             {
-                sceneManager->getCurrentScene()->onNetworkInputSent(inputSeq.value(), 0);
+                sceneManager->getCurrentScene()->onNetInputQueued(inputSeq.value(), 0);
             }
             return;
         }
@@ -272,7 +272,7 @@ namespace bomberman
         if (const auto inputSeq = netClient_->sendInput(buttons);
             inputSeq.has_value() && sceneManager->getCurrentScene() != nullptr)
         {
-            sceneManager->getCurrentScene()->onNetworkInputSent(inputSeq.value(), buttons);
+            sceneManager->getCurrentScene()->onNetInputQueued(inputSeq.value(), buttons);
         }
     }
 

@@ -132,7 +132,7 @@ namespace bomberman::server
         void samplePeerTransport(ServerState& state, const MatchPlayerState& matchPlayer)
         {
             const auto* session = findPeerSessionByPlayerId(state, matchPlayer.playerId);
-            if (state.serverTick % kPeerSampleTicks != 0 || session == nullptr || session->peer == nullptr)
+            if (state.serverTick % kPeerTransportSampleTicks != 0 || session == nullptr || session->peer == nullptr)
             {
                 return;
             }
@@ -145,7 +145,7 @@ namespace bomberman::server
             const uint32_t packetLossPermille = static_cast<uint32_t>(
                 static_cast<uint64_t>(session->peer->packetLoss) * 1000u / ENET_PEER_PACKET_LOSS_SCALE);
 
-            state.diag.samplePeer(matchPlayer.playerId,
+            state.diag.samplePeerTransport(matchPlayer.playerId,
                                   session->peer->roundTripTime,
                                   session->peer->roundTripTimeVariance,
                                   packetLossPermille,

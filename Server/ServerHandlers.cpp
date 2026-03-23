@@ -200,7 +200,7 @@ namespace bomberman::server
                 return std::nullopt;
             }
 
-            ctx.recordedPlayerId = reservedPlayerId.value();
+            ctx.recordedPlayerId = reservedPlayerId;
             return reservedPlayerId;
         }
 
@@ -302,12 +302,12 @@ namespace bomberman::server
             auto* matchPlayer = getAcceptedMatchPlayerState(ctx.state, *session);
             if (matchPlayer == nullptr)
             {
-                LOG_NET_INPUT_ERROR("Input playerId={} has no active match state - ignoring", session->playerId.value());
+                LOG_NET_INPUT_ERROR("Input playerId={} has no active match state - ignoring", *session->playerId);
                 ctx.receiveResult = NetPacketResult::Rejected;
                 return nullptr;
             }
 
-            ctx.recordedPlayerId = session->playerId.value();
+            ctx.recordedPlayerId = session->playerId;
             return matchPlayer;
         }
 
@@ -454,7 +454,7 @@ namespace bomberman::server
         /** @brief Emits the periodic accepted-input trace for one match-player batch. */
         void logAcceptedInputBatch(const MatchPlayerState& matchPlayer, const MsgInput& msgInput, const uint32_t highestSeq)
         {
-            if ((highestSeq % kInputBatchLogIntervalTicks) != 0)
+            if ((highestSeq % kServerInputBatchLogIntervalTicks) != 0)
                 return;
 
             LOG_NET_INPUT_DEBUG("Input playerId={} batch=[{}..{}] lastRecv={} lastProcessed={}",

@@ -1,9 +1,14 @@
+/**
+ * @file MultiplayerLevelScene.cpp
+ * @brief Multiplayer gameplay scene implementation.
+ */
+
 #include "Scenes/MultiplayerLevelScene.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
-#include <unordered_map>
+#include <unordered_set>
 
 #include <SDL.h>
 
@@ -16,6 +21,10 @@
 
 namespace bomberman
 {
+    // =================================================================================================================
+    // ===== Internal Helpers ==========================================================================================
+    // =================================================================================================================
+
     namespace
     {
         struct PlayerColor
@@ -25,7 +34,7 @@ namespace bomberman
             uint8_t b;
         };
 
-        static constexpr PlayerColor kPlayerColors[] = {
+        constexpr PlayerColor kPlayerColors[] = {
             {0xFF, 0x22, 0x22},
             {0x22, 0xFF, 0x22},
             {0x22, 0x88, 0xFF},
@@ -40,11 +49,11 @@ namespace bomberman
         constexpr uint32_t kGameplayDegradedThresholdMs = 2000;
         constexpr int kGameplayStatusOffsetY = 12;
         constexpr uint32_t kLivePredictionLogIntervalMs = 1000;
-        constexpr uint32_t kPredictionTickMs = 1000u / static_cast<uint32_t>(sim::kTickRate);
+        constexpr uint32_t kSimulationTickMs = 1000u / static_cast<uint32_t>(sim::kTickRate);
 
-        bool isAlive(const net::MsgSnapshot::PlayerEntry& entry)
+        bool snapshotEntryIsAlive(const net::MsgSnapshot::PlayerEntry& entry)
         {
-            const uint8_t flags = static_cast<uint8_t>(entry.flags);
+            const auto flags = static_cast<uint8_t>(entry.flags);
             return (flags & static_cast<uint8_t>(net::MsgSnapshot::PlayerEntry::EPlayerFlags::Alive)) != 0;
         }
 
@@ -74,24 +83,21 @@ namespace bomberman
             return std::clamp(scaledTileSize / 3, kNameTagMinPointSize, kNameTagMaxPointSize);
         }
 
-        MovementDirection inferDirectionFromButtons(const uint8_t buttons,
-                                                    const MovementDirection fallback)
+        MovementDirection inferDirectionFromButtons(const uint8_t buttons)
         {
             const int8_t moveX = net::buttonsToMoveX(buttons);
             const int8_t moveY = net::buttonsToMoveY(buttons);
 
-            if (moveX == 0 && moveY == 0)
+            if(moveX == 0 && moveY == 0)
                 return MovementDirection::None;
 
-            if (moveX != 0)
+            if(moveX != 0)
                 return moveX > 0 ? MovementDirection::Right : MovementDirection::Left;
 
-            if (moveY != 0)
-                return moveY > 0 ? MovementDirection::Down : MovementDirection::Up;
-
-            return fallback;
+            return moveY > 0 ? MovementDirection::Down : MovementDirection::Up;
         }
     } // namespace
+
 
     MultiplayerLevelScene::MultiplayerLevelScene(Game* game, const unsigned int stage,
                                                  const unsigned int prevScore,
@@ -101,53 +107,91 @@ namespace bomberman
         initializeLevelWorld(mapSeed);
     }
 
+    // =================================================================================================================
+    // ===== Scene Hooks ===============================================================================================
+    // =================================================================================================================
+
     void MultiplayerLevelScene::updateLevel(const unsigned int delta)
+    {
+        net::NetClient* netClient = requireConnectedNetClient();
+        if(netClient == nullptr)
+            return;
+
+        /*
+         * Runtime order:
+         * 1) consume any newer owner correction first so local prediction owns local presentation.
+         * 2) consume the newest snapshot for remote presentation and local bootstrap fallback.
+         * 3) tick scene objects after state application, then finish tag/camera/diagnostic updates.
+         */
+        updateGameplayConnectionHealth(*netClient);
+        applyLatestCorrectionIfAvailable(*netClient);
+        applyLatestSnapshotIfAvailable();
+        finalizeFrameUpdate(delta);
+    }
+
+    net::NetClient* MultiplayerLevelScene::requireConnectedNetClient()
     {
         net::NetClient* netClient = game->getNetClient();
         if(netClient == nullptr || netClient->connectState() != net::EConnectState::Connected)
         {
-            const auto stateName = netClient ? net::connectStateName(netClient->connectState()) : std::string_view("NoClient");
-            leaveToMenu(false, stateName);
+            const auto stateName =
+                netClient ? net::connectStateName(netClient->connectState()) : std::string_view("NoClient");
+            returnToMenu(false, stateName);
+            return nullptr;
+        }
+
+        return netClient;
+    }
+
+    void MultiplayerLevelScene::applyLatestCorrectionIfAvailable(const net::NetClient& netClient)
+    {
+        if(!game->isPredictionEnabled())
             return;
-        }
 
-        updateGameplaySessionHealth(*netClient);
-
-        if(game->isPredictionEnabled())
+        net::MsgCorrection correction{};
+        if(netClient.tryGetLatestCorrection(correction) &&
+           correction.serverTick > lastAppliedCorrectionTick_)
         {
-            net::MsgCorrection correction{};
-            if(netClient->tryGetLatestCorrection(correction) &&
-               correction.serverTick > lastAppliedCorrectionTick_)
-            {
-                applyAuthoritativeCorrection(correction);
-            }
+            applyAuthoritativeCorrection(correction);
         }
+    }
 
+    void MultiplayerLevelScene::applyLatestSnapshotIfAvailable()
+    {
         net::MsgSnapshot snapshot{};
         if(game->tryGetLatestSnapshot(snapshot))
         {
             applySnapshot(snapshot);
         }
-        Scene::update(delta);
-        updateRemotePresentations(delta);
-        updateLocalNameTagPosition();
+    }
+
+    void MultiplayerLevelScene::finalizeFrameUpdate(const unsigned int delta)
+    {
+        updateSceneObjects(delta);
+        updateRemotePlayerPresentations(delta);
+        updateLocalPlayerTagPosition();
         updateCamera();
         logLivePredictionTelemetry(delta);
     }
 
     void MultiplayerLevelScene::onExit()
     {
-        logPredictionDiagnosticsSummary();
+        logPredictionSummary();
         removeAllRemotePlayers();
         localPrediction_.reset();
+        lastAppliedSnapshotTick_ = 0;
         lastAppliedCorrectionTick_ = 0;
+        localPlayerId_.reset();
         livePredictionTelemetry_ = {};
+        localFacingDirection_ = MovementDirection::Right;
         livePredictionLogAccumulatorMs_ = 0;
+        gameplayConnectionDegraded_ = false;
+        returningToMenu_ = false;
 
-        if(localNameTag_)
+        if(localPlayerTag_)
         {
-            removeObject(localNameTag_);
-            localNameTag_.reset();
+            removeObject(localPlayerTag_);
+            localPlayerTag_.reset();
         }
 
         if(gameplayStatusText_)
@@ -164,29 +208,37 @@ namespace bomberman
         if(scancode != SDL_SCANCODE_ESCAPE)
             return;
 
-        leaveToMenu(true, "LocalLeave");
+        returnToMenu(true, "LocalLeave");
     }
 
-    void MultiplayerLevelScene::onNetworkInputSent(const uint32_t inputSeq, const uint8_t buttons)
+    // =================================================================================================================
+    // ===== Local Input, Snapshot, and Correction Flow ================================================================
+    // =================================================================================================================
+
+    void MultiplayerLevelScene::onNetInputQueued(const uint32_t inputSeq, const uint8_t buttons)
     {
         if(!game->isPredictionEnabled())
         {
-            syncLocalPresentationFromInputButtons(buttons);
+            updateLocalPresentationFromInputButtons(buttons);
             return;
         }
 
         if(!localPrediction_.applyLocalInput(inputSeq, buttons, tiles))
             return;
 
-        updateLivePredictionPendingDepth();
+        updateMaxPendingInputDepth();
 
         if(!localPrediction_.isInitialized())
         {
-            syncLocalPresentationFromInputButtons(buttons);
+            /*
+             * Before the first owner correction arrives, keep local presentation responsive
+             * without inventing local position ahead of the prediction baseline.
+             */
+            updateLocalPresentationFromInputButtons(buttons);
             return;
         }
 
-        syncLocalPresentationFromLocalState(localPrediction_.currentState());
+        syncLocalPresentationFromOwnedState(localPrediction_.currentState());
     }
 
     void MultiplayerLevelScene::applySnapshot(const net::MsgSnapshot& snapshot)
@@ -203,7 +255,12 @@ namespace bomberman
 
         const uint8_t localId = netClient->playerId();
         ensureLocalPresentation(localId);
-        syncRemotePlayersFromSnapshot(snapshot, localId);
+
+        /*
+         * Snapshot player entries remain the authoritative membership source.
+         * Local position only comes from snapshots while prediction is disabled or unarmed.
+         */
+        applySnapshotToRemotePlayers(snapshot, localId);
         lastAppliedSnapshotTick_ = snapshot.serverTick;
     }
 
@@ -233,6 +290,17 @@ namespace bomberman
             return;
         }
 
+        logCorrectionReplayOutcome(correction, replayResult);
+        syncLocalPresentationFromOwnedState(localPrediction_.currentState());
+        storeCorrectionTelemetry(correction, replayResult);
+        updateMaxPendingInputDepth();
+        lastAppliedCorrectionTick_ = correction.serverTick;
+    }
+
+    void MultiplayerLevelScene::logCorrectionReplayOutcome(
+        const net::MsgCorrection& correction,
+        const net::CorrectionReplayResult& replayResult)
+    {
         if(replayResult.missingInputHistory > 0)
         {
             LOG_NET_INPUT_WARN("Prediction replay truncated tick={} lastProcessed={} missingInputs={}",
@@ -267,8 +335,12 @@ namespace bomberman
                               correction.serverTick,
                               correction.lastProcessedInputSeq);
         }
+    }
 
-        syncLocalPresentationFromLocalState(localPrediction_.currentState());
+    void MultiplayerLevelScene::storeCorrectionTelemetry(
+        const net::MsgCorrection& correction,
+        const net::CorrectionReplayResult& replayResult)
+    {
         livePredictionTelemetry_.lastAckedInputSeq = correction.lastProcessedInputSeq;
         livePredictionTelemetry_.lastCorrectionServerTick = correction.serverTick;
         livePredictionTelemetry_.lastCorrectionDeltaQ = replayResult.deltaManhattanQ;
@@ -277,24 +349,22 @@ namespace bomberman
         livePredictionTelemetry_.lastRemainingDeferredInputs = replayResult.remainingDeferredInputs;
         livePredictionTelemetry_.recoveryActive = replayResult.recoveryStillActive;
         livePredictionTelemetry_.recoveryCatchUpSeq = replayResult.recoveryCatchUpSeq;
-        updateLivePredictionPendingDepth();
-        lastAppliedCorrectionTick_ = correction.serverTick;
     }
 
-    void MultiplayerLevelScene::updateGameplaySessionHealth(const net::NetClient& netClient)
+    void MultiplayerLevelScene::updateGameplayConnectionHealth(const net::NetClient& netClient)
     {
         const uint32_t silenceMs = netClient.gameplaySilenceMs();
-        setGameplayDegraded(silenceMs >= kGameplayDegradedThresholdMs, silenceMs);
+        setGameplayConnectionDegraded(silenceMs >= kGameplayDegradedThresholdMs, silenceMs);
     }
 
-    void MultiplayerLevelScene::setGameplayDegraded(const bool degraded, const uint32_t silenceMs)
+    void MultiplayerLevelScene::setGameplayConnectionDegraded(const bool degraded, const uint32_t silenceMs)
     {
-        if(gameplayDegraded_ == degraded)
+        if(gameplayConnectionDegraded_ == degraded)
             return;
 
-        gameplayDegraded_ = degraded;
+        gameplayConnectionDegraded_ = degraded;
 
-        if(gameplayDegraded_)
+        if(gameplayConnectionDegraded_)
         {
             LOG_NET_CONN_WARN("Gameplay updates silent for {}ms - connection degraded, waiting for gameplay updates",
                               silenceMs);
@@ -339,12 +409,13 @@ namespace bomberman
             return;
 
         livePredictionLogAccumulatorMs_ = 0;
-        updateLivePredictionPendingDepth();
+        updateMaxPendingInputDepth();
 
-        const uint32_t pendingDepth = currentPendingInputDepth();
-        const uint32_t pendingAgeMs = pendingDepth * kPredictionTickMs;
+        const uint32_t pendingDepth = pendingInputDepth();
+        const uint32_t pendingAgeMs = pendingDepth * kSimulationTickMs;
         LOG_NET_DIAG_DEBUG(
-            "Prediction live ackSeq={} corrTick={} pendingDepth={} pendingAgeMs={} lastDeltaQ={} lastReplay={} lastMissingInputs={} remainingDeferredInputs={} recoveryActive={} recoveryCatchUpSeq={} maxPendingDepth={}",
+            "Prediction live ackSeq={} corrTick={} pendingDepth={} pendingAgeMs={} lastDeltaQ={} lastReplay={} "
+            "lastMissingInputs={} remainingDeferredInputs={} recoveryActive={} recoveryCatchUpSeq={} maxPendingDepth={}",
             livePredictionTelemetry_.lastAckedInputSeq,
             livePredictionTelemetry_.lastCorrectionServerTick,
             pendingDepth,
@@ -358,13 +429,13 @@ namespace bomberman
             livePredictionTelemetry_.maxPendingInputDepth);
     }
 
-    void MultiplayerLevelScene::updateLivePredictionPendingDepth()
+    void MultiplayerLevelScene::updateMaxPendingInputDepth()
     {
         livePredictionTelemetry_.maxPendingInputDepth =
-            std::max(livePredictionTelemetry_.maxPendingInputDepth, currentPendingInputDepth());
+            std::max(livePredictionTelemetry_.maxPendingInputDepth, pendingInputDepth());
     }
 
-    uint32_t MultiplayerLevelScene::currentPendingInputDepth() const
+    uint32_t MultiplayerLevelScene::pendingInputDepth() const
     {
         const uint32_t lastRecorded = localPrediction_.lastRecordedInputSeq();
         if(lastRecorded <= livePredictionTelemetry_.lastAckedInputSeq)
@@ -373,7 +444,7 @@ namespace bomberman
         return lastRecorded - livePredictionTelemetry_.lastAckedInputSeq;
     }
 
-    void MultiplayerLevelScene::logPredictionDiagnosticsSummary() const
+    void MultiplayerLevelScene::logPredictionSummary() const
     {
         if(!game->isPredictionEnabled())
             return;
@@ -392,7 +463,9 @@ namespace bomberman
                 : 0.0;
 
         LOG_NET_DIAG_INFO(
-            "Prediction summary localInputs={} deferredInputs={} rejectedInputs={} corrections={} mismatches={} avgDeltaQ={:.2f} maxDeltaQ={} replayedInputs={} maxReplay={} truncations={} recoveries={} recoveryResolutions={} maxMissingInputs={} maxPendingDepth={}",
+            "Prediction summary localInputs={} deferredInputs={} rejectedInputs={} corrections={} mismatches={} "
+            "avgDeltaQ={:.2f} maxDeltaQ={} replayedInputs={} maxReplay={} truncations={} recoveries={} "
+            "recoveryResolutions={} maxMissingInputs={} maxPendingDepth={}",
             stats.localInputsApplied,
             stats.localInputsDeferred,
             stats.rejectedLocalInputs,
@@ -409,31 +482,28 @@ namespace bomberman
             livePredictionTelemetry_.maxPendingInputDepth);
     }
 
-    void MultiplayerLevelScene::applyBootstrapLocalSnapshotSample(const net::MsgSnapshot::PlayerEntry& entry,
-                                                                  const uint32_t tick)
+    void MultiplayerLevelScene::applyBootstrapLocalSnapshot(const net::MsgSnapshot::PlayerEntry& entry)
     {
-        localPreviousSample_ = localLatestSample_;
-        localLatestSample_.posQ = {entry.xQ, entry.yQ};
-        localLatestSample_.tick = tick;
-        localLatestSample_.valid = true;
-
-        // Before the first owner correction arrives, keep local position authoritative from
-        // snapshots while leaving facing/animation driven by the latest local input buttons.
+        /*
+         * Before the first owner correction arrives, keep local position authoritative from
+         * snapshots while leaving facing and animation driven by the latest local input buttons.
+         */
         playerPos_.xQ = entry.xQ;
         playerPos_.yQ = entry.yQ;
         syncPlayerSpriteToSimPosition();
     }
 
-    void MultiplayerLevelScene::syncLocalPresentationFromInputButtons(const uint8_t buttons)
+    void MultiplayerLevelScene::updateLocalPresentationFromInputButtons(const uint8_t buttons)
     {
         if(!player)
             return;
 
-        localIsMoving_ = (net::buttonsToMoveX(buttons) != 0) || (net::buttonsToMoveY(buttons) != 0);
-        if(localIsMoving_)
+        // This helper is presentation-only.
+        const bool isMoving = (net::buttonsToMoveX(buttons) != 0) || (net::buttonsToMoveY(buttons) != 0);
+        if(isMoving)
         {
-            localLastFacing_ = inferDirectionFromButtons(buttons, localLastFacing_);
-            player->setMovementDirection(localLastFacing_);
+            localFacingDirection_ = inferDirectionFromButtons(buttons);
+            player->setMovementDirection(localFacingDirection_);
         }
         else
         {
@@ -441,28 +511,34 @@ namespace bomberman
         }
     }
 
-    void MultiplayerLevelScene::syncLocalPresentationFromLocalState(const net::LocalPlayerState& localState)
+    void MultiplayerLevelScene::syncLocalPresentationFromOwnedState(const net::LocalPlayerState& localState)
     {
         if(!player)
             return;
 
+        /*
+         * Once prediction is initialized, the predicted or recovery state is the source of truth
+         * for local presentation and camera anchoring.
+         */
         playerPos_ = localState.posQ;
         syncPlayerSpriteToSimPosition();
 
-        localIsMoving_ = (net::buttonsToMoveX(localState.buttons) != 0) ||
-                         (net::buttonsToMoveY(localState.buttons) != 0);
-        if(localIsMoving_)
+        const bool isMoving = (net::buttonsToMoveX(localState.buttons) != 0) ||
+                              (net::buttonsToMoveY(localState.buttons) != 0);
+        if(isMoving)
         {
-            localLastFacing_ = inferDirectionFromButtons(localState.buttons, localLastFacing_);
-            player->setMovementDirection(localLastFacing_);
+            localFacingDirection_ = inferDirectionFromButtons(localState.buttons);
+            player->setMovementDirection(localFacingDirection_);
         }
         else
         {
             player->setMovementDirection(MovementDirection::None);
         }
+    }
 
-        updateLocalNameTagPosition();
-        updateCamera();
+    void MultiplayerLevelScene::updateSceneObjects(const unsigned int delta)
+    {
+        Scene::update(delta);
     }
 
     void MultiplayerLevelScene::ensureLocalPresentation(const uint8_t localId)
@@ -470,84 +546,86 @@ namespace bomberman
         if(!player)
             return;
 
-        if(localPlayerId_ != localId)
+        if(!localPlayerId_.has_value() || localPlayerId_.value() != localId)
         {
             localPlayerId_ = localId;
 
             const PlayerColor color = colorForPlayerId(localId);
             player->setColorMod(color.r, color.g, color.b);
 
-            if(localNameTag_)
+            if(localPlayerTag_)
             {
-                localNameTag_->setText(makePlayerTagText(localId));
-                localNameTag_->fitToContent();
-                localNameTag_->setColor(SDL_Color{color.r, color.g, color.b, 0xFF});
+                localPlayerTag_->setText(formatPlayerTag(localId));
+                localPlayerTag_->fitToContent();
+                localPlayerTag_->setColor(SDL_Color{color.r, color.g, color.b, 0xFF});
             }
         }
 
-        if(!localNameTag_)
+        if(!localPlayerTag_)
         {
             const int pointSize = computeTagPointSize(scaledTileSize);
             auto font = game->getAssetManager()->getFont(pointSize);
-            localNameTag_ = std::make_shared<Text>(font, game->getRenderer(), makePlayerTagText(localId));
-            localNameTag_->fitToContent();
+            localPlayerTag_ = std::make_shared<Text>(font, game->getRenderer(), formatPlayerTag(localId));
+            localPlayerTag_->fitToContent();
 
             const PlayerColor color = colorForPlayerId(localId);
-            localNameTag_->setColor(SDL_Color{color.r, color.g, color.b, 0xFF});
+            localPlayerTag_->setColor(SDL_Color{color.r, color.g, color.b, 0xFF});
 
-            addObject(localNameTag_);
+            addObject(localPlayerTag_);
         }
     }
 
-    void MultiplayerLevelScene::applyLocalSnapshotSample(const net::MsgSnapshot::PlayerEntry& entry,
-                                                         const uint8_t /*localId*/,
-                                                         const uint32_t tick)
+    void MultiplayerLevelScene::applyAuthoritativeLocalSnapshot(const net::MsgSnapshot::PlayerEntry& entry)
     {
         if(game->isPredictionEnabled())
         {
             if(!localPrediction_.isInitialized())
-                applyBootstrapLocalSnapshotSample(entry, tick);
+                applyBootstrapLocalSnapshot(entry);
             return;
         }
 
-        localPreviousSample_ = localLatestSample_;
-        localLatestSample_.posQ = {entry.xQ, entry.yQ};
-        localLatestSample_.tick = tick;
-        localLatestSample_.valid = true;
-
-        // Without prediction, keep local position authoritative from snapshots but let
-        // direct local input own facing/animation for responsive local presentation.
+        /*
+         * Without prediction, keep local position authoritative from snapshots but let
+         * direct local input own facing and animation for responsive local presentation.
+         */
         playerPos_.xQ = entry.xQ;
         playerPos_.yQ = entry.yQ;
         syncPlayerSpriteToSimPosition();
     }
 
-    void MultiplayerLevelScene::updateLocalNameTagPosition()
+    void MultiplayerLevelScene::updateLocalPlayerTagPosition()
     {
-        if(!player || !localNameTag_)
+        if(!player || !localPlayerTag_)
             return;
 
-        const int tagX = player->getPositionX() + player->getWidth() / 2 - localNameTag_->getWidth() / 2;
-        const int tagY = player->getPositionY() - localNameTag_->getHeight() - kNameTagOffsetPx;
-        localNameTag_->setPosition(tagX, tagY);
+        const int tagX = player->getPositionX() + player->getWidth() / 2 - localPlayerTag_->getWidth() / 2;
+        const int tagY = player->getPositionY() - localPlayerTag_->getHeight() - kNameTagOffsetPx;
+        localPlayerTag_->setPosition(tagX, tagY);
     }
 
-    void MultiplayerLevelScene::syncRemotePlayersFromSnapshot(const net::MsgSnapshot& snapshot,
-                                                              const uint8_t localId)
+    // =================================================================================================================
+    // ===== Remote Player Presentation ===============================================================================
+    // =================================================================================================================
+
+    void MultiplayerLevelScene::applySnapshotToRemotePlayers(const net::MsgSnapshot& snapshot,
+                                                             const uint8_t localId)
     {
-        std::unordered_map<uint8_t, bool> seenRemoteIds;
+        std::unordered_set<uint8_t> seenRemoteIds;
 
         for(uint8_t i = 0; i < snapshot.playerCount; ++i)
         {
             const auto& entry = snapshot.players[i];
-            const bool alive = isAlive(entry);
+            const bool alive = snapshotEntryIsAlive(entry);
 
             if(entry.playerId == localId)
             {
-                // Keep existing local-player authoritative application behavior.
+                /*
+                 * Local entries flow through dedicated local ownership rules rather than the
+                 * remote snapshot and interpolation path.
+                 */
                 if(alive)
                 {
-                    applyLocalSnapshotSample(entry, localId, snapshot.serverTick);
+                    applyAuthoritativeLocalSnapshot(entry);
                 }
                 continue;
             }
@@ -555,224 +633,235 @@ namespace bomberman
             if(!alive)
                 continue;
 
-            seenRemoteIds[entry.playerId] = true;
-            upsertRemotePlayer(entry.playerId, entry.xQ, entry.yQ, snapshot.serverTick);
+            seenRemoteIds.insert(entry.playerId);
+            updateOrCreateRemotePlayer(entry.playerId, entry.xQ, entry.yQ, snapshot.serverTick);
         }
 
-        removeMissingRemotePlayers(seenRemoteIds);
+        pruneMissingRemotePlayers(seenRemoteIds);
     }
 
-    void MultiplayerLevelScene::upsertRemotePlayer(const uint8_t playerId,
-                                                   const int16_t xQ,
-                                                   const int16_t yQ,
-                                                   const uint32_t snapshotTick)
+    void MultiplayerLevelScene::updateOrCreateRemotePlayer(const uint8_t playerId,
+                                                           const int16_t xQ,
+                                                           const int16_t yQ,
+                                                           const uint32_t snapshotTick)
     {
-        auto [it, inserted] = remotePlayers_.try_emplace(playerId);
-        RemotePlayerView& view = it->second;
+        auto [it, inserted] = remotePlayerPresentations_.try_emplace(playerId);
+        RemotePlayerPresentation& presentation = it->second;
 
         if(inserted)
         {
-            view.sprite = std::make_shared<Player>(game->getAssetManager()->getTexture(Texture::Player),
-                                                   game->getRenderer());
-            view.sprite->setSize(scaledTileSize, scaledTileSize);
-            view.sprite->setMovementDirection(MovementDirection::None);
+            presentation.playerSprite =
+                std::make_shared<Player>(game->getAssetManager()->getTexture(Texture::Player), game->getRenderer());
+            presentation.playerSprite->setSize(scaledTileSize, scaledTileSize);
+            presentation.playerSprite->setMovementDirection(MovementDirection::None);
 
             const PlayerColor color = colorForPlayerId(playerId);
-            view.sprite->setColorMod(color.r, color.g, color.b);
+            presentation.playerSprite->setColorMod(color.r, color.g, color.b);
 
             const int pointSize = computeTagPointSize(scaledTileSize);
             auto font = game->getAssetManager()->getFont(pointSize);
-            view.nameTag = std::make_shared<Text>(font, game->getRenderer(), makePlayerTagText(playerId));
-            view.nameTag->fitToContent();
-            view.nameTag->setColor(SDL_Color{color.r, color.g, color.b, 0xFF});
+            presentation.playerTag = std::make_shared<Text>(font, game->getRenderer(), formatPlayerTag(playerId));
+            presentation.playerTag->fitToContent();
+            presentation.playerTag->setColor(SDL_Color{color.r, color.g, color.b, 0xFF});
 
-            addObject(view.sprite);
-            addObject(view.nameTag);
+            addObject(presentation.playerSprite);
+            addObject(presentation.playerTag);
         }
 
-        updateSnapshotHistory(view, xQ, yQ, snapshotTick);
-        updateAnimationFromSnapshotDelta(view);
+        recordSnapshotSample(presentation, xQ, yQ, snapshotTick);
+        updateRemoteAnimationFromSnapshotDelta(presentation);
 
-        view.authoritativePosQ.xQ = xQ;
-        view.authoritativePosQ.yQ = yQ;
-        view.lastSeenSnapshotTick = snapshotTick;
+        presentation.authoritativePosQ.xQ = xQ;
+        presentation.authoritativePosQ.yQ = yQ;
 
-        const sim::TilePos presentedPosQ = resolvePresentedPosition(view);
-        view.presentedPosQ = presentedPosQ;
+        const sim::TilePos presentedPosQ = computeRemotePresentedPosition(presentation);
         const int screenX = sim::tileQToScreenTopLeft(presentedPosQ.xQ, fieldPositionX, scaledTileSize, 0);
         const int screenY = sim::tileQToScreenTopLeft(presentedPosQ.yQ, fieldPositionY, scaledTileSize, 0);
-        view.sprite->setPosition(screenX, screenY);
+        presentation.playerSprite->setPosition(screenX, screenY);
 
-        updateRemoteNameTagPosition(view, playerId);
+        updateRemotePlayerTagPosition(presentation);
     }
 
-    void MultiplayerLevelScene::removeMissingRemotePlayers(const std::unordered_map<uint8_t, bool>& seenRemoteIds)
+    void MultiplayerLevelScene::pruneMissingRemotePlayers(const std::unordered_set<uint8_t>& seenRemoteIds)
     {
-        for(auto it = remotePlayers_.begin(); it != remotePlayers_.end();)
+        for(auto it = remotePlayerPresentations_.begin(); it != remotePlayerPresentations_.end();)
         {
-            if(seenRemoteIds.find(it->first) != seenRemoteIds.end())
+            if(seenRemoteIds.contains(it->first))
             {
                 ++it;
                 continue;
             }
 
-            if(it->second.sprite)
-                removeObject(it->second.sprite);
-            if(it->second.nameTag)
-                removeObject(it->second.nameTag);
+            if(it->second.playerSprite)
+                removeObject(it->second.playerSprite);
+            if(it->second.playerTag)
+                removeObject(it->second.playerTag);
 
-            it = remotePlayers_.erase(it);
+            it = remotePlayerPresentations_.erase(it);
         }
     }
 
     void MultiplayerLevelScene::removeAllRemotePlayers()
     {
-        for(auto& [id, view] : remotePlayers_)
+        for(auto& entry : remotePlayerPresentations_)
         {
-            (void)id;
-            if(view.sprite)
-                removeObject(view.sprite);
-            if(view.nameTag)
-                removeObject(view.nameTag);
+            auto& presentation = entry.second;
+            if(presentation.playerSprite)
+                removeObject(presentation.playerSprite);
+            if(presentation.playerTag)
+                removeObject(presentation.playerTag);
         }
-        remotePlayers_.clear();
+        remotePlayerPresentations_.clear();
     }
 
-    void MultiplayerLevelScene::updateSnapshotHistory(RemotePlayerView& view,
-                                                      const int16_t xQ,
-                                                      const int16_t yQ,
-                                                      const uint32_t tick)
+    void MultiplayerLevelScene::recordSnapshotSample(RemotePlayerPresentation& presentation,
+                                                     const int16_t xQ,
+                                                     const int16_t yQ,
+                                                     const uint32_t serverTick)
     {
-        view.previousSample = view.latestSample;
-        view.latestSample.posQ = {xQ, yQ};
-        view.latestSample.tick = tick;
-        view.latestSample.valid = true;
-        view.ticksSinceLatestSample = 0.0f;
-        view.receivedSampleThisUpdate = true;
+        presentation.previousSnapshot = presentation.latestSnapshot;
+        presentation.latestSnapshot.posQ = {xQ, yQ};
+        presentation.latestSnapshot.serverTick = serverTick;
+        presentation.latestSnapshot.valid = true;
+        presentation.ticksSinceLatestSnapshot = 0.0f;
+        presentation.receivedSnapshotThisUpdate = true;
     }
 
-    void MultiplayerLevelScene::updateAnimationFromSnapshotDelta(RemotePlayerView& view)
+    void MultiplayerLevelScene::updateRemoteAnimationFromSnapshotDelta(RemotePlayerPresentation& presentation)
     {
-        if(!view.latestSample.valid || !view.sprite)
+        if(!presentation.latestSnapshot.valid || !presentation.playerSprite)
             return;
 
-        if(!view.previousSample.valid)
+        if(!presentation.previousSnapshot.valid)
         {
-            view.sprite->setMovementDirection(MovementDirection::None);
-            view.isMoving = false;
+            presentation.playerSprite->setMovementDirection(MovementDirection::None);
             return;
         }
 
-        const int dxQ = view.latestSample.posQ.xQ - view.previousSample.posQ.xQ;
-        const int dyQ = view.latestSample.posQ.yQ - view.previousSample.posQ.yQ;
+        const int dxQ = presentation.latestSnapshot.posQ.xQ - presentation.previousSnapshot.posQ.xQ;
+        const int dyQ = presentation.latestSnapshot.posQ.yQ - presentation.previousSnapshot.posQ.yQ;
         const int absDx = std::abs(dxQ);
         const int absDy = std::abs(dyQ);
 
-        view.isMoving = (absDx >= kMovementDeltaThresholdQ) || (absDy >= kMovementDeltaThresholdQ);
-        if(!view.isMoving)
+        const bool isMovingFromSnapshots =
+            (absDx >= kMovementDeltaThresholdQ) || (absDy >= kMovementDeltaThresholdQ);
+        if(!isMovingFromSnapshots)
         {
-            view.sprite->setMovementDirection(MovementDirection::None);
+            presentation.playerSprite->setMovementDirection(MovementDirection::None);
             return;
         }
 
-        view.lastFacing = inferDirectionFromDelta(dxQ, dyQ, view.lastFacing);
-        view.sprite->setMovementDirection(view.lastFacing);
+        presentation.facingDirection = inferDirectionFromDelta(dxQ, dyQ, presentation.facingDirection);
+        presentation.playerSprite->setMovementDirection(presentation.facingDirection);
     }
 
-    void MultiplayerLevelScene::updateRemotePresentations(const unsigned int delta)
+    void MultiplayerLevelScene::updateRemotePlayerPresentations(const unsigned int delta)
     {
         const float tickDelta =
-            static_cast<float>(delta) / static_cast<float>(kPredictionTickMs);
+            static_cast<float>(delta) / static_cast<float>(kSimulationTickMs);
 
-        for(auto& [playerId, view] : remotePlayers_)
+        for(auto& entry : remotePlayerPresentations_)
         {
-            if(!view.sprite)
+            auto& presentation = entry.second;
+            if(!presentation.playerSprite)
                 continue;
 
-            if(view.receivedSampleThisUpdate)
+            if(presentation.receivedSnapshotThisUpdate)
             {
-                // Keep freshly received samples at alpha=0 for one update so interpolation
-                // actually blends from previous -> latest instead of snapping immediately.
-                view.receivedSampleThisUpdate = false;
+                /*
+                 * Keep freshly received samples at alpha=0 for one update so interpolation
+                 * blends from previous to latest instead of snapping immediately.
+                 */
+                presentation.receivedSnapshotThisUpdate = false;
             }
             else
             {
-                view.ticksSinceLatestSample += tickDelta;
+                presentation.ticksSinceLatestSnapshot += tickDelta;
             }
 
-            const sim::TilePos presentedPosQ = resolvePresentedPosition(view);
-            view.presentedPosQ = presentedPosQ;
+            const sim::TilePos presentedPosQ = computeRemotePresentedPosition(presentation);
 
             const int screenX = sim::tileQToScreenTopLeft(presentedPosQ.xQ, fieldPositionX, scaledTileSize, 0);
             const int screenY = sim::tileQToScreenTopLeft(presentedPosQ.yQ, fieldPositionY, scaledTileSize, 0);
-            view.sprite->setPosition(screenX, screenY);
+            presentation.playerSprite->setPosition(screenX, screenY);
 
-            updateRemoteNameTagPosition(view, playerId);
+            updateRemotePlayerTagPosition(presentation);
         }
     }
 
-    sim::TilePos MultiplayerLevelScene::resolvePresentedPosition(const RemotePlayerView& view) const
+    sim::TilePos MultiplayerLevelScene::computeRemotePresentedPosition(
+        const RemotePlayerPresentation& presentation) const
     {
         if(!game->isRemoteSmoothingEnabled())
-            return view.authoritativePosQ;
+            return presentation.authoritativePosQ;
 
-        if(!view.previousSample.valid || !view.latestSample.valid)
-            return view.authoritativePosQ;
+        if(!presentation.previousSnapshot.valid || !presentation.latestSnapshot.valid)
+            return presentation.authoritativePosQ;
 
         const uint32_t observedSnapshotSpacingTicks =
-            (view.latestSample.tick > view.previousSample.tick)
-                ? (view.latestSample.tick - view.previousSample.tick)
+            (presentation.latestSnapshot.serverTick > presentation.previousSnapshot.serverTick)
+                ? (presentation.latestSnapshot.serverTick - presentation.previousSnapshot.serverTick)
                 : 0u;
 
         if(observedSnapshotSpacingTicks == 0)
-            return view.authoritativePosQ;
+            return presentation.authoritativePosQ;
 
-        // This path is interpolation only: blend between the two most recent authoritative
-        // snapshot samples. It intentionally does not extrapolate or dead-reckon remote players.
-        // TODO: If observed snapshot spacing becomes too noisy under loss, send the nominal
-        // snapshot interval to clients during handshake/level setup and blend against that value.
+        /*
+         * This path is interpolation only. Remote players remain snapshot-authoritative,
+         * and the scene avoids extrapolation or dead reckoning here.
+         *
+         * TODO: If observed snapshot spacing becomes too noisy under loss, send the nominal
+         * snapshot interval to clients during handshake.
+         */
         const float alpha = std::clamp(
-            view.ticksSinceLatestSample / static_cast<float>(observedSnapshotSpacingTicks),
+            presentation.ticksSinceLatestSnapshot / static_cast<float>(observedSnapshotSpacingTicks),
             0.0f,
             1.0f);
 
         sim::TilePos presentedPosQ{};
         presentedPosQ.xQ = static_cast<int32_t>(std::lround(
-            static_cast<double>(view.previousSample.posQ.xQ) +
-            static_cast<double>(view.latestSample.posQ.xQ - view.previousSample.posQ.xQ) * alpha));
+            static_cast<double>(presentation.previousSnapshot.posQ.xQ) +
+            static_cast<double>(presentation.latestSnapshot.posQ.xQ - presentation.previousSnapshot.posQ.xQ) * alpha));
         presentedPosQ.yQ = static_cast<int32_t>(std::lround(
-            static_cast<double>(view.previousSample.posQ.yQ) +
-            static_cast<double>(view.latestSample.posQ.yQ - view.previousSample.posQ.yQ) * alpha));
+            static_cast<double>(presentation.previousSnapshot.posQ.yQ) +
+            static_cast<double>(presentation.latestSnapshot.posQ.yQ - presentation.previousSnapshot.posQ.yQ) * alpha));
 
         return presentedPosQ;
     }
 
-    void MultiplayerLevelScene::updateRemoteNameTagPosition(RemotePlayerView& view, const uint8_t /*playerId*/)
+    void MultiplayerLevelScene::updateRemotePlayerTagPosition(RemotePlayerPresentation& presentation)
     {
-        if(!view.nameTag || !view.sprite)
+        if(!presentation.playerTag || !presentation.playerSprite)
             return;
 
-        const int tagX = view.sprite->getPositionX() + view.sprite->getWidth() / 2 - view.nameTag->getWidth() / 2;
-        const int tagY = view.sprite->getPositionY() - view.nameTag->getHeight() - kNameTagOffsetPx;
-        view.nameTag->setPosition(tagX, tagY);
+        const int tagX = presentation.playerSprite->getPositionX() + presentation.playerSprite->getWidth() / 2 -
+                         presentation.playerTag->getWidth() / 2;
+        const int tagY = presentation.playerSprite->getPositionY() - presentation.playerTag->getHeight() -
+                         kNameTagOffsetPx;
+        presentation.playerTag->setPosition(tagX, tagY);
     }
 
-    std::string MultiplayerLevelScene::makePlayerTagText(const uint8_t playerId)
+    std::string MultiplayerLevelScene::formatPlayerTag(const uint8_t playerId)
     {
-        // Player IDs are zero-indexed, but for display we want them to be 1-indexed.
+        /* Player IDs are zero-indexed, but the player-facing label is 1-indexed. */
         return "P" + std::to_string(static_cast<unsigned int>(playerId) + 1u);
     }
 
-    void MultiplayerLevelScene::leaveToMenu(const bool disconnectClient, const std::string_view reason)
+    // =================================================================================================================
+    // ===== Leave and Teardown =======================================================================================
+    // =================================================================================================================
+
+    void MultiplayerLevelScene::returnToMenu(const bool disconnectClient, const std::string_view reason)
     {
-        if(leavingToMenu_)
+        if(returningToMenu_)
             return;
 
-        leavingToMenu_ = true;
+        returningToMenu_ = true;
 
         if(disconnectClient)
         {
             LOG_NET_CONN_INFO("Leaving multiplayer level and disconnecting: {}", reason);
+            /* The scene switches immediately; ENet disconnect completion finishes asynchronously. */
             game->disconnectNetClientIfActive(false);
         }
         else

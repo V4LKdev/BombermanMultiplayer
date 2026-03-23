@@ -12,19 +12,21 @@
 #include "NetDiagConfig.h"
 
 /**
- * @brief Diagnostics recorder for high-level network events, peer transport health samples, and aggregate counters.
+ * @file NetDiagnostics.h
+ * @brief Session-local multiplayer diagnostics recorder and report model.
  *
- * It does 4 things:
- *   1. Captures discrete events in a recent-event ring buffer.
- *   2. Stores the latest sampled transport health values for each peer.
- *   3. Maintains layered aggregate counters for packet, input-stream, and simulation facts.
- *   4. Dumps a human-readable session report to disk on demand.
+ * The recorder stays lightweight:
+ * - recent noteworthy events live in a fixed-size ring buffer
+ * - transport and input-continuity state keep only the latest sample per peer
+ * - aggregate counters summarize one diagnostics session
+ * - reporting writes a simple text snapshot suitable for manual review
  */
-
 
 namespace bomberman::net
 {
-    /** @brief High-level kinds of diagnostics events captured during a network session. */
+    // ----- Recent-event model -----
+
+    /** @brief High-level kinds of recent events captured during a diagnostics session. */
     enum class NetEventType : uint8_t
     {
         Unknown,
@@ -36,6 +38,7 @@ namespace bomberman::net
         Simulation
     };
 
+    /** @brief Peer lifecycle milestones currently emitted by the server networking flow. */
     enum class NetPeerLifecycleType : uint8_t
     {
         TransportConnected,
@@ -45,12 +48,14 @@ namespace bomberman::net
         TransportDisconnectedBeforeHandshake
     };
 
+    /** @brief Packet travel direction recorded in a recent packet event. */
     enum class NetPacketDirection : uint8_t
     {
         Outgoing,
         Incoming
     };
 
+    /** @brief Diagnostics classification for one packet attempt or receive path outcome. */
     enum class NetPacketResult : uint8_t
     {
         Ok,
@@ -59,6 +64,7 @@ namespace bomberman::net
         Malformed
     };
 
+    /** @brief Simulation/input-timeline events worth retaining in recent-event history. */
     enum class NetSimulationEventType : uint8_t
     {
         Gap,
@@ -69,27 +75,28 @@ namespace bomberman::net
     struct NetEvent
     {
         NetEventType type = NetEventType::Unknown;
-        uint64_t timestampMs = 0;
+        uint64_t timestampMs = 0; ///< Monotonic timestamp. Zero means "stamp on record".
 
-        NetPacketDirection packetDirection = NetPacketDirection::Outgoing;
-        NetPacketResult packetResult = NetPacketResult::Ok;
-        NetPeerLifecycleType lifecycleType = NetPeerLifecycleType::TransportConnected;
-        NetSimulationEventType simulationType = NetSimulationEventType::Gap;
+        NetPacketDirection packetDirection = NetPacketDirection::Outgoing; ///< Valid for packet events.
+        NetPacketResult packetResult = NetPacketResult::Ok; ///< Valid for packet events.
+        NetPeerLifecycleType lifecycleType = NetPeerLifecycleType::TransportConnected; ///< Valid for peer lifecycle events.
+        NetSimulationEventType simulationType = NetSimulationEventType::Gap; ///< Valid for simulation events.
 
-        uint8_t peerId = 0xFF;
-        uint8_t channelId = 0xFF;
-        uint8_t msgType = 0;
+        uint8_t peerId = 0xFF; ///< Gameplay peer id when known, otherwise 0xFF.
+        uint8_t channelId = 0xFF; ///< Raw ENet channel id for packet events.
+        uint8_t msgType = 0; ///< Raw @ref EMsgType value for packet events.
 
-        uint32_t seq = 0;
-        // Generic value fields that can be used for different purposes depending on the event type.
-        uint32_t valueA = 0;
-        uint32_t valueB = 0;
+        uint32_t seq = 0; ///< Input sequence or other event-specific sequence value.
+        uint32_t detailA = 0; ///< Event-specific numeric detail.
+        uint32_t detailB = 0; ///< Event-specific numeric detail.
 
-        std::string note;
+        std::string note; ///< Optional short human-readable note for reports.
     };
 
+    // ----- Latest per-peer state -----
+
     /** @brief Latest sampled transport health values for a single peer. */
-    struct NetPeerSample
+    struct NetPeerTransportSample
     {
         uint8_t peerId = 0xFF;
         uint64_t timestampMs = 0;
@@ -111,7 +118,6 @@ namespace bomberman::net
         uint32_t lastProcessedInputSeq = 0;
     };
 
-
     /**
      * @brief Aggregate counters and timing collected across one diagnostics session.
      */
@@ -129,14 +135,12 @@ namespace bomberman::net
         uint64_t recentEventsRecorded = 0; ///< Number of events written to the recent-event ring.
         uint64_t recentEventsEvicted = 0; ///< Number of older recent events evicted from the fixed-size ring.
 
-        // Attempt counters: incremented for every send/recv record call, including failed results.
-        uint64_t packetsSent = 0;
-        uint64_t packetsRecv = 0;
-        uint64_t packetBytesSent = 0;
-        uint64_t packetBytesRecv = 0;
-        // Failed attempts by direction (subset of packetsSent/packetsRecv).
-        uint64_t packetsSentFailed = 0;
-        uint64_t packetsRecvFailed = 0;
+        uint64_t packetsSent = 0; ///< Outgoing packet attempts recorded, including failed queue attempts.
+        uint64_t packetsRecv = 0; ///< Incoming packet attempts recorded, including rejected or malformed packets.
+        uint64_t packetBytesSent = 0; ///< Outgoing bytes counted across all recorded send attempts.
+        uint64_t packetBytesRecv = 0; ///< Incoming bytes counted across all recorded receive attempts.
+        uint64_t packetsSentFailed = 0; ///< Failed outgoing attempts, subset of @ref packetsSent.
+        uint64_t packetsRecvFailed = 0; ///< Failed incoming attempts, subset of @ref packetsRecv.
         uint64_t malformedPacketsRecv = 0; ///< Incoming packets rejected before a typed payload could be dispatched.
         uint64_t malformedPacketBytesRecv = 0; ///< Bytes carried by malformed incoming packets.
 
@@ -149,11 +153,12 @@ namespace bomberman::net
         uint64_t bufferedInputRecoveries = 0; ///< Times the exact input packet missed its deadline, but redundant batch history filled the seq before a gap occurred.
     };
 
-
     /**
-     * @brief Reusable diagnostics recorder shared by client- and server-side networking code.
+     * @brief Session-local recorder for recent multiplayer diagnostics and aggregate counters.
      *
-     * The class owns recent events, latest peer samples, packet aggregates, and high-level session counters.
+     * Recording is manual and call-site driven. The class does not inspect ENet
+     * state or gameplay state on its own; it stores what the owning network flow
+     * explicitly reports to it.
      */
     class NetDiagnostics
     {
@@ -173,23 +178,23 @@ namespace bomberman::net
         /** @brief Ends the current diagnostics session and finalizes duration fields. */
         void endSession();
 
-        // ---- Event and sample recording ----
+        // ---- Recent-event extension seam ----
 
         /**
-         * @brief Records a fully populated event structure.
+         * @brief Records a fully populated recent event.
          *
-         * If event.timestampMs is zero, the implementation will stamp it with the
+         * This is the lowest-level extension point for future diagnostics work.
+         * If `event.timestampMs` is zero, the recorder stamps it with the
          * current monotonic time.
          */
         void recordEvent(const NetEvent& event);
 
-        /** @brief Convenience overload for simple events with an attached note string. */
-        void recordEvent(NetEventType type, std::string_view note = {});
+        // ---- Packet accounting ----
 
-        /** @brief Records an outgoing packet attempt for a gameplay peer and updates summary counters. */
+        /** @brief Records one outgoing packet attempt and updates packet summary totals. */
         void recordPacketSent(EMsgType type, uint8_t peerId, uint8_t channelId, std::size_t bytes, NetPacketResult result = NetPacketResult::Ok);
 
-        /** @brief Records an incoming packet attempt for a gameplay peer and updates summary counters. */
+        /** @brief Records one incoming packet attempt and updates packet summary totals. */
         void recordPacketRecv(EMsgType type, uint8_t peerId, uint8_t channelId, std::size_t bytes, NetPacketResult result = NetPacketResult::Ok);
 
         /** @brief Records an incoming packet that failed before typed dispatch, such as a malformed header. */
@@ -197,6 +202,8 @@ namespace bomberman::net
 
         /** @brief Records a structured peer lifecycle event. */
         void recordPeerLifecycle(NetPeerLifecycleType type, uint8_t peerId, uint32_t transportPeerId, std::string_view note = {});
+
+        // ---- Input stream and simulation continuity ----
 
         /** @brief Records one input packet that was received and parsed successfully. */
         void recordInputPacketReceived();
@@ -216,10 +223,10 @@ namespace bomberman::net
         /** @brief Records a buffered-input recovery where redundant history supplied the exact seq before consume time. */
         void recordBufferedInputRecovery(uint8_t peerId, uint32_t inputSeq, uint32_t serverTick);
 
-        // ---- Peer transport health sampling ----
+        // ---- Latest per-peer state sampling ----
 
         /** @brief Stores the latest sampled transport health values for a peer. */
-        void samplePeer(uint8_t peerId, uint32_t rttMs, uint32_t rttVarianceMs, uint32_t packetLossPermille, uint32_t queuedReliable, uint32_t queuedUnreliable);
+        void samplePeerTransport(uint8_t peerId, uint32_t rttMs, uint32_t rttVarianceMs, uint32_t packetLossPermille, uint32_t queuedReliable, uint32_t queuedUnreliable);
 
         /** @brief Stores the latest input progression cursors for a peer. */
         void samplePeerInputContinuity(uint8_t peerId, uint32_t lastReceivedInputSeq, uint32_t lastProcessedInputSeq);
@@ -235,8 +242,16 @@ namespace bomberman::net
     private:
         // ---- Internal helpers ----
 
+        static uint64_t nowMs();
+        static uint64_t recentEventDedupeCooldownMs(const NetEvent& event);
+        static std::string makeRecentEventSignature(const NetEvent& event);
+        static bool isAlwaysEmitEvent(const NetEvent& event);
+
         /** @brief Returns whether a packet attempt should be stored in recent-event history. */
         static bool shouldEmitPacketEvent(NetPacketResult result);
+
+        /** @brief Convenience helper for recorder-owned events with no structured payload. */
+        void recordEvent(NetEventType type, std::string_view note = {});
 
         /** @brief Global per-message packet aggregates. */
         struct PacketAggregate
@@ -255,17 +270,13 @@ namespace bomberman::net
             uint64_t lastEmittedTimestampMs = 0;
         };
 
-        static uint64_t nowMs();
-        static uint64_t recentEventDedupeCooldownMs(const NetEvent& event);
-        static std::string makeRecentEventSignature(const NetEvent& event);
-        static bool isAlwaysEmitEvent(const NetEvent& event);
-
         /** @brief Resets all per-session state before a new session begins. */
         void resetForNewSession(std::string_view ownerTag, bool enabled);
 
-        /** @brief Inserts an event into the recent-event ring buffer. */
-        void pushRecentEvent(NetEvent event);
+        /** @brief Applies recent-event dedupe policy before writing to the ring buffer. */
         void recordRecentEvent(NetEvent event);
+        /** @brief Inserts an event into the fixed-size recent-event ring buffer. */
+        void pushRecentEvent(NetEvent event);
 
         // ---- State ----
 
@@ -279,10 +290,10 @@ namespace bomberman::net
         std::size_t recentStart_ = 0;                               ///< Ring buffer head index.
         std::size_t recentCount_ = 0;                               ///< Number of valid entries in the ring.
 
-        std::unordered_map<uint8_t, NetPeerSample> latestPeerSamples_;
-        std::unordered_map<uint8_t, NetPeerContinuitySummary> peerContinuitySummaries_;
-        std::unordered_map<std::string, RecentEventRepeatState> recentEventRepeatState_;
         std::array<PacketAggregate, 256> packetAggregates_{};       ///< Per-message packet aggregates by raw msg type.
+        std::unordered_map<uint8_t, NetPeerTransportSample> latestPeerSamples_; ///< Latest transport sample by gameplay peer id.
+        std::unordered_map<uint8_t, NetPeerContinuitySummary> peerContinuitySummaries_; ///< Latest input continuity state by gameplay peer id.
+        std::unordered_map<std::string, RecentEventRepeatState> recentEventRepeatState_; ///< Recent-event dedupe bookkeeping by signature.
     };
 
 } // namespace bomberman::net

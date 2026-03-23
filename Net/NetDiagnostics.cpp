@@ -1,12 +1,17 @@
+/**
+ * @file NetDiagnostics.cpp
+ * @brief Implementation of the lightweight multiplayer diagnostics recorder.
+ */
+
 #include "NetDiagnostics.h"
 
+#include <algorithm>
 #include <chrono>
 #include <fstream>
 #include <iomanip>
 #include <sstream>
 #include <utility>
 #include <vector>
-#include <algorithm>
 
 namespace bomberman::net
 {
@@ -16,6 +21,7 @@ namespace bomberman::net
         // ===== Local string helpers ==================================================================================
         // =============================================================================================================
 
+        /** @brief Returns a stable printable label for one recent-event kind. */
         constexpr const char* toString(NetEventType type)
         {
             switch (type)
@@ -31,6 +37,7 @@ namespace bomberman::net
             }
         }
 
+        /** @brief Returns a stable printable label for one peer lifecycle event. */
         constexpr const char* toString(NetPeerLifecycleType type)
         {
             switch (type)
@@ -46,6 +53,7 @@ namespace bomberman::net
             }
         }
 
+        /** @brief Returns a stable printable label for one packet outcome. */
         constexpr const char* toString(NetPacketResult result)
         {
             switch (result)
@@ -58,6 +66,7 @@ namespace bomberman::net
             }
         }
 
+        /** @brief Returns a stable printable label for one simulation continuity event. */
         constexpr const char* toString(NetSimulationEventType type)
         {
             switch (type)
@@ -68,6 +77,7 @@ namespace bomberman::net
             }
         }
 
+        /** @brief Formats one input bitmask using the same compact hex style as network logs. */
         std::string formatInputMask(const uint32_t mask)
         {
             std::ostringstream out;
@@ -174,7 +184,7 @@ namespace bomberman::net
         event.peerId = peerId;
         event.channelId = channelId;
         event.msgType = static_cast<uint8_t>(type);
-        event.valueA = static_cast<uint32_t>(bytes);
+        event.detailA = static_cast<uint32_t>(bytes);
         recordRecentEvent(std::move(event));
     }
 
@@ -215,7 +225,7 @@ namespace bomberman::net
         event.peerId = peerId;
         event.channelId = channelId;
         event.msgType = static_cast<uint8_t>(type);
-        event.valueA = static_cast<uint32_t>(bytes);
+        event.detailA = static_cast<uint32_t>(bytes);
         recordRecentEvent(std::move(event));
     }
 
@@ -240,7 +250,7 @@ namespace bomberman::net
         event.packetResult = NetPacketResult::Malformed;
         event.peerId = peerId;
         event.channelId = channelId;
-        event.valueA = static_cast<uint32_t>(bytes);
+        event.detailA = static_cast<uint32_t>(bytes);
         event.note = note;
         recordRecentEvent(std::move(event));
     }
@@ -258,7 +268,7 @@ namespace bomberman::net
         event.timestampMs = nowMs();
         event.lifecycleType = type;
         event.peerId = peerId;
-        event.valueA = transportPeerId;
+        event.detailA = transportPeerId;
         event.note = note;
         recordRecentEvent(std::move(event));
     }
@@ -316,8 +326,8 @@ namespace bomberman::net
         event.simulationType = NetSimulationEventType::Gap;
         event.peerId = peerId;
         event.seq = inputSeq;
-        event.valueA = heldButtons;
-        event.valueB = serverTick;
+        event.detailA = heldButtons;
+        event.detailB = serverTick;
         recordRecentEvent(std::move(event));
     }
 
@@ -345,21 +355,21 @@ namespace bomberman::net
         event.simulationType = NetSimulationEventType::BufferedRecovery;
         event.peerId = peerId;
         event.seq = inputSeq;
-        event.valueB = serverTick;
+        event.detailB = serverTick;
         recordRecentEvent(std::move(event));
     }
 
-    void NetDiagnostics::samplePeer(const uint8_t peerId,
-                                    const uint32_t rttMs,
-                                    const uint32_t rttVarianceMs,
-                                    const uint32_t packetLossPermille,
-                                    const uint32_t queuedReliable,
-                                    const uint32_t queuedUnreliable)
+    void NetDiagnostics::samplePeerTransport(const uint8_t peerId,
+                                             const uint32_t rttMs,
+                                             const uint32_t rttVarianceMs,
+                                             const uint32_t packetLossPermille,
+                                             const uint32_t queuedReliable,
+                                             const uint32_t queuedUnreliable)
     {
         if (!enabled_ || !sessionActive_)
             return;
 
-        NetPeerSample sample{};
+        NetPeerTransportSample sample{};
         sample.peerId = peerId;
         sample.timestampMs = nowMs();
         sample.rttMs = rttMs;
@@ -412,7 +422,8 @@ namespace bomberman::net
         const uint64_t reportEndMs = summary_.active ? nowMs() : summary_.endTimestampMs;
         const uint64_t reportDurationMs =
             (reportEndMs >= summary_.beginTimestampMs) ? (reportEndMs - summary_.beginTimestampMs) : 0;
-        //  Little formatting lambdas
+
+        // Keep the report deliberately plain so it stays diffable and easy to scan during manual testing.
         const auto writeSectionHeader = [&out](const std::string_view title)
         {
             out << "--- " << title << " ---\n";
@@ -503,8 +514,18 @@ namespace bomberman::net
         }
         else
         {
+            std::vector<uint8_t> peerIds;
+            peerIds.reserve(latestPeerSamples_.size());
             for (const auto& [peerId, sample] : latestPeerSamples_)
             {
+                (void)sample;
+                peerIds.push_back(peerId);
+            }
+            std::sort(peerIds.begin(), peerIds.end());
+
+            for (const uint8_t peerId : peerIds)
+            {
+                const auto& sample = latestPeerSamples_.at(peerId);
                 out << "  - peer=" << static_cast<int>(peerId)
                     << " ts_ms=" << sample.timestampMs
                     << " rtt_ms=" << sample.rttMs
@@ -576,16 +597,16 @@ namespace bomberman::net
                         if (event.peerId != 0xFF)
                             out << " peer=" << static_cast<int>(event.peerId);
                         out << " lifecycle=" << toString(event.lifecycleType)
-                            << " transport_peer=" << event.valueA;
+                            << " transport_peer=" << event.detailA;
                         break;
 
                     case NetEventType::Simulation:
                         out << " peer=" << static_cast<int>(event.peerId)
                             << " seq=" << event.seq
                             << " sim=" << toString(event.simulationType)
-                            << " server_tick=" << event.valueB;
+                            << " server_tick=" << event.detailB;
                         if (event.simulationType == NetSimulationEventType::Gap)
-                            out << " held_mask=" << formatInputMask(event.valueA);
+                            out << " held_mask=" << formatInputMask(event.detailA);
                         break;
 
                     case NetEventType::SessionBegin:
@@ -601,10 +622,10 @@ namespace bomberman::net
                             out << " msg=0x" << std::hex << static_cast<int>(event.msgType) << std::dec;
                         if (event.seq != 0)
                             out << " seq=" << event.seq;
-                        if (event.valueA != 0)
-                            out << " a=" << event.valueA;
-                        if (event.valueB != 0)
-                            out << " b=" << event.valueB;
+                        if (event.detailA != 0)
+                            out << " detail_a=" << event.detailA;
+                        if (event.detailB != 0)
+                            out << " detail_b=" << event.detailB;
                         break;
                 }
 
@@ -633,6 +654,36 @@ namespace bomberman::net
         return kRecentEventDedupeCooldownMs;
     }
 
+    std::string NetDiagnostics::makeRecentEventSignature(const NetEvent& event)
+    {
+        std::ostringstream out;
+        out << static_cast<int>(event.type)
+            << '|' << static_cast<int>(event.peerId)
+            << '|' << static_cast<int>(event.channelId)
+            << '|' << static_cast<int>(event.msgType)
+            << '|' << event.seq
+            << '|' << static_cast<int>(event.packetDirection)
+            << '|' << static_cast<int>(event.packetResult)
+            << '|' << static_cast<int>(event.lifecycleType)
+            << '|' << static_cast<int>(event.simulationType)
+            << '|' << event.detailA
+            << '|' << event.detailB
+            << '|' << event.note;
+        return out.str();
+    }
+
+    bool NetDiagnostics::isAlwaysEmitEvent(const NetEvent& event)
+    {
+        return event.type == NetEventType::SessionBegin
+            || event.type == NetEventType::SessionEnd
+            || event.type == NetEventType::PeerLifecycle;
+    }
+
+    bool NetDiagnostics::shouldEmitPacketEvent(const NetPacketResult result)
+    {
+        return result != NetPacketResult::Ok;
+    }
+
     void NetDiagnostics::resetForNewSession(const std::string_view ownerTag, const bool enabled)
     {
         enabled_ = enabled;
@@ -653,33 +704,6 @@ namespace bomberman::net
 
         for (auto& item : packetAggregates_)
             item = {};
-    }
-
-    bool NetDiagnostics::shouldEmitPacketEvent(const NetPacketResult result)
-    {
-        return result != NetPacketResult::Ok;
-    }
-
-    std::string NetDiagnostics::makeRecentEventSignature(const NetEvent& event)
-    {
-        std::ostringstream out;
-        out << static_cast<int>(event.type)
-            << '|' << static_cast<int>(event.peerId)
-            << '|' << static_cast<int>(event.channelId)
-            << '|' << static_cast<int>(event.msgType)
-            << '|' << static_cast<int>(event.packetDirection)
-            << '|' << static_cast<int>(event.packetResult)
-            << '|' << static_cast<int>(event.lifecycleType)
-            << '|' << static_cast<int>(event.simulationType)
-            << '|' << event.note;
-        return out.str();
-    }
-
-    bool NetDiagnostics::isAlwaysEmitEvent(const NetEvent& event)
-    {
-        return event.type == NetEventType::SessionBegin
-            || event.type == NetEventType::SessionEnd
-            || event.type == NetEventType::PeerLifecycle;
     }
 
     void NetDiagnostics::recordRecentEvent(NetEvent event)
