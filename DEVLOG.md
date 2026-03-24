@@ -1,5 +1,29 @@
 # Bomberman Multiplayer – Dev Log
 
+## 2026-03-24 (b81e50a) – Finish Authoritative Bomb Gameplay Slice
+
+### Goal
+Complete a playable, server-authoritative bomb/explosion/death loop before moving on to lobby and match-flow work.
+
+### What landed
+- Added authoritative server bomb state, placement validation, fuse timing, explosion resolution, brick destruction, and death handling.
+- Replicated active bombs through snapshots and added reliable gameplay events for `BombPlaced` and `ExplosionResolved`.
+- Updated multiplayer presentation so bomb placement, explosion VFX, brick removal, and immediate death feedback appear correctly on clients.
+- Added round-end detection, match rejection while a round is in progress, and authoritative `InputLocked` handling so end-of-round freeze is clean.
+- Extended diagnostics with bomb, brick-destruction, round-end, and in-progress-reject reporting.
+
+### Cleanup
+- Extracted bomb-specific server gameplay logic into `ServerBombs.*` so `ServerSimulation.cpp` is back to tick/input/snapshot flow.
+- Normalized a small part of the shared simulation documentation in `SimConfig.h` to match the Doxygen style used elsewhere.
+
+### Validation
+- Rebuilt and repeatedly playtested the slice with one and two clients, including latency/loss simulation.
+- Verified bomb count and blast radius scaling with temporary config changes.
+
+### Result
+- The multiplayer gameplay loop now supports authoritative bombs, destruction, death, and round-end behavior in a stable form.
+- The next clean milestone is lobby/match flow, spawn handling, and reconnect policy built on top of this foundation.
+
 ## 2026-03-23 (pending) – Finish Multiplayer QA Cleanup Pass
 
 ### Goal
