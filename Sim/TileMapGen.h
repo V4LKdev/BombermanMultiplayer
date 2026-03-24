@@ -4,6 +4,7 @@
 #include <random>
 
 #include "Const.h"
+#include "Sim/SpawnSlots.h"
 
 /**
  * @file Sim/TileMapGen.h
@@ -43,11 +44,15 @@ namespace bomberman::sim
                 }
             }
         }
+
+        for (const auto& cell : kProtectedSpawnClearCells)
+        {
+            outTiles[cell.row][cell.col] = Tile::EmptyGrass;
+        }
     }
 
 } // namespace bomberman::sim
 
 #endif // BOMBERMAN_SIM_TILEMAPGEN_H
-
 
 

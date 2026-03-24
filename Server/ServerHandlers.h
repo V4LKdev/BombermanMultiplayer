@@ -21,6 +21,9 @@ namespace bomberman::server
      */
     void handleReceiveEvent(const ENetEvent& event, ServerState& state);
 
+    /** @brief Rebuilds and broadcasts the current authoritative lobby state to all accepted peers. */
+    void broadcastLobbyState(ServerState& state);
+
 } // namespace bomberman::server
 
 #endif // BOMBERMAN_SERVERHANDLERS_H

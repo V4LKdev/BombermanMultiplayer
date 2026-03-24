@@ -30,8 +30,7 @@ namespace bomberman
 
         spawnPlayer(fieldPositionX + playerStartX * scaledTileSize,
                     fieldPositionY + playerStartY * scaledTileSize);
-        playerPos_ = { playerStartX * 256 + 128, playerStartY * 256 + 128 };
-        syncPlayerSpriteToSimPosition();
+        setLocalPlayerPositionQ({ playerStartX * 256 + 128, playerStartY * 256 + 128 });
     }
 
     void LevelScene::generateTileMap(std::optional<uint32_t> mapSeed)
@@ -274,6 +273,12 @@ namespace bomberman
         const int screenX = sim::tileQToScreenTopLeft(playerPos_.xQ, fieldPositionX, scaledTileSize, 0);
         const int screenY = sim::tileQToScreenTopLeft(playerPos_.yQ, fieldPositionY, scaledTileSize, 0);
         player->setPosition(screenX, screenY);
+    }
+
+    void LevelScene::setLocalPlayerPositionQ(const sim::TilePos posQ)
+    {
+        playerPos_ = posQ;
+        syncPlayerSpriteToSimPosition();
     }
 
 } // namespace bomberman

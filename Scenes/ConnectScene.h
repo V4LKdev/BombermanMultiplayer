@@ -23,7 +23,7 @@ namespace bomberman
      *
      * Owns the user-facing form for player name and server address entry,
      * displays async connection progress/failure status from `NetClient`,
-     * and transitions into the multiplayer stage flow once the session is ready.
+     * and transitions into the multiplayer lobby flow once the session is ready.
      */
     class ConnectScene : public Scene
     {
@@ -124,7 +124,7 @@ namespace bomberman
         bool playerNameTouched_ = false; ///< True once the player name field has received its first keystroke.
         bool hostTouched_       = false; ///< True once the host field has received its first keystroke.
         uint16_t port_ = 0; ///< Read-only server port, displayed for info only.
-        bool transitionedToStage_ = false; ///< Guards the one-time scene handoff after a successful connection.
+        bool transitionedToLobby_ = false; ///< Guards the one-time scene handoff after a successful connection.
         net::EConnectState lastConnectState_ = net::EConnectState::Disconnected; ///< Cached state to avoid redundant status text updates.
 
         // ----- Cached Layout -----

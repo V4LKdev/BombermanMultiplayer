@@ -10,7 +10,7 @@
 #include <string>
 
 #include "Game.h"
-#include "StageScene.h"
+#include "LobbyScene.h"
 #include "Net/NetClient.h"
 #include "Net/NetCommon.h"
 
@@ -232,14 +232,13 @@ namespace bomberman
             case net::EConnectState::Connected:
                 setConnectStatus("Connected!", {80, 220, 80, 255});
 
-                if (!transitionedToStage_)
+                if (!transitionedToLobby_)
                 {
-                    // `Connected` means Welcome + LevelInfo already completed, so the stage scene can wait for the map seed.
-                    transitionedToStage_ = true;
+                    transitionedToLobby_ = true;
                     game->getSceneManager()->addScene(
-                        "stage",
-                        std::make_shared<StageScene>(game, 1, 0, LevelMode::Multiplayer));
-                    game->getSceneManager()->activateScene("stage");
+                        "lobby",
+                        std::make_shared<LobbyScene>(game));
+                    game->getSceneManager()->activateScene("lobby");
                     game->getSceneManager()->removeScene("connect");
                 }
                 break;

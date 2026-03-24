@@ -28,6 +28,9 @@ namespace bomberman::net
         constexpr int kConnectTimeoutMs = 5000;
         constexpr int kDisconnectTimeoutMs = 5000;
         constexpr int kDisconnectPollTimeoutMs = 100;
+        // Preserve the previous combined backlog headroom (64 per event type)
+        // while moving both reliable gameplay types into one ordered queue.
+        constexpr std::size_t kMaxPendingGameplayEvents = 128;
 
         using SteadyClock = std::chrono::steady_clock;
         using TimePoint = SteadyClock::time_point;
@@ -46,16 +49,17 @@ namespace bomberman::net
 
             switch (type)
             {
-                case Hello:
                 case Welcome:
                 case Reject:
-                case LevelInfo:
                     return true;
+                case Hello:
                 case Input:
                 case Snapshot:
                 case Correction:
                 case BombPlaced:
                 case ExplosionResolved:
+                case LobbyState:
+                case LevelInfo:
                 default:
                     return false;
             }
@@ -108,8 +112,14 @@ namespace bomberman::net
         };
         CachedLevelInfo cachedLevelInfo{};
 
-        std::deque<MsgBombPlaced> pendingBombPlacedEvents{};
-        std::deque<MsgExplosionResolved> pendingExplosionEvents{};
+        struct CachedLobbyState
+        {
+            MsgLobbyState lobbyState{};
+            bool valid = false;
+        };
+        CachedLobbyState cachedLobbyState{};
+
+        std::deque<GameplayEvent> pendingGameplayEvents{};
 
         // ----- Protocol handlers -----
         static void onWelcome(NetClient& client,
@@ -134,6 +144,14 @@ namespace bomberman::net
                                 std::size_t payloadSize)
         {
             client.handleLevelInfo(payload, payloadSize);
+        }
+
+        static void onLobbyState(NetClient& client,
+                                 const PacketHeader& /*header*/,
+                                 const uint8_t* payload,
+                                 std::size_t payloadSize)
+        {
+            client.handleLobbyState(payload, payloadSize);
         }
 
         static void onSnapshot(NetClient& client,
@@ -182,6 +200,7 @@ namespace bomberman::net
         impl_->dispatcher.bind(Welcome, &Impl::onWelcome);
         impl_->dispatcher.bind(Reject, &Impl::onReject);
         impl_->dispatcher.bind(LevelInfo, &Impl::onLevelInfo);
+        impl_->dispatcher.bind(LobbyState, &Impl::onLobbyState);
         impl_->dispatcher.bind(Snapshot, &Impl::onSnapshot);
         impl_->dispatcher.bind(Correction, &Impl::onCorrection);
         impl_->dispatcher.bind(BombPlaced, &Impl::onBombPlaced);
@@ -759,27 +778,26 @@ namespace bomberman::net
         return impl_->cachedCorrection.correction.serverTick;
     }
 
-    bool NetClient::tryDequeueBombPlaced(MsgBombPlaced& out)
+    bool NetClient::tryGetLatestLobbyState(MsgLobbyState& out) const
     {
-        if (impl_ == nullptr || !isConnected() || impl_->pendingBombPlacedEvents.empty())
+        if (impl_ == nullptr || !isConnected() || !impl_->cachedLobbyState.valid)
         {
             return false;
         }
 
-        out = impl_->pendingBombPlacedEvents.front();
-        impl_->pendingBombPlacedEvents.pop_front();
+        out = impl_->cachedLobbyState.lobbyState;
         return true;
     }
 
-    bool NetClient::tryDequeueExplosionResolved(MsgExplosionResolved& out)
+    bool NetClient::tryDequeueGameplayEvent(GameplayEvent& out)
     {
-        if (impl_ == nullptr || !isConnected() || impl_->pendingExplosionEvents.empty())
+        if (impl_ == nullptr || !isConnected() || impl_->pendingGameplayEvents.empty())
         {
             return false;
         }
 
-        out = impl_->pendingExplosionEvents.front();
-        impl_->pendingExplosionEvents.pop_front();
+        out = impl_->pendingGameplayEvents.front();
+        impl_->pendingGameplayEvents.pop_front();
         return true;
     }
 
@@ -840,7 +858,11 @@ namespace bomberman::net
         }
         playerId_ = welcome.playerId;
         serverTickRate_ = welcome.serverTickRate;
-        LOG_NET_CONN_INFO("Welcome: playerId={}, tickRate={} - handshake complete, session ready", welcome.playerId, welcome.serverTickRate);
+        state_ = EConnectState::Connected;
+        impl_->connectedStartTime = SteadyClock::now();
+        LOG_NET_CONN_INFO("Welcome: playerId={}, tickRate={} - session connected, waiting for lobby or match bootstrap",
+                          welcome.playerId,
+                          welcome.serverTickRate);
     }
 
     void NetClient::handleReject(const uint8_t* payload, std::size_t payloadSize)
@@ -896,15 +918,14 @@ namespace bomberman::net
         {
             return;
         }
-        if (state_ != EConnectState::Handshaking)
+        if (state_ != EConnectState::Connected)
         {
             LOG_NET_PROTO_WARN("LevelInfo received in invalid state {} - ignoring", connectStateName(state_));
             return;
         }
         if (playerId_ == kInvalidPlayerId || serverTickRate_ == 0)
         {
-            LOG_NET_PROTO_ERROR("LevelInfo received before valid Welcome - failing handshake");
-            state_ = EConnectState::FailedHandshake;
+            LOG_NET_PROTO_WARN("LevelInfo received without a valid connected session - ignoring");
             return;
         }
 
@@ -912,16 +933,30 @@ namespace bomberman::net
         if (!deserializeMsgLevelInfo(payload, payloadSize, levelInfo))
         {
             LOG_NET_PROTO_WARN("Failed to parse LevelInfo payload");
-            state_ = EConnectState::FailedHandshake;
             return;
         }
 
         impl_->cachedLevelInfo = {levelInfo, true};
-
-        state_ = EConnectState::Connected;
-        impl_->connectedStartTime = SteadyClock::now();
-
         LOG_NET_CONN_INFO("Received LevelInfo seed={}", levelInfo.mapSeed);
+    }
+
+    void NetClient::handleLobbyState(const uint8_t* payload, std::size_t payloadSize) const
+    {
+        if (!impl_ || !isConnected())
+        {
+            LOG_NET_CONN_DEBUG("Received LobbyState payload while not connected - ignoring");
+            return;
+        }
+
+        MsgLobbyState lobbyState{};
+        if (!deserializeMsgLobbyState(payload, payloadSize, lobbyState))
+        {
+            LOG_NET_PROTO_WARN("Failed to parse LobbyState payload");
+            return;
+        }
+
+        impl_->cachedLobbyState = {lobbyState, true};
+        LOG_NET_CONN_DEBUG("Received LobbyState update");
     }
 
     void NetClient::handleSnapshot(const uint8_t* payload, std::size_t payloadSize) const
@@ -1007,14 +1042,7 @@ namespace bomberman::net
             return;
         }
 
-        constexpr std::size_t kMaxPendingGameplayEvents = 64;
-        if (impl_->pendingBombPlacedEvents.size() >= kMaxPendingGameplayEvents)
-        {
-            impl_->pendingBombPlacedEvents.pop_front();
-        }
-
-        impl_->pendingBombPlacedEvents.push_back(bombPlaced);
-        impl_->lastGameplayReceiveTime = SteadyClock::now();
+        enqueueGameplayEvent(GameplayEvent::fromBombPlaced(bombPlaced));
 
         LOG_NET_SNAPSHOT_DEBUG("Received BombPlaced tick={} ownerId={} cell=({}, {}) radius={} explodeTick={}",
                                bombPlaced.serverTick,
@@ -1040,14 +1068,7 @@ namespace bomberman::net
             return;
         }
 
-        constexpr std::size_t kMaxPendingGameplayEvents = 64;
-        if (impl_->pendingExplosionEvents.size() >= kMaxPendingGameplayEvents)
-        {
-            impl_->pendingExplosionEvents.pop_front();
-        }
-
-        impl_->pendingExplosionEvents.push_back(explosion);
-        impl_->lastGameplayReceiveTime = SteadyClock::now();
+        enqueueGameplayEvent(GameplayEvent::fromExplosionResolved(explosion));
 
         LOG_NET_SNAPSHOT_DEBUG("Received ExplosionResolved tick={} ownerId={} origin=({}, {}) blastCells={} destroyedBricks={} killedMask=0x{:02x}",
                                explosion.serverTick,
@@ -1057,6 +1078,24 @@ namespace bomberman::net
                                explosion.blastCellCount,
                                explosion.destroyedBrickCount,
                                explosion.killedPlayerMask);
+    }
+
+    void NetClient::enqueueGameplayEvent(const GameplayEvent& event) const
+    {
+        if (impl_ == nullptr)
+        {
+            return;
+        }
+
+        if (impl_->pendingGameplayEvents.size() >= kMaxPendingGameplayEvents)
+        {
+            LOG_NET_SNAPSHOT_WARN(
+                "Pending reliable gameplay event queue overflow - dropping oldest event to preserve receive order");
+            impl_->pendingGameplayEvents.pop_front();
+        }
+
+        impl_->pendingGameplayEvents.push_back(event);
+        impl_->lastGameplayReceiveTime = SteadyClock::now();
     }
 
     // =================================================================================================================
@@ -1140,8 +1179,8 @@ namespace bomberman::net
             impl_->cachedSnapshot = {};
             impl_->cachedCorrection = {};
             impl_->cachedLevelInfo = {};
-            impl_->pendingBombPlacedEvents.clear();
-            impl_->pendingExplosionEvents.clear();
+            impl_->cachedLobbyState = {};
+            impl_->pendingGameplayEvents.clear();
         }
     }
 

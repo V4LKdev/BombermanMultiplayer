@@ -88,6 +88,8 @@ namespace bomberman::server
     {
         uint8_t playerId = 0;                               ///< Stable authoritative player seat in [0, net::kMaxPlayers).
         std::string playerName;                             ///< Latest accepted player name associated with this player seat.
+        bool ready = false;                                 ///< Passive lobby ready toggle owned by the server seat state.
+        uint8_t wins = 0;                                   ///< Server-owned round wins for the current seat occupant.
         ENetAddress lastKnownAddress{};                     ///< Last accepted or disconnected remote address, kept as reconnect/diagnostic hint only.
         uint32_t acceptedServerTick = 0;                    ///< Server tick when the current or most recent live session was accepted.
         std::optional<uint32_t> lastDisconnectServerTick{}; ///< Set once the current or most recent live session disconnects.
@@ -323,9 +325,10 @@ namespace bomberman::server
     /**
      * @brief Creates active in-match authoritative state for one player seat.
      *
-     * Replaces any existing @ref MatchPlayerState in the same slot.
+     * Replaces any existing @ref MatchPlayerState in the same slot and seeds
+     * the starting position from the shared default spawn-slot table.
      */
-    void createMatchPlayerState(ServerState& state, uint8_t playerId, sim::TilePos spawnPos);
+    void createMatchPlayerState(ServerState& state, uint8_t playerId);
 
     /**
      * @brief Destroys active in-match authoritative state for one player seat, if present.

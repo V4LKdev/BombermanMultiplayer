@@ -18,6 +18,7 @@
 #include "Game.h"
 #include "Net/NetClient.h"
 #include "Sim/SimConfig.h"
+#include "Sim/SpawnSlots.h"
 #include "Util/Log.h"
 
 namespace bomberman
@@ -28,6 +29,9 @@ namespace bomberman
 
     namespace
     {
+        static_assert(net::kMaxPlayers <= sim::kDefaultSpawnSlots.size(),
+                      "Spawn slot table must cover all supported multiplayer player ids");
+
         struct PlayerColor
         {
             uint8_t r;
@@ -154,6 +158,7 @@ namespace bomberman
         : LevelScene(game, stage, prevScore, mapSeed)
     {
         initializeLevelWorld(mapSeed);
+        seedLocalSpawnFromAssignedPlayerId();
         explosionSound_ = std::make_shared<Sound>(game->getAssetManager()->getSound(SoundEnum::Explosion));
     }
 
@@ -219,16 +224,18 @@ namespace bomberman
 
     void MultiplayerLevelScene::applyPendingGameplayEvents(net::NetClient& netClient)
     {
-        net::MsgBombPlaced bombPlaced{};
-        while(netClient.tryDequeueBombPlaced(bombPlaced))
+        net::NetClient::GameplayEvent gameplayEvent{};
+        while(netClient.tryDequeueGameplayEvent(gameplayEvent))
         {
-            applyBombPlacedEvent(bombPlaced);
-        }
-
-        net::MsgExplosionResolved explosion{};
-        while(netClient.tryDequeueExplosionResolved(explosion))
-        {
-            applyExplosionResolvedEvent(explosion);
+            switch(gameplayEvent.type)
+            {
+                case net::NetClient::GameplayEvent::EType::BombPlaced:
+                    applyBombPlacedEvent(gameplayEvent.bombPlaced);
+                    break;
+                case net::NetClient::GameplayEvent::EType::ExplosionResolved:
+                    applyExplosionResolvedEvent(gameplayEvent.explosionResolved);
+                    break;
+            }
         }
     }
 
@@ -346,6 +353,19 @@ namespace bomberman
         applySnapshotToRemotePlayers(snapshot, localId);
         applySnapshotBombs(snapshot);
         lastAppliedSnapshotTick_ = snapshot.serverTick;
+    }
+
+    void MultiplayerLevelScene::seedLocalSpawnFromAssignedPlayerId()
+    {
+        const net::NetClient* netClient = game->getNetClient();
+        if(!netClient)
+            return;
+
+        const uint8_t playerId = netClient->playerId();
+        if(playerId == net::NetClient::kInvalidPlayerId)
+            return;
+
+        setLocalPlayerPositionQ(sim::spawnTilePosForPlayerId(playerId));
     }
 
     void MultiplayerLevelScene::applyAuthoritativeCorrection(const net::MsgCorrection& correction)

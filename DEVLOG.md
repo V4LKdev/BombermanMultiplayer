@@ -1,5 +1,28 @@
 # Bomberman Multiplayer – Dev Log
 
+## 2026-03-24 (pending) – Add Passive Multiplayer Lobby Foundation
+
+### Goal
+Split connection acceptance from in-round gameplay setup and establish a clean lobby-first multiplayer flow.
+
+### What landed
+- Fixed reliable gameplay-event ordering on the client by draining bomb and explosion events from one shared receive-order queue.
+- Added deterministic player-id keyed spawn slots and protected those spawn-safe cells in map generation.
+- Added a dedicated read-only `LobbyScene` and routed online connect flow into the lobby instead of directly into stage/gameplay scenes.
+- Made `Welcome` complete the client connection and removed `LevelInfo` from the handshake path.
+- Added authoritative `LobbyState` protocol support and server rebroadcasts on join and disconnect.
+- Stopped creating `MatchPlayerState` during `Hello`; accepted peers now become lobby seats only.
+- Extended durable `PlayerSlot` state with lobby-owned `ready` and `wins` fields for the next match-flow steps.
+- Cleaned the initial lobby presentation so seat rows render as a stable table and full-length names fit cleanly.
+
+### Validation
+- Rebuilt the client and dedicated server with `cmake --build build -j4`.
+- Manually tested one-to-four clients joining the lobby, join/leave lobby updates, full-server rejects, and seat reuse after disconnect.
+
+### Result
+- Multiplayer now has a clean passive lobby checkpoint instead of connecting straight into gameplay.
+- The next natural milestone is lobby interaction and controlled match start/bootstrap on top of this flow.
+
 ## 2026-03-24 (b81e50a) – Finish Authoritative Bomb Gameplay Slice
 
 ### Goal

@@ -12,7 +12,6 @@
 #include "Net/NetSend.h"
 #include "Net/PacketDispatch.h"
 #include "ServerState.h"
-#include "Sim/TileMapGen.h"
 #include "Util/Log.h"
 
 using namespace bomberman::net;
@@ -25,14 +24,6 @@ namespace bomberman::server
 
     namespace
     {
-        // ----- Temporary match bootstrap constants -----
-
-        /** @brief Current temporary authoritative spawn used for newly accepted peers. */
-        constexpr sim::TilePos kDefaultSpawnPos{
-            playerStartX * 256 + 128,
-            playerStartY * 256 + 128
-        };
-
         // ----- Diagnostics helpers -----
 
         constexpr std::string_view rejectReasonName(const MsgReject::EReason reason)
@@ -124,31 +115,6 @@ namespace bomberman::server
             enet_peer_disconnect_later(ctx.peer, 0);
         }
 
-        /**
-         * @brief Resets a peer after `Welcome` was already queued but the full handshake could not be completed.
-         *
-         * This intentionally avoids sending `Reject`, because `Welcome` may
-         * already be queued on the reliable channel and a later reject would
-         * produce a contradictory partial handshake on the client.
-         */
-        void abortPartialHandshake(PacketDispatchContext& ctx,
-                                   const uint8_t playerId,
-                                   const EMsgType failedType,
-                                   const std::size_t failedPayloadSize,
-                                   std::string_view failedLabel)
-        {
-            recordControlPacketSent(ctx, failedType, playerId, failedPayloadSize, NetPacketResult::Dropped);
-            releasePlayerId(ctx.state, playerId);
-            ctx.receiveResult = NetPacketResult::Rejected;
-
-            LOG_NET_CONN_ERROR(
-                "Failed to queue {} for peer {} after Welcome was already queued; resetting peer to drop the partial handshake",
-                failedLabel,
-                ctx.peer->incomingPeerID);
-
-            enet_peer_reset(ctx.peer);
-        }
-
         /** @brief Returns true once a live peer session exists and Hello has been accepted for it. */
         bool hasAcceptedPlayer(const ENetPeer* peer)
         {
@@ -157,31 +123,12 @@ namespace bomberman::server
         }
 
         /**
-         * @brief Returns true when the current round has diverged beyond what a fresh connect can bootstrap cleanly.
-         *
-         * The current connect bootstrap includes the map seed plus snapshots.
-         * That is enough for bombs and alive-state recovery, but not for
-         * destroyed-brick map mutations yet, so we reject new joins once the
-         * authoritative tile map diverges from the seed-generated baseline.
+         * @brief Returns true when the server is not currently accepting fresh lobby joins.
          */
         [[nodiscard]]
         bool roundRequiresAdditionalBootstrap(const ServerState& state)
         {
-            if (state.phase == ServerPhase::StartingMatch || state.phase == ServerPhase::EndOfMatch)
-                return true;
-
-            sim::TileMap pristineTiles{};
-            sim::generateTileMap(state.mapSeed, pristineTiles);
-            for (std::size_t row = 0; row < tileArrayHeight; ++row)
-            {
-                for (std::size_t col = 0; col < tileArrayWidth; ++col)
-                {
-                    if (pristineTiles[row][col] != state.tiles[row][col])
-                        return true;
-                }
-            }
-
-            return false;
+            return state.phase != ServerPhase::Lobby;
         }
 
         /** @brief Returns the active in-match authoritative state for an accepted peer session, if any. */
@@ -266,26 +213,53 @@ namespace bomberman::server
             return true;
         }
 
-        /**
-         * @brief Queues the temporary immediate `LevelInfo` bootstrap after a successful Welcome.
-         *
-         * This is intentionally separate from acceptance semantics so the later
-         * lobby/gameflow state machine can move the call site without
-         * reworking Hello validation and Welcome handling again.
-         */
+        /** @brief Builds the current authoritative passive lobby state in stable player-id seat order. */
         [[nodiscard]]
-        bool queueImmediateLevelBootstrap(PacketDispatchContext& ctx, const uint8_t playerId)
+        MsgLobbyState buildLobbyState(const ServerState& state)
         {
-            MsgLevelInfo levelInfo{};
-            levelInfo.mapSeed = ctx.state.mapSeed;
-            if (!queueReliableControl(ctx.peer, makeLevelInfoPacket(levelInfo)))
+            MsgLobbyState lobbyState{};
+
+            for (uint8_t playerId = 0; playerId < kMaxPlayers; ++playerId)
             {
-                abortPartialHandshake(ctx, playerId, EMsgType::LevelInfo, kMsgLevelInfoSize, "LevelInfo");
-                return false;
+                const auto* session = findPeerSessionByPlayerId(state, playerId);
+                if (session == nullptr)
+                    continue;
+
+                const auto& slotEntry = state.playerSlots[playerId];
+                if (!slotEntry.has_value())
+                    continue;
+
+                auto& seat = lobbyState.seats[playerId];
+                const auto& slot = slotEntry.value();
+
+                uint8_t flags = static_cast<uint8_t>(MsgLobbyState::SeatEntry::ESeatFlags::Occupied);
+                if (slot.ready)
+                {
+                    flags |= static_cast<uint8_t>(MsgLobbyState::SeatEntry::ESeatFlags::Ready);
+                }
+
+                seat.flags = static_cast<MsgLobbyState::SeatEntry::ESeatFlags>(flags);
+                seat.wins = slot.wins;
+                setLobbySeatName(seat, slot.playerName);
             }
 
-            recordControlPacketSent(ctx, EMsgType::LevelInfo, playerId, kMsgLevelInfoSize);
-            return true;
+            return lobbyState;
+        }
+
+        /** @brief Queues one authoritative lobby-state snapshot to a single accepted peer. */
+        void queueLobbyStateToPeer(ServerState& state, ENetPeer& peer, const uint8_t playerId, const MsgLobbyState& lobbyState)
+        {
+            const bool queued = queueReliableControl(&peer, makeLobbyStatePacket(lobbyState));
+            state.diag.recordPacketSent(EMsgType::LobbyState,
+                                        playerId,
+                                        static_cast<uint8_t>(EChannel::ControlReliable),
+                                        kPacketHeaderSize + kMsgLobbyStateSize,
+                                        queued ? NetPacketResult::Ok : NetPacketResult::Dropped);
+
+            if (!queued)
+            {
+                LOG_NET_CONN_WARN("Failed to queue LobbyState to playerId={} peer={}", playerId, peer.incomingPeerID);
+            }
         }
 
         /** @brief Commits the accepted peer into stable server storage and records the acceptance lifecycle event. */
@@ -301,12 +275,7 @@ namespace bomberman::server
                 return;
             }
 
-            // TODO: individual spawn points per player.
             acceptPeerSession(ctx.state, *session, playerId, playerName);
-            createMatchPlayerState(ctx.state, playerId, kDefaultSpawnPos);
-            ctx.state.phase = ServerPhase::InMatch;
-            ctx.state.roundWinnerPlayerId.reset();
-            ctx.state.roundEndedInDraw = false;
 
             recordPeerLifecycle(ctx.diag,
                                 NetPeerLifecycleType::PlayerAccepted,
@@ -567,15 +536,9 @@ namespace bomberman::server
         if (!queueWelcomeForHello(ctx, playerId))
             return;
 
-        if (!queueImmediateLevelBootstrap(ctx, playerId))
-            return;
-
-        flush(ctx.state.host);
-        LOG_NET_CONN_INFO("Sent immediate post-accept LevelInfo bootstrap (seed={}) to playerId={}",
-                          ctx.state.mapSeed,
-                          playerId);
-
         finalizeAcceptedHello(ctx, playerId, playerName);
+        broadcastLobbyState(ctx.state);
+        LOG_NET_CONN_INFO("Accepted playerId={} into the passive lobby", playerId);
     }
 
     void onInput(PacketDispatchContext& ctx, const PacketHeader& /*header*/, const uint8_t* payload, std::size_t size)
@@ -662,6 +625,24 @@ namespace bomberman::server
         }
 
         state.diag.recordPacketRecv(header.type, ctx.recordedPlayerId.value_or(0xFF), channelId, dataLength, ctx.receiveResult);
+    }
+
+    void broadcastLobbyState(ServerState& state)
+    {
+        if (state.host == nullptr)
+            return;
+
+        const MsgLobbyState lobbyState = buildLobbyState(state);
+
+        for (const auto& sessionEntry : state.peerSessions)
+        {
+            if (!sessionEntry.has_value() || !sessionEntry->playerId.has_value() || sessionEntry->peer == nullptr)
+                continue;
+
+            queueLobbyStateToPeer(state, *sessionEntry->peer, sessionEntry->playerId.value(), lobbyState);
+        }
+
+        flush(state.host);
     }
 
 } // namespace bomberman::server

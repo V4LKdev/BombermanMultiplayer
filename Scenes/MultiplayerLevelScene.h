@@ -133,7 +133,7 @@ namespace bomberman
         void applyLatestCorrectionIfAvailable(const net::NetClient& netClient);
         /** @brief Applies the newest unapplied gameplay snapshot, if any. */
         void applyLatestSnapshotIfAvailable();
-        /** @brief Applies any pending reliable gameplay events after snapshot state for this frame. */
+        /** @brief Applies any pending reliable gameplay events after snapshot state in original receive order. */
         void applyPendingGameplayEvents(net::NetClient& netClient);
         /** @brief Ticks scene objects, remote presentation, camera, and diagnostics after state application. */
         void finalizeFrameUpdate(unsigned int delta);
@@ -142,6 +142,8 @@ namespace bomberman
         void applySnapshot(const net::MsgSnapshot& snapshot);
         /** @brief Ensures the local player's multiplayer color and tag match the assigned player ID. */
         void ensureLocalPresentation(uint8_t localId);
+        /** @brief Seeds local player presentation from the assigned player-id spawn slot before the first snapshot/correction arrives. */
+        void seedLocalSpawnFromAssignedPlayerId();
         /** @brief Reconciles prediction against one owner correction and updates local presentation. */
         void applyAuthoritativeCorrection(const net::MsgCorrection& correction);
         /** @brief Logs replay truncation and recovery outcomes for one applied correction. */

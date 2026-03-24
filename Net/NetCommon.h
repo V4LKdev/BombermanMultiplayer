@@ -30,7 +30,7 @@ namespace bomberman::net
 
     // ----- Protocol Constants -----
 
-    constexpr uint16_t      kProtocolVersion = 5;
+    constexpr uint16_t      kProtocolVersion = 6;
 
     constexpr uint16_t      kDefaultServerPort = 12345;  ///< Default server port used by both client and server.
     constexpr std::size_t   kMaxPacketSize = 1400;       ///< Upper packet size bound (below typical 1500-byte MTU).
@@ -141,6 +141,14 @@ namespace bomberman::net
     constexpr std::size_t kMsgLevelInfoSize =
         sizeof(uint32_t);  // mapSeed
 
+    constexpr std::size_t kMsgLobbyStateSeatSize =
+        sizeof(uint8_t) +  // flags
+        sizeof(uint8_t) +  // wins
+        kPlayerNameMax;    // name (fixed-size field)
+
+    constexpr std::size_t kMsgLobbyStateSize =
+        kMaxPlayers * kMsgLobbyStateSeatSize;
+
     constexpr std::size_t kMsgInputSize =
         sizeof(uint32_t) + // baseInputSeq
         sizeof(uint8_t) +  // count
@@ -199,6 +207,8 @@ namespace bomberman::net
     static_assert(kMsgWelcomeSize    == 5,   "MsgWelcome size mismatch");
     static_assert(kMsgRejectSize     == 3,   "MsgReject size mismatch");
     static_assert(kMsgLevelInfoSize  == 4,   "MsgLevelInfo size mismatch");
+    static_assert(kMsgLobbyStateSeatSize == 18, "MsgLobbyState seat size mismatch");
+    static_assert(kMsgLobbyStateSize == 72, "MsgLobbyState size mismatch");
     static_assert(kMsgInputSize      == 21,  "MsgInput size mismatch");
     static_assert(kMsgSnapshotSize   == 94,  "MsgSnapshot size mismatch");
     static_assert(kMsgCorrectionSize == 12,  "MsgCorrection size mismatch");
@@ -247,6 +257,7 @@ namespace bomberman::net
         Welcome    = 0x02,
         Reject     = 0x03,
         LevelInfo  = 0x04,
+        LobbyState = 0x05,
 
         Input      = 0x10,
         Snapshot   = 0x11,
@@ -262,6 +273,7 @@ namespace bomberman::net
                raw == static_cast<uint8_t>(EMsgType::Welcome)    ||
                raw == static_cast<uint8_t>(EMsgType::Reject)     ||
                raw == static_cast<uint8_t>(EMsgType::LevelInfo)  ||
+               raw == static_cast<uint8_t>(EMsgType::LobbyState) ||
                raw == static_cast<uint8_t>(EMsgType::Input)      ||
                raw == static_cast<uint8_t>(EMsgType::Snapshot)   ||
                raw == static_cast<uint8_t>(EMsgType::Correction) ||
@@ -279,6 +291,7 @@ namespace bomberman::net
             case EMsgType::Welcome:    return "Welcome";
             case EMsgType::Reject:     return "Reject";
             case EMsgType::LevelInfo:  return "LevelInfo";
+            case EMsgType::LobbyState: return "LobbyState";
             case EMsgType::Input:      return "Input";
             case EMsgType::Snapshot:   return "Snapshot";
             case EMsgType::Correction: return "Correction";
@@ -291,8 +304,8 @@ namespace bomberman::net
     /**
      * @brief Returns the required ENet channel for a protocol message type.
      *
-     * @note `LevelInfo` currently remains a reliable control/bootstrap message
-     * queued immediately after `Welcome`.
+     * @note `LevelInfo` and `LobbyState` are both reliable control/bootstrap
+     * messages owned by higher-level session and match flow.
      */
     constexpr EChannel expectedChannelFor(EMsgType type)
     {
@@ -302,6 +315,7 @@ namespace bomberman::net
             case EMsgType::Welcome:
             case EMsgType::Reject:
             case EMsgType::LevelInfo:
+            case EMsgType::LobbyState:
                 return EChannel::ControlReliable;
             case EMsgType::Input:
                 return EChannel::InputUnreliable;
@@ -367,6 +381,7 @@ namespace bomberman::net
             case EMsgType::Welcome:    return kMsgWelcomeSize;
             case EMsgType::Reject:     return kMsgRejectSize;
             case EMsgType::LevelInfo:  return kMsgLevelInfoSize;
+            case EMsgType::LobbyState: return kMsgLobbyStateSize;
             case EMsgType::Input:      return kMsgInputSize;
             case EMsgType::Snapshot:   return kMsgSnapshotSize;
             case EMsgType::Correction: return kMsgCorrectionSize;
@@ -434,7 +449,7 @@ namespace bomberman::net
     };
 
     /**
-     * @brief Level setup payload sent reliably by the server after `Welcome`.
+     * @brief Match bootstrap payload sent reliably by the server when gameplay setup is needed.
      *
      * @note This is a temporary handshake-adjacent bootstrap message. The
      * current contract keeps it separate from `Welcome` so it can later move
@@ -444,6 +459,38 @@ namespace bomberman::net
     {
         uint32_t mapSeed = 0; ///< 32-bit seed for the shared tile-map generator.
     };
+
+    /**
+     * @brief Passive lobby seat snapshot sent reliably by the server.
+     *
+     * Slots are encoded in stable player-id seat order so clients can render a
+     * dynamic lobby list without inferring seat ownership from packet order.
+     */
+    struct MsgLobbyState
+    {
+        struct SeatEntry
+        {
+            enum class ESeatFlags : uint8_t
+            {
+                None = 0x00,
+                Occupied = 0x01,
+                Ready = 0x02
+            };
+
+            static constexpr uint8_t kKnownFlags =
+                static_cast<uint8_t>(ESeatFlags::Occupied) |
+                static_cast<uint8_t>(ESeatFlags::Ready);
+
+            ESeatFlags flags = ESeatFlags::None; ///< Occupancy/ready state for this player-id seat.
+            uint8_t wins = 0;                    ///< Server-owned round wins for the current seat occupant.
+            char name[kPlayerNameMax]{};         ///< Seat display name, NUL-terminated and zero-padded when occupied.
+        };
+
+        SeatEntry seats[kMaxPlayers]{}; ///< Stable player-id keyed lobby seats.
+    };
+
+    static_assert(sizeof(MsgLobbyState::SeatEntry) == kMsgLobbyStateSeatSize, "MsgLobbyState::SeatEntry size mismatch");
+    static_assert(sizeof(MsgLobbyState) == kMsgLobbyStateSize, "MsgLobbyState size mismatch");
 
     // ----- Gameplay Message Payloads -----
 
@@ -656,6 +703,42 @@ namespace bomberman::net
         setHelloName(hello, std::string_view{name, copyLen});
     }
 
+    /** @brief Returns true when one lobby-seat flag field contains only known bits. */
+    constexpr bool isValidLobbySeatFlags(const uint8_t flags)
+    {
+        return (flags & static_cast<uint8_t>(~MsgLobbyState::SeatEntry::kKnownFlags)) == 0;
+    }
+
+    /** @brief Sets one lobby-seat display name with truncation and zero padding. */
+    inline void setLobbySeatName(MsgLobbyState::SeatEntry& seat, std::string_view name)
+    {
+        std::memset(seat.name, 0, kPlayerNameMax);
+
+        const std::size_t copyLen = (name.size() < (kPlayerNameMax - 1)) ? name.size() : (kPlayerNameMax - 1);
+        std::memcpy(seat.name, name.data(), copyLen);
+    }
+
+    /** @brief Returns the visible lobby-seat display name. */
+    [[nodiscard]]
+    inline std::string_view lobbySeatName(const MsgLobbyState::SeatEntry& seat)
+    {
+        return std::string_view(seat.name, boundedStrLen(seat.name, kPlayerNameMax - 1));
+    }
+
+    /** @brief Returns true when one lobby seat is currently occupied. */
+    constexpr bool lobbySeatIsOccupied(const MsgLobbyState::SeatEntry& seat)
+    {
+        return (static_cast<uint8_t>(seat.flags) &
+                static_cast<uint8_t>(MsgLobbyState::SeatEntry::ESeatFlags::Occupied)) != 0;
+    }
+
+    /** @brief Returns true when one occupied lobby seat is marked ready. */
+    constexpr bool lobbySeatIsReady(const MsgLobbyState::SeatEntry& seat)
+    {
+        return (static_cast<uint8_t>(seat.flags) &
+                static_cast<uint8_t>(MsgLobbyState::SeatEntry::ESeatFlags::Ready)) != 0;
+    }
+
     // =================================================================================================================
     // ===== Serialization =============================================================================================
     // =================================================================================================================
@@ -815,6 +898,62 @@ namespace bomberman::net
             return false;
         }
         outInfo.mapSeed = readU32LE(in);
+        return true;
+    }
+
+    /** @brief Serializes `MsgLobbyState` to fixed-size wire payload. */
+    inline void serializeMsgLobbyState(const MsgLobbyState& lobbyState, uint8_t* out) noexcept
+    {
+        for (std::size_t i = 0; i < kMaxPlayers; ++i)
+        {
+            const auto offset = i * kMsgLobbyStateSeatSize;
+            const auto& seat = lobbyState.seats[i];
+
+            out[offset] = static_cast<uint8_t>(seat.flags);
+            out[offset + 1] = seat.wins;
+            std::memset(out + offset + 2, 0, kPlayerNameMax);
+            const std::size_t nameLen = boundedStrLen(seat.name, kPlayerNameMax - 1);
+            std::memcpy(out + offset + 2, seat.name, nameLen);
+        }
+    }
+
+    /** @brief Deserializes `MsgLobbyState` from fixed-size wire payload. */
+    [[nodiscard]]
+    inline bool deserializeMsgLobbyState(const uint8_t* in, std::size_t inSize, MsgLobbyState& outLobbyState)
+    {
+        if (inSize < kMsgLobbyStateSize)
+        {
+            return false;
+        }
+
+        for (std::size_t i = 0; i < kMaxPlayers; ++i)
+        {
+            const auto offset = i * kMsgLobbyStateSeatSize;
+            auto& seat = outLobbyState.seats[i];
+
+            const uint8_t rawFlags = in[offset];
+            if (!isValidLobbySeatFlags(rawFlags))
+            {
+                return false;
+            }
+
+            seat.flags = static_cast<MsgLobbyState::SeatEntry::ESeatFlags>(rawFlags);
+            seat.wins = in[offset + 1];
+            std::memcpy(seat.name, in + offset + 2, kPlayerNameMax);
+            seat.name[kPlayerNameMax - 1] = '\0';
+
+            const std::size_t nameLen = boundedStrLen(seat.name, kPlayerNameMax - 1);
+            std::memset(seat.name + nameLen, 0, kPlayerNameMax - nameLen);
+
+            if (!lobbySeatIsOccupied(seat))
+            {
+                seat.wins = 0;
+                std::memset(seat.name, 0, kPlayerNameMax);
+                continue;
+            }
+
+        }
+
         return true;
     }
 
@@ -1273,7 +1412,7 @@ namespace bomberman::net
         return bytes;
     }
 
-    /** @brief Builds a full LevelInfo packet (header + payload). Sent reliably by server after Welcome. */
+    /** @brief Builds a full LevelInfo packet (header + payload). */
     inline std::array<uint8_t, kPacketHeaderSize + kMsgLevelInfoSize> makeLevelInfoPacket(const MsgLevelInfo& info)
     {
         PacketHeader header{};
@@ -1283,6 +1422,20 @@ namespace bomberman::net
         std::array<uint8_t, kPacketHeaderSize + kMsgLevelInfoSize> bytes{};
         serializeHeader(header, bytes.data());
         serializeMsgLevelInfo(info, bytes.data() + kPacketHeaderSize);
+
+        return bytes;
+    }
+
+    /** @brief Builds a full LobbyState packet (header + payload). */
+    inline std::array<uint8_t, kPacketHeaderSize + kMsgLobbyStateSize> makeLobbyStatePacket(const MsgLobbyState& lobbyState)
+    {
+        PacketHeader header{};
+        header.type = EMsgType::LobbyState;
+        header.payloadSize = static_cast<uint16_t>(kMsgLobbyStateSize);
+
+        std::array<uint8_t, kPacketHeaderSize + kMsgLobbyStateSize> bytes{};
+        serializeHeader(header, bytes.data());
+        serializeMsgLobbyState(lobbyState, bytes.data() + kPacketHeaderSize);
 
         return bytes;
     }

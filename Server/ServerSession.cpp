@@ -7,6 +7,7 @@
 
 #include <random>
 
+#include "Sim/SpawnSlots.h"
 #include "Sim/TileMapGen.h"
 #include "Util/Log.h"
 
@@ -14,6 +15,9 @@ namespace bomberman::server
 {
     namespace
     {
+        static_assert(net::kMaxPlayers <= sim::kDefaultSpawnSlots.size(),
+                      "Spawn slot table must cover all supported multiplayer player ids");
+
         /**
          * @brief Maps an ENet incoming peer id to the stable peer-session storage slot.
          *
@@ -256,6 +260,8 @@ namespace bomberman::server
         auto& slot = slotEntry.value();
         slot.playerId = playerId;
         slot.playerName = std::string(playerName);
+        slot.ready = false;
+        slot.wins = 0;
         slot.lastKnownAddress = session.peer->address;
         slot.acceptedServerTick = state.serverTick;
         slot.lastDisconnectServerTick.reset();
@@ -277,6 +283,8 @@ namespace bomberman::server
         if (releasedPlayerId.has_value())
         {
             const uint8_t playerId = releasedPlayerId.value();
+            const bool hadActiveRoundState =
+                state.phase != ServerPhase::Lobby || !hasNoActiveMatchPlayers(state);
 
             if (auto& slotEntry = state.playerSlots[playerId]; slotEntry.has_value())
                 markReleasedPlayerSlot(slotEntry.value(), peer, state.serverTick);
@@ -284,7 +292,7 @@ namespace bomberman::server
             destroyMatchPlayerState(state, playerId);
             releasePlayerId(state, playerId);
 
-            if (hasNoActiveMatchPlayers(state))
+            if (hadActiveRoundState && hasNoActiveMatchPlayers(state))
             {
                 state.phase = ServerPhase::Lobby;
                 state.roundWinnerPlayerId.reset();
@@ -303,13 +311,13 @@ namespace bomberman::server
     // ===== Match Player State Lifecycle ==============================================================================
     // =================================================================================================================
 
-    void createMatchPlayerState(ServerState& state, const uint8_t playerId, const sim::TilePos spawnPos)
+    void createMatchPlayerState(ServerState& state, const uint8_t playerId)
     {
         auto& matchEntry = state.matchPlayers[playerId];
         matchEntry.emplace();
         auto& matchPlayer = matchEntry.value();
         matchPlayer.playerId = playerId;
-        matchPlayer.pos = spawnPos;
+        matchPlayer.pos = sim::spawnTilePosForPlayerId(playerId);
         matchPlayer.alive = true;
         matchPlayer.inputLocked = false;
         matchPlayer.activeBombCount = 0;

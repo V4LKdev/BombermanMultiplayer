@@ -22,8 +22,8 @@ namespace bomberman::net
     {
         Disconnected,    ///< Not connected and holding no transport resources.
         Connecting,      ///< ENet connect in progress, waiting for a CONNECT event.
-        Handshaking,     ///< Transport connected and Hello sent, awaiting handshake completion.
-        Connected,       ///< Full session ready after Welcome was received and processed successfully.
+        Handshaking,     ///< Transport connected and Hello sent, awaiting Welcome or Reject.
+        Connected,       ///< Session accepted and ready for lobby or later match-bootstrap messages.
         Disconnecting,   ///< Graceful disconnect requested, awaiting ENet completion.
         FailedResolve,   ///< Host address could not be resolved.
         FailedConnect,   ///< Connect attempt timed out or transport failed before handshake.
@@ -66,7 +66,7 @@ namespace bomberman::net
      * connect and handshake flow, pumps incoming packets, caches the latest
      * session data, and sends runtime input batches during gameplay.
      *
-     * A session is considered connected only after `Welcome` has been received successfully.
+     * A session is considered connected once `Welcome` has been received successfully.
      */
     class NetClient
     {
@@ -95,7 +95,8 @@ namespace bomberman::net
          * @param playerName Player name sent in the Hello payload.
          *
          * If transport setup succeeds, the client enters `Connecting`.
-         * `Connected` state means the full handshake is completed.
+         * `Connected` state means the server accepted the session and the
+         * client may enter lobby flow immediately.
          *
          * @note Use @ref NetClient::connectState to observe progress or failure.
          */
@@ -183,6 +184,15 @@ namespace bomberman::net
         uint16_t serverTickRate() const { return serverTickRate_; }
 
         /**
+         * @brief Copies the newest cached lobby state for the current session.
+         *
+         * Returns `false` until at least one valid authoritative lobby-state
+         * message has been received for the current session.
+         */
+        [[nodiscard]]
+        bool tryGetLatestLobbyState(MsgLobbyState& out) const;
+
+        /**
          * @brief Copies the newest cached snapshot for the current session.
          *
          * Returns `false` if no valid snapshot has been received since the most
@@ -209,20 +219,49 @@ namespace bomberman::net
         uint32_t lastCorrectionTick() const;
 
         /**
-         * @brief Pops the oldest pending reliable bomb-placement event for the current session.
+         * @brief One reliable gameplay event dequeued in original receive order.
          *
-         * Returns `false` when no pending event is queued.
+         * Gameplay-reliable packets share one ENet channel, so preserving this
+         * order matters across message types rather than only within each type.
          */
-        [[nodiscard]]
-        bool tryDequeueBombPlaced(MsgBombPlaced& out);
+        struct GameplayEvent
+        {
+            enum class EType : uint8_t
+            {
+                BombPlaced,
+                ExplosionResolved
+            };
+
+            [[nodiscard]]
+            static GameplayEvent fromBombPlaced(const MsgBombPlaced& bombPlaced)
+            {
+                GameplayEvent event{};
+                event.type = EType::BombPlaced;
+                event.bombPlaced = bombPlaced;
+                return event;
+            }
+
+            [[nodiscard]]
+            static GameplayEvent fromExplosionResolved(const MsgExplosionResolved& explosionResolved)
+            {
+                GameplayEvent event{};
+                event.type = EType::ExplosionResolved;
+                event.explosionResolved = explosionResolved;
+                return event;
+            }
+
+            EType type = EType::BombPlaced;
+            MsgBombPlaced bombPlaced{};
+            MsgExplosionResolved explosionResolved{};
+        };
 
         /**
-         * @brief Pops the oldest pending reliable explosion-resolution event for the current session.
+         * @brief Pops the oldest pending reliable gameplay event for the current session.
          *
          * Returns `false` when no pending event is queued.
          */
         [[nodiscard]]
-        bool tryDequeueExplosionResolved(MsgExplosionResolved& out);
+        bool tryDequeueGameplayEvent(GameplayEvent& out);
 
         /**
          * @brief Returns milliseconds since the last snapshot or correction.
@@ -234,9 +273,10 @@ namespace bomberman::net
         uint32_t gameplaySilenceMs() const;
 
         /**
-         * @brief Returns the cached map seed from the current session's `LevelInfo`.
+         * @brief Returns the cached map seed from the current session's latest `LevelInfo`.
          *
-         * The cache is cleared on disconnect or reset.
+         * The cache is cleared on disconnect or reset. In lobby-only states no
+         * LevelInfo may have been received yet.
          */
         [[nodiscard]]
         bool tryGetMapSeed(uint32_t& outSeed) const;
@@ -302,10 +342,12 @@ namespace bomberman::net
         void handleWelcome(const uint8_t* payload, std::size_t payloadSize);
         void handleReject(const uint8_t* payload, std::size_t payloadSize);
         void handleLevelInfo(const uint8_t* payload, std::size_t payloadSize);
+        void handleLobbyState(const uint8_t* payload, std::size_t payloadSize) const;
         void handleSnapshot(const uint8_t* payload, std::size_t payloadSize) const;
         void handleCorrection(const uint8_t* payload, std::size_t payloadSize) const;
         void handleBombPlaced(const uint8_t* payload, std::size_t payloadSize) const;
         void handleExplosionResolved(const uint8_t* payload, std::size_t payloadSize) const;
+        void enqueueGameplayEvent(const GameplayEvent& event) const;
 
         // ----- pumpNetwork() helpers -----
 

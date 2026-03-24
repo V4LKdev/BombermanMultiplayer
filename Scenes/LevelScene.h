@@ -114,6 +114,9 @@ namespace bomberman
          */
         void syncPlayerSpriteToSimPosition();
 
+        /** @brief Replaces the canonical local player position and syncs the sprite immediately. */
+        void setLocalPlayerPositionQ(sim::TilePos posQ);
+
         std::shared_ptr<Music> menuMusic = nullptr;                       // menu music
         std::shared_ptr<Player> player = nullptr;                         // player
         Tile tiles[tileArrayHeight][tileArrayWidth];                      // tilemap

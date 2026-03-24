@@ -70,6 +70,7 @@ namespace bomberman::server
                 }
 
                 recordServerDiagLifecycle(state, NetPeerLifecycleType::PeerDisconnected, playerId, peer.incomingPeerID);
+                broadcastLobbyState(state);
                 return;
             }
 

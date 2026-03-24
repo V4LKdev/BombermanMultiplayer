@@ -40,6 +40,7 @@ set(SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/Scenes/Scene.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Scenes/MenuScene.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Scenes/ConnectScene.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/Scenes/LobbyScene.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Scenes/LevelScene.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Scenes/LevelSceneFactory.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Scenes/SingleplayerLevelScene.cpp
