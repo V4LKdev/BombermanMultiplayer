@@ -726,6 +726,25 @@ namespace bomberman::net
         return seq;
     }
 
+    bool NetClient::sendLobbyReady(const bool ready) const
+    {
+        if (impl_ == nullptr || !isConnected() || impl_->peer == nullptr)
+        {
+            return false;
+        }
+
+        const auto readyPacket = makeLobbyReadyPacket(ready);
+        if (!queueReliableControl(impl_->peer, readyPacket))
+        {
+            LOG_NET_CONN_WARN("Failed to queue LobbyReady desiredReady={}", ready);
+            return false;
+        }
+
+        flushOutgoing();
+        LOG_NET_CONN_DEBUG("Queued LobbyReady desiredReady={}", ready);
+        return true;
+    }
+
     void NetClient::flushOutgoing() const
     {
         if (impl_ == nullptr || impl_->host == nullptr)

@@ -20,6 +20,7 @@
 #include "Sim/SimConfig.h"
 #include "Sim/SpawnSlots.h"
 #include "Util/Log.h"
+#include "Util/PlayerColors.h"
 
 namespace bomberman
 {
@@ -31,22 +32,8 @@ namespace bomberman
     {
         static_assert(net::kMaxPlayers <= sim::kDefaultSpawnSlots.size(),
                       "Spawn slot table must cover all supported multiplayer player ids");
-
-        struct PlayerColor
-        {
-            uint8_t r;
-            uint8_t g;
-            uint8_t b;
-        };
-
-        constexpr PlayerColor kPlayerColors[] = {
-            {0xFF, 0x22, 0x22},
-            {0x22, 0xFF, 0x22},
-            {0x22, 0x88, 0xFF},
-            {0xFF, 0xFF, 0x22},
-        };
-
-        constexpr std::size_t kColorCount = std::size(kPlayerColors);
+        static_assert(net::kMaxPlayers <= util::kPlayerColorCount,
+                      "Player color table must cover all supported multiplayer player ids");
         constexpr int kMovementDeltaThresholdQ = 2;
         constexpr int kNameTagOffsetPx = 6;
         constexpr int kNameTagMinPointSize = 12;
@@ -108,11 +95,6 @@ namespace bomberman
         {
             const auto flags = static_cast<uint8_t>(entry.flags);
             return (flags & static_cast<uint8_t>(net::MsgSnapshot::PlayerEntry::EPlayerFlags::InputLocked)) != 0;
-        }
-
-        PlayerColor colorForPlayerId(const uint8_t playerId)
-        {
-            return kPlayerColors[static_cast<std::size_t>(playerId) % kColorCount];
         }
 
         MovementDirection inferDirectionFromDelta(const int dxQ,
@@ -654,7 +636,7 @@ namespace bomberman
         {
             localPlayerId_ = localId;
 
-            const PlayerColor color = colorForPlayerId(localId);
+            const util::PlayerColor color = util::colorForPlayerId(localId);
             player->setColorMod(color.r, color.g, color.b);
 
             if(localPlayerTag_)
@@ -672,7 +654,7 @@ namespace bomberman
             localPlayerTag_ = std::make_shared<Text>(font, game->getRenderer(), formatPlayerTag(localId));
             localPlayerTag_->fitToContent();
 
-            const PlayerColor color = colorForPlayerId(localId);
+            const util::PlayerColor color = util::colorForPlayerId(localId);
             localPlayerTag_->setColor(SDL_Color{color.r, color.g, color.b, 0xFF});
 
             addObject(localPlayerTag_);
@@ -830,7 +812,7 @@ namespace bomberman
             presentation.playerSprite->setSize(scaledTileSize, scaledTileSize);
             presentation.playerSprite->setMovementDirection(MovementDirection::None);
 
-            const PlayerColor color = colorForPlayerId(playerId);
+            const util::PlayerColor color = util::colorForPlayerId(playerId);
             presentation.playerSprite->setColorMod(color.r, color.g, color.b);
 
             const int pointSize = computeTagPointSize(scaledTileSize);
@@ -875,7 +857,7 @@ namespace bomberman
         presentation.ownerId = entry.ownerId;
         presentation.radius = entry.radius;
 
-        const PlayerColor color = colorForPlayerId(entry.ownerId);
+        const util::PlayerColor color = util::colorForPlayerId(entry.ownerId);
         presentation.bombSprite->setColorMod(color.r, color.g, color.b);
 
         const int screenX = fieldPositionX + static_cast<int>(entry.col) * scaledTileSize;

@@ -157,6 +157,17 @@ namespace bomberman::net
         [[nodiscard]]
         std::optional<uint32_t> sendInput(uint8_t buttons) const;
 
+        /**
+         * @brief Sends an authoritative lobby ready-state request for the local accepted seat.
+         *
+         * The server remains the source of truth; successful sends are reflected
+         * back through later `LobbyState` updates.
+         *
+         * @return `true` if the request was queued successfully.
+         */
+        [[nodiscard]]
+        bool sendLobbyReady(bool ready) const;
+
         /** @brief Flushes any queued outgoing ENet packets immediately. */
         void flushOutgoing() const;
 

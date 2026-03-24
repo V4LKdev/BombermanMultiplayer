@@ -30,7 +30,7 @@ namespace bomberman::net
 
     // ----- Protocol Constants -----
 
-    constexpr uint16_t      kProtocolVersion = 6;
+    constexpr uint16_t      kProtocolVersion = 7;
 
     constexpr uint16_t      kDefaultServerPort = 12345;  ///< Default server port used by both client and server.
     constexpr std::size_t   kMaxPacketSize = 1400;       ///< Upper packet size bound (below typical 1500-byte MTU).
@@ -141,6 +141,9 @@ namespace bomberman::net
     constexpr std::size_t kMsgLevelInfoSize =
         sizeof(uint32_t);  // mapSeed
 
+    constexpr std::size_t kMsgLobbyReadySize =
+        sizeof(uint8_t);   // ready
+
     constexpr std::size_t kMsgLobbyStateSeatSize =
         sizeof(uint8_t) +  // flags
         sizeof(uint8_t) +  // wins
@@ -207,6 +210,7 @@ namespace bomberman::net
     static_assert(kMsgWelcomeSize    == 5,   "MsgWelcome size mismatch");
     static_assert(kMsgRejectSize     == 3,   "MsgReject size mismatch");
     static_assert(kMsgLevelInfoSize  == 4,   "MsgLevelInfo size mismatch");
+    static_assert(kMsgLobbyReadySize == 1,   "MsgLobbyReady size mismatch");
     static_assert(kMsgLobbyStateSeatSize == 18, "MsgLobbyState seat size mismatch");
     static_assert(kMsgLobbyStateSize == 72, "MsgLobbyState size mismatch");
     static_assert(kMsgInputSize      == 21,  "MsgInput size mismatch");
@@ -258,6 +262,7 @@ namespace bomberman::net
         Reject     = 0x03,
         LevelInfo  = 0x04,
         LobbyState = 0x05,
+        LobbyReady = 0x06,
 
         Input      = 0x10,
         Snapshot   = 0x11,
@@ -274,6 +279,7 @@ namespace bomberman::net
                raw == static_cast<uint8_t>(EMsgType::Reject)     ||
                raw == static_cast<uint8_t>(EMsgType::LevelInfo)  ||
                raw == static_cast<uint8_t>(EMsgType::LobbyState) ||
+               raw == static_cast<uint8_t>(EMsgType::LobbyReady) ||
                raw == static_cast<uint8_t>(EMsgType::Input)      ||
                raw == static_cast<uint8_t>(EMsgType::Snapshot)   ||
                raw == static_cast<uint8_t>(EMsgType::Correction) ||
@@ -292,6 +298,7 @@ namespace bomberman::net
             case EMsgType::Reject:     return "Reject";
             case EMsgType::LevelInfo:  return "LevelInfo";
             case EMsgType::LobbyState: return "LobbyState";
+            case EMsgType::LobbyReady: return "LobbyReady";
             case EMsgType::Input:      return "Input";
             case EMsgType::Snapshot:   return "Snapshot";
             case EMsgType::Correction: return "Correction";
@@ -304,7 +311,7 @@ namespace bomberman::net
     /**
      * @brief Returns the required ENet channel for a protocol message type.
      *
-     * @note `LevelInfo` and `LobbyState` are both reliable control/bootstrap
+     * @note `LevelInfo`, `LobbyState`, and `LobbyReady` all use reliable control
      * messages owned by higher-level session and match flow.
      */
     constexpr EChannel expectedChannelFor(EMsgType type)
@@ -316,6 +323,7 @@ namespace bomberman::net
             case EMsgType::Reject:
             case EMsgType::LevelInfo:
             case EMsgType::LobbyState:
+            case EMsgType::LobbyReady:
                 return EChannel::ControlReliable;
             case EMsgType::Input:
                 return EChannel::InputUnreliable;
@@ -382,6 +390,7 @@ namespace bomberman::net
             case EMsgType::Reject:     return kMsgRejectSize;
             case EMsgType::LevelInfo:  return kMsgLevelInfoSize;
             case EMsgType::LobbyState: return kMsgLobbyStateSize;
+            case EMsgType::LobbyReady: return kMsgLobbyReadySize;
             case EMsgType::Input:      return kMsgInputSize;
             case EMsgType::Snapshot:   return kMsgSnapshotSize;
             case EMsgType::Correction: return kMsgCorrectionSize;
@@ -458,6 +467,12 @@ namespace bomberman::net
     struct MsgLevelInfo
     {
         uint32_t mapSeed = 0; ///< 32-bit seed for the shared tile-map generator.
+    };
+
+    /** @brief Client-authored desired ready state for its currently accepted lobby seat. */
+    struct MsgLobbyReady
+    {
+        uint8_t ready = 0; ///< `1` marks ready, `0` clears ready.
     };
 
     /**
@@ -898,6 +913,36 @@ namespace bomberman::net
             return false;
         }
         outInfo.mapSeed = readU32LE(in);
+        return true;
+    }
+
+    /** @brief Returns true when one lobby-ready value uses a known wire encoding. */
+    constexpr bool isValidLobbyReadyValue(const uint8_t ready)
+    {
+        return ready <= 1u;
+    }
+
+    /** @brief Serializes `MsgLobbyReady` to a fixed-size wire payload. */
+    inline void serializeMsgLobbyReady(const MsgLobbyReady& ready, uint8_t* out) noexcept
+    {
+        out[0] = ready.ready != 0 ? 1u : 0u;
+    }
+
+    /** @brief Deserializes `MsgLobbyReady` from a fixed-size wire payload. */
+    [[nodiscard]]
+    inline bool deserializeMsgLobbyReady(const uint8_t* in, std::size_t inSize, MsgLobbyReady& outReady)
+    {
+        if (inSize < kMsgLobbyReadySize)
+        {
+            return false;
+        }
+
+        if (!isValidLobbyReadyValue(in[0]))
+        {
+            return false;
+        }
+
+        outReady.ready = in[0];
         return true;
     }
 
@@ -1424,6 +1469,28 @@ namespace bomberman::net
         serializeMsgLevelInfo(info, bytes.data() + kPacketHeaderSize);
 
         return bytes;
+    }
+
+    /** @brief Builds a full LobbyReady packet (header + payload). */
+    inline std::array<uint8_t, kPacketHeaderSize + kMsgLobbyReadySize> makeLobbyReadyPacket(const MsgLobbyReady& ready)
+    {
+        PacketHeader header{};
+        header.type = EMsgType::LobbyReady;
+        header.payloadSize = static_cast<uint16_t>(kMsgLobbyReadySize);
+
+        std::array<uint8_t, kPacketHeaderSize + kMsgLobbyReadySize> bytes{};
+        serializeHeader(header, bytes.data());
+        serializeMsgLobbyReady(ready, bytes.data() + kPacketHeaderSize);
+
+        return bytes;
+    }
+
+    /** @brief Convenience overload building LobbyReady directly from the desired ready state. */
+    inline std::array<uint8_t, kPacketHeaderSize + kMsgLobbyReadySize> makeLobbyReadyPacket(const bool ready)
+    {
+        MsgLobbyReady msg{};
+        msg.ready = ready ? 1u : 0u;
+        return makeLobbyReadyPacket(msg);
     }
 
     /** @brief Builds a full LobbyState packet (header + payload). */

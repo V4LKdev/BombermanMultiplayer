@@ -7,7 +7,9 @@
 #define BOMBERMAN_SCENES_LOBBYSCENE_H
 
 #include <array>
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <string_view>
 
 #include "Entities/Text.h"
@@ -55,6 +57,8 @@ namespace bomberman
         std::array<SeatRowWidgets, net::kMaxPlayers> seatRows_{};
 
         net::MsgLobbyState lastRenderedLobbyState_{};
+        std::optional<bool> pendingReadyState_{};
+        uint32_t lastReadyRequestMs_ = 0;
         bool hasRenderedLobbyState_ = false;
         bool returningToMenu_ = false;
     };

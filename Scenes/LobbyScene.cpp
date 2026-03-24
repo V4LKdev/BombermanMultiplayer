@@ -9,9 +9,12 @@
 #include <cstring>
 #include <string>
 
+#include <SDL.h>
+
 #include "Game.h"
 #include "Net/NetClient.h"
 #include "Util/Log.h"
+#include "Util/PlayerColors.h"
 
 namespace bomberman
 {
@@ -19,7 +22,7 @@ namespace bomberman
     {
         constexpr int kTitleY = 72;
         constexpr int kStatusY = 126;
-        constexpr int kHelpY = 520;
+        constexpr int kHelpY = 548;
         constexpr int kHeaderY = 182;
         constexpr int kSeatStartY = 220;
         constexpr int kSeatRowStep = 48;
@@ -29,6 +32,7 @@ namespace bomberman
         constexpr int kNameColumnOffset = 146;
         constexpr int kWinsColumnOffset = 470;
         constexpr int kStateColumnOffset = 566;
+        constexpr uint32_t kReadyToggleCooldownMs = 180;
 
         [[nodiscard]]
         bool lobbyStatesEqual(const net::MsgLobbyState& lhs, const net::MsgLobbyState& rhs)
@@ -55,10 +59,8 @@ namespace bomberman
             text->setPosition(x, y);
         }
 
-        void setSeatRowColor(const LobbyScene::SeatRowWidgets& row, const SDL_Color color)
+        void setSeatDetailColor(const LobbyScene::SeatRowWidgets& row, const SDL_Color color)
         {
-            row.seatText->setColor(color);
-            row.localTagText->setColor(color);
             row.nameText->setColor(color);
             row.winsText->setColor(color);
             row.stateText->setColor(color);
@@ -112,17 +114,18 @@ namespace bomberman
         }
 
         [[nodiscard]]
-        SDL_Color seatRowColor(const uint8_t playerId,
-                               const net::MsgLobbyState::SeatEntry& seat,
-                               const uint8_t localPlayerId)
+        SDL_Color seatDetailColor(const net::MsgLobbyState::SeatEntry& seat)
         {
             if (!net::lobbySeatIsOccupied(seat))
                 return SDL_Color{0x90, 0x90, 0x90, 0xFF};
 
-            if (playerId == localPlayerId)
-                return SDL_Color{0x66, 0xD6, 0xFF, 0xFF};
-
             return SDL_Color{0xF0, 0xF0, 0xF0, 0xFF};
+        }
+
+        SDL_Color seatSlotColor(const uint8_t playerId)
+        {
+            const util::PlayerColor color = util::colorForPlayerId(playerId);
+            return SDL_Color{color.r, color.g, color.b, 0xFF};
         }
 
         void populateSeatRow(const LobbyScene::SeatRowWidgets& row,
@@ -137,7 +140,9 @@ namespace bomberman
             setTextContent(row.nameText, seatDisplayName(seat), leftX + kNameColumnOffset, y);
             setTextContent(row.winsText, seatWinsText(seat), leftX + kWinsColumnOffset, y);
             setTextContent(row.stateText, seatStateText(seat), leftX + kStateColumnOffset, y);
-            setSeatRowColor(row, seatRowColor(playerId, seat, localPlayerId));
+            row.seatText->setColor(seatSlotColor(playerId));
+            row.localTagText->setColor(seatDetailColor(seat));
+            setSeatDetailColor(row, seatDetailColor(seat));
         }
     } // namespace
 
@@ -159,7 +164,7 @@ namespace bomberman
         statusText_->setColor(SDL_Color{0xFF, 0xD1, 0x66, 0xFF});
         addObject(statusText_);
 
-        helpText_ = std::make_shared<Text>(bodyFont, game->getRenderer(), "ESC TO LEAVE");
+        helpText_ = std::make_shared<Text>(bodyFont, game->getRenderer(), "SPACE READY  ESC TO LEAVE");
         helpText_->fitToContent();
         helpText_->setColor(SDL_Color{0xB0, 0xB0, 0xB0, 0xFF});
         helpText_->setPosition(game->getWindowWidth() / 2 - helpText_->getWidth() / 2, kHelpY);
@@ -223,6 +228,57 @@ namespace bomberman
         if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE)
         {
             returnToMenu(true, "LocalLeaveLobby");
+            return;
+        }
+
+        if (event.key.keysym.scancode == SDL_SCANCODE_SPACE)
+        {
+            auto* netClient = game->getNetClient();
+            if (netClient == nullptr || netClient->connectState() != net::EConnectState::Connected)
+                return;
+
+            if (pendingReadyState_.has_value())
+            {
+                LOG_NET_CONN_DEBUG("Ignoring LobbyReady toggle while the previous request is still pending");
+                return;
+            }
+
+            const uint32_t nowMs = SDL_GetTicks();
+            if (lastReadyRequestMs_ != 0 && (nowMs - lastReadyRequestMs_) < kReadyToggleCooldownMs)
+            {
+                LOG_NET_CONN_DEBUG("Ignoring LobbyReady toggle within {} ms cooldown", kReadyToggleCooldownMs);
+                return;
+            }
+
+            net::MsgLobbyState lobbyState{};
+            if (!netClient->tryGetLatestLobbyState(lobbyState))
+            {
+                setStatus("Waiting for lobby...", SDL_Color{0xFF, 0xD1, 0x66, 0xFF});
+                return;
+            }
+
+            const uint8_t localPlayerId = netClient->playerId();
+            if (localPlayerId >= net::kMaxPlayers)
+                return;
+
+            const auto& localSeat = lobbyState.seats[localPlayerId];
+            if (!net::lobbySeatIsOccupied(localSeat))
+            {
+                LOG_NET_CONN_WARN("Ignoring LobbyReady toggle because local seat {} is not occupied", localPlayerId);
+                return;
+            }
+
+            const bool desiredReady = !net::lobbySeatIsReady(localSeat);
+            if (!netClient->sendLobbyReady(desiredReady))
+            {
+                setStatus("Failed to send ready update", SDL_Color{0xE0, 0x6A, 0x6A, 0xFF});
+                return;
+            }
+
+            pendingReadyState_ = desiredReady;
+            lastReadyRequestMs_ = nowMs;
+            setStatus(desiredReady ? "Marking ready..." : "Clearing ready...",
+                      SDL_Color{0xFF, 0xD1, 0x66, 0xFF});
         }
     }
 
@@ -249,9 +305,18 @@ namespace bomberman
             return;
         }
 
+        const uint8_t localPlayerId = netClient->playerId();
+        if (pendingReadyState_.has_value() &&
+            localPlayerId < net::kMaxPlayers &&
+            net::lobbySeatIsOccupied(lobbyState.seats[localPlayerId]) &&
+            net::lobbySeatIsReady(lobbyState.seats[localPlayerId]) == pendingReadyState_.value())
+        {
+            pendingReadyState_.reset();
+        }
+
         if (!hasRenderedLobbyState_ || !lobbyStatesEqual(lastRenderedLobbyState_, lobbyState))
         {
-            rebuildLobbyPresentation(lobbyState, netClient->playerId());
+            rebuildLobbyPresentation(lobbyState, localPlayerId);
             lastRenderedLobbyState_ = lobbyState;
             hasRenderedLobbyState_ = true;
         }
@@ -281,7 +346,15 @@ namespace bomberman
             populateSeatRow(seatRows_[playerId], leftX, playerId, lobbyState.seats[playerId], localPlayerId);
         }
 
-        setStatus("", SDL_Color{0x80, 0xDC, 0x80, 0xFF});
+        if (pendingReadyState_.has_value())
+        {
+            setStatus(pendingReadyState_.value() ? "Marking ready..." : "Clearing ready...",
+                      SDL_Color{0xFF, 0xD1, 0x66, 0xFF});
+        }
+        else
+        {
+            setStatus("", SDL_Color{0x80, 0xDC, 0x80, 0xFF});
+        }
     }
 
     void LobbyScene::returnToMenu(const bool disconnectClient, const std::string_view reason)

@@ -284,6 +284,38 @@ namespace bomberman::server
             ctx.receiveResult = NetPacketResult::Ok;
         }
 
+        /** @brief Returns the accepted durable lobby seat for a control packet or classifies the packet as rejected. */
+        [[nodiscard]]
+        PlayerSlot* requireAcceptedLobbySlot(PacketDispatchContext& ctx)
+        {
+            auto* session = getPeerSession(ctx.peer);
+            if (session == nullptr)
+            {
+                LOG_NET_CONN_ERROR("Lobby control peer {} has no live peer session - ignoring", ctx.peer->incomingPeerID);
+                ctx.receiveResult = NetPacketResult::Rejected;
+                return nullptr;
+            }
+
+            if (!session->playerId.has_value())
+            {
+                LOG_NET_CONN_WARN("Lobby control from non-handshaked peer {} - ignoring", ctx.peer->incomingPeerID);
+                ctx.receiveResult = NetPacketResult::Rejected;
+                return nullptr;
+            }
+
+            const uint8_t playerId = session->playerId.value();
+            auto& slotEntry = ctx.state.playerSlots[playerId];
+            if (!slotEntry.has_value())
+            {
+                LOG_NET_CONN_ERROR("Lobby control playerId={} has no durable lobby seat - ignoring", playerId);
+                ctx.receiveResult = NetPacketResult::Rejected;
+                return nullptr;
+            }
+
+            ctx.recordedPlayerId = playerId;
+            return &slotEntry.value();
+        }
+
         // ----- Input receive helpers -----
 
         /** @brief Returns the accepted in-match player state for an Input packet or classifies the packet as rejected. */
@@ -568,6 +600,43 @@ namespace bomberman::server
         ctx.receiveResult = NetPacketResult::Ok;
     }
 
+    void onLobbyReady(PacketDispatchContext& ctx, const PacketHeader& /*header*/, const uint8_t* payload, std::size_t payloadSize)
+    {
+        if (ctx.state.phase != ServerPhase::Lobby)
+        {
+            LOG_NET_CONN_WARN("LobbyReady received outside lobby phase from peer {} - ignoring", ctx.peer->incomingPeerID);
+            ctx.receiveResult = NetPacketResult::Rejected;
+            return;
+        }
+
+        auto* slot = requireAcceptedLobbySlot(ctx);
+        if (slot == nullptr)
+            return;
+
+        MsgLobbyReady msgReady{};
+        if (!deserializeMsgLobbyReady(payload, payloadSize, msgReady))
+        {
+            LOG_NET_PROTO_WARN("Failed to parse LobbyReady payload from peer {}", ctx.peer->incomingPeerID);
+            ctx.receiveResult = NetPacketResult::Malformed;
+            return;
+        }
+
+        const bool desiredReady = msgReady.ready != 0;
+        if (slot->ready == desiredReady)
+        {
+            ctx.receiveResult = NetPacketResult::Ok;
+            return;
+        }
+
+        slot->ready = desiredReady;
+        LOG_NET_CONN_DEBUG("Lobby ready updated playerId={} name=\"{}\" ready={}",
+                           slot->playerId,
+                           slot->playerName,
+                           desiredReady);
+        broadcastLobbyState(ctx.state);
+        ctx.receiveResult = NetPacketResult::Ok;
+    }
+
     // =================================================================================================================
     // ===== Packet Dispatcher =========================================================================================
     // =================================================================================================================
@@ -578,6 +647,7 @@ namespace bomberman::server
         {
             PacketDispatcher<PacketDispatchContext> d{};
             d.bind(EMsgType::Hello, &onHello);
+            d.bind(EMsgType::LobbyReady, &onLobbyReady);
             d.bind(EMsgType::Input, &onInput);
             return d;
         }
