@@ -7,6 +7,8 @@
 #include <cstring>
 #include <string_view>
 
+#include "Const.h"
+
 /**
  * @file NetCommon.h
  * @brief Shared protocol constants, message types, and wire helpers.
@@ -28,7 +30,7 @@ namespace bomberman::net
 
     // ----- Protocol Constants -----
 
-    constexpr uint16_t      kProtocolVersion = 2;
+    constexpr uint16_t      kProtocolVersion = 3;
 
     constexpr uint16_t      kDefaultServerPort = 12345;  ///< Default server port used by both client and server.
     constexpr std::size_t   kMaxPacketSize = 1400;       ///< Upper packet size bound (below typical 1500-byte MTU).
@@ -42,6 +44,7 @@ namespace bomberman::net
     /** @note Changing these values will affect wire layout and require protocol version bump. */
     constexpr std::size_t   kPlayerNameMax = 16;
     constexpr uint8_t       kMaxPlayers = 4;             ///< Maximum supported player count in a game instance.
+    constexpr uint8_t       kMaxSnapshotBombs = kMaxPlayers * 4; ///< Maximum bombs carried by one snapshot payload.
 
     /** @brief First valid input sequence number. Seq 0 means "no input received yet". */
     constexpr uint32_t      kFirstInputSeq = 1;
@@ -141,11 +144,17 @@ namespace bomberman::net
     constexpr std::size_t kMsgSnapshotSize =
         sizeof(uint32_t) + // serverTick
         sizeof(uint8_t) +  // playerCount
+        sizeof(uint8_t) +  // bombCount
         kMaxPlayers *
             (sizeof(uint8_t) +   // playerId
              sizeof(int16_t) +   // xQ
              sizeof(int16_t) +   // yQ
-             sizeof(uint8_t));   // flags
+             sizeof(uint8_t)) +  // flags
+        kMaxSnapshotBombs *
+            (sizeof(uint8_t) +   // ownerId
+             sizeof(uint8_t) +   // col
+             sizeof(uint8_t) +   // row
+             sizeof(uint8_t));   // radius
 
     constexpr std::size_t kMsgCorrectionSize =
         sizeof(uint32_t) + // serverTick
@@ -162,15 +171,25 @@ namespace bomberman::net
     static_assert(kMsgRejectSize     == 3,   "MsgReject size mismatch");
     static_assert(kMsgLevelInfoSize  == 4,   "MsgLevelInfo size mismatch");
     static_assert(kMsgInputSize      == 21,  "MsgInput size mismatch");
-    static_assert(kMsgSnapshotSize   == 29,  "MsgSnapshot size mismatch");
+    static_assert(kMsgSnapshotSize   == 94,  "MsgSnapshot size mismatch");
     static_assert(kMsgCorrectionSize == 12,  "MsgCorrection size mismatch");
 
-    constexpr std::size_t kSnapshotPlayersOffset = sizeof(uint32_t) + sizeof(uint8_t);
+    constexpr std::size_t kSnapshotPlayersOffset =
+        sizeof(uint32_t) + // serverTick
+        sizeof(uint8_t) +  // playerCount
+        sizeof(uint8_t);   // bombCount
     constexpr std::size_t kSnapshotPlayerEntrySize =
         sizeof(uint8_t) +  // playerId
         sizeof(int16_t) +  // xQ
         sizeof(int16_t) +  // yQ
         sizeof(uint8_t);   // flags
+    constexpr std::size_t kSnapshotBombsOffset =
+        kSnapshotPlayersOffset + kMaxPlayers * kSnapshotPlayerEntrySize;
+    constexpr std::size_t kSnapshotBombEntrySize =
+        sizeof(uint8_t) +  // ownerId
+        sizeof(uint8_t) +  // col
+        sizeof(uint8_t) +  // row
+        sizeof(uint8_t);   // radius
 
     // ----- Message Types -----
 
@@ -356,8 +375,8 @@ namespace bomberman::net
     /**
      * @brief Snapshot payload broadcast by the server to all clients.
      *
-     * Contains only active authoritative in-match player state.
-     * The first `playerCount` entries are packed in ascending player-id slot order.
+     * Contains active authoritative in-match player state plus active bombs.
+     * Players are packed in ascending player-id slot order. Bombs are packed in ascending cell order.
      *
      * @todo Add Tile data, bombs, lobby state, death/respawn, and more diagnostics.
      *
@@ -368,6 +387,7 @@ namespace bomberman::net
     {
         uint32_t serverTick = 0;        ///< Authoritative server tick at which this snapshot was produced.
         uint8_t playerCount = 0;        ///< Number of active entries stored in `players`.
+        uint8_t bombCount = 0;          ///< Number of active entries stored in `bombs`.
 
         struct PlayerEntry
         {
@@ -390,6 +410,16 @@ namespace bomberman::net
         };
 
         PlayerEntry players[kMaxPlayers]; ///< Packed active-player entries; slots beyond `playerCount` are ignored.
+
+        struct BombEntry
+        {
+            uint8_t ownerId = 0;        ///< Player identifier [0, kMaxPlayers) that owns this bomb.
+            uint8_t col = 0;            ///< Tile-map column occupied by the bomb.
+            uint8_t row = 0;            ///< Tile-map row occupied by the bomb.
+            uint8_t radius = 0;         ///< Explosion radius snapped at placement time.
+        };
+
+        BombEntry bombs[kMaxSnapshotBombs]; ///< Packed active bombs; slots beyond `bombCount` are ignored.
     };
 
     /**
@@ -464,6 +494,12 @@ namespace bomberman::net
     constexpr std::size_t snapshotPlayerOffset(std::size_t index)
     {
         return kSnapshotPlayersOffset + index * kSnapshotPlayerEntrySize;
+    }
+
+    /** @brief Returns the payload offset of the snapshot bomb entry at `index`. */
+    constexpr std::size_t snapshotBombOffset(std::size_t index)
+    {
+        return kSnapshotBombsOffset + index * kSnapshotBombEntrySize;
     }
 
     /** @brief Sets `MsgHello::name` from `string_view` with truncation and zero padding. */
@@ -709,7 +745,9 @@ namespace bomberman::net
     {
         writeU32LE(out, snap.serverTick);
         const uint8_t playerCount = (snap.playerCount <= kMaxPlayers) ? snap.playerCount : kMaxPlayers;
+        const uint8_t bombCount = (snap.bombCount <= kMaxSnapshotBombs) ? snap.bombCount : kMaxSnapshotBombs;
         out[4] = playerCount;
+        out[5] = bombCount;
 
         for (std::size_t i = 0; i < kMaxPlayers; ++i)
         {
@@ -719,6 +757,16 @@ namespace bomberman::net
             writeU16LE(out + offset + 1, static_cast<uint16_t>(player.xQ));
             writeU16LE(out + offset + 3, static_cast<uint16_t>(player.yQ));
             out[offset + 5] = static_cast<uint8_t>(player.flags);
+        }
+
+        for (std::size_t i = 0; i < kMaxSnapshotBombs; ++i)
+        {
+            const auto& bomb = snap.bombs[i];
+            const std::size_t offset = snapshotBombOffset(i);
+            out[offset] = bomb.ownerId;
+            out[offset + 1] = bomb.col;
+            out[offset + 2] = bomb.row;
+            out[offset + 3] = bomb.radius;
         }
     }
 
@@ -733,7 +781,12 @@ namespace bomberman::net
 
         outSnap.serverTick = readU32LE(in);
         outSnap.playerCount = in[4];
+        outSnap.bombCount = in[5];
         if (outSnap.playerCount > kMaxPlayers)
+        {
+            return false;
+        }
+        if (outSnap.bombCount > kMaxSnapshotBombs)
         {
             return false;
         }
@@ -779,6 +832,45 @@ namespace bomberman::net
             }
 
             player.flags = static_cast<MsgSnapshot::PlayerEntry::EPlayerFlags>(rawFlags);
+        }
+
+        uint16_t previousBombCellKey = 0;
+        bool hasPreviousBomb = false;
+        for (std::size_t i = 0; i < kMaxSnapshotBombs; ++i)
+        {
+            const std::size_t offset = snapshotBombOffset(i);
+            auto& bomb = outSnap.bombs[i];
+            bomb.ownerId = in[offset];
+            bomb.col = in[offset + 1];
+            bomb.row = in[offset + 2];
+            bomb.radius = in[offset + 3];
+
+            if (i < outSnap.bombCount)
+            {
+                if (bomb.ownerId >= kMaxPlayers)
+                {
+                    return false;
+                }
+                if (bomb.col >= ::bomberman::tileArrayWidth || bomb.row >= ::bomberman::tileArrayHeight)
+                {
+                    return false;
+                }
+                if (bomb.radius == 0)
+                {
+                    return false;
+                }
+
+                const uint16_t bombCellKey =
+                    static_cast<uint16_t>(bomb.row) * static_cast<uint16_t>(::bomberman::tileArrayWidth) +
+                    static_cast<uint16_t>(bomb.col);
+                if (hasPreviousBomb && bombCellKey <= previousBombCellKey)
+                {
+                    return false;
+                }
+
+                previousBombCellKey = bombCellKey;
+                hasPreviousBomb = true;
+            }
         }
 
         return true;

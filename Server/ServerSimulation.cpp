@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <climits>
+#include <optional>
 
 #include "Net/NetSend.h"
 #include "ServerSnapshot.h"
@@ -22,6 +23,157 @@ namespace bomberman::server
 
     namespace
     {
+        /** @brief Returns true when the current authoritative buttons contain a new bomb-press edge. */
+        [[nodiscard]]
+        bool hasBombPlacementEdge(const MatchPlayerState& matchPlayer)
+        {
+            const bool bombHeldNow = (matchPlayer.appliedButtons & kInputBomb) != 0;
+            const bool bombHeldLastTick = (matchPlayer.previousTickButtons & kInputBomb) != 0;
+            return bombHeldNow && !bombHeldLastTick;
+        }
+
+        /** @brief Converts an authoritative player center position into the occupied tile cell. */
+        [[nodiscard]]
+        std::optional<BombCell> bombCellFromPlayerPosition(const sim::TilePos& pos)
+        {
+            const int32_t col = pos.xQ / 256;
+            const int32_t row = pos.yQ / 256;
+            if (col < 0 || row < 0 ||
+                col >= static_cast<int32_t>(tileArrayWidth) ||
+                row >= static_cast<int32_t>(tileArrayHeight))
+            {
+                return std::nullopt;
+            }
+
+            return BombCell{
+                static_cast<uint8_t>(col),
+                static_cast<uint8_t>(row)
+            };
+        }
+
+        /** @brief Returns true when no active bomb currently occupies the given tile cell. */
+        [[nodiscard]]
+        bool isBombCellUnoccupied(const ServerState& state, const BombCell& cell)
+        {
+            for (const auto& bombEntry : state.bombs)
+            {
+                if (!bombEntry.has_value())
+                    continue;
+
+                if (bombEntry->cell.col == cell.col && bombEntry->cell.row == cell.row)
+                    return false;
+            }
+
+            return true;
+        }
+
+        /** @brief Returns a free authoritative bomb slot, or `std::nullopt` when capacity is exhausted. */
+        [[nodiscard]]
+        std::optional<std::size_t> findFreeBombSlot(const ServerState& state)
+        {
+            for (std::size_t i = 0; i < state.bombs.size(); ++i)
+            {
+                if (!state.bombs[i].has_value())
+                    return i;
+            }
+
+            return std::nullopt;
+        }
+
+        /** @brief Attempts to place one authoritative bomb for this player on the current server tick. */
+        void tryPlaceBomb(ServerState& state, MatchPlayerState& matchPlayer)
+        {
+            if (!hasBombPlacementEdge(matchPlayer))
+                return;
+
+            if (!matchPlayer.alive)
+            {
+                LOG_NET_INPUT_DEBUG("Rejected bomb placement playerId={} tick={} because the player is dead",
+                                    matchPlayer.playerId,
+                                    state.serverTick);
+                return;
+            }
+
+            if (matchPlayer.activeBombCount >= matchPlayer.maxBombs)
+            {
+                LOG_NET_INPUT_DEBUG("Rejected bomb placement playerId={} tick={} because activeBombCount={} maxBombs={}",
+                                    matchPlayer.playerId,
+                                    state.serverTick,
+                                    matchPlayer.activeBombCount,
+                                    matchPlayer.maxBombs);
+                return;
+            }
+
+            const auto cell = bombCellFromPlayerPosition(matchPlayer.pos);
+            if (!cell.has_value())
+            {
+                LOG_NET_INPUT_WARN("Rejected bomb placement playerId={} tick={} because the authoritative position is out of bounds pos=({}, {})",
+                                   matchPlayer.playerId,
+                                   state.serverTick,
+                                   matchPlayer.pos.xQ,
+                                   matchPlayer.pos.yQ);
+                return;
+            }
+
+            const Tile tile = state.tiles[cell->row][cell->col];
+            if (tile == Tile::Stone || tile == Tile::Brick)
+            {
+                LOG_NET_INPUT_DEBUG("Rejected bomb placement playerId={} tick={} because cell=({}, {}) is solid tile={}",
+                                    matchPlayer.playerId,
+                                    state.serverTick,
+                                    static_cast<int>(cell->col),
+                                    static_cast<int>(cell->row),
+                                    static_cast<int>(tile));
+                return;
+            }
+
+            if (!isBombCellUnoccupied(state, *cell))
+            {
+                LOG_NET_INPUT_DEBUG("Rejected bomb placement playerId={} tick={} because cell=({}, {}) is already occupied",
+                                    matchPlayer.playerId,
+                                    state.serverTick,
+                                    static_cast<int>(cell->col),
+                                    static_cast<int>(cell->row));
+                return;
+            }
+
+            const auto freeSlot = findFreeBombSlot(state);
+            if (!freeSlot.has_value())
+            {
+                LOG_NET_INPUT_WARN("Rejected bomb placement playerId={} tick={} because authoritative bomb capacity {} is exhausted",
+                                   matchPlayer.playerId,
+                                   state.serverTick,
+                                   state.bombs.size());
+                return;
+            }
+
+            auto& bombEntry = state.bombs[freeSlot.value()];
+            bombEntry.emplace();
+            auto& bomb = bombEntry.value();
+            bomb.ownerId = matchPlayer.playerId;
+            bomb.cell = *cell;
+            bomb.placedTick = state.serverTick;
+            bomb.explodeTick = state.serverTick + sim::kDefaultBombFuseTicks;
+            bomb.radius = matchPlayer.bombRange;
+
+            ++matchPlayer.activeBombCount;
+            state.diag.recordBombPlaced(matchPlayer.playerId,
+                                        bomb.cell.col,
+                                        bomb.cell.row,
+                                        bomb.radius,
+                                        state.serverTick);
+
+            LOG_NET_INPUT_INFO("Bomb placed playerId={} tick={} cell=({}, {}) radius={} activeBombs={}/{} explodeTick={}",
+                               matchPlayer.playerId,
+                               state.serverTick,
+                               static_cast<int>(bomb.cell.col),
+                               static_cast<int>(bomb.cell.row),
+                               static_cast<int>(bomb.radius),
+                               static_cast<int>(matchPlayer.activeBombCount),
+                               static_cast<int>(matchPlayer.maxBombs),
+                               bomb.explodeTick);
+        }
+
         /** @brief Builds the owner correction that corresponds to the current authoritative tick. */
         [[nodiscard]]
         MsgCorrection buildCorrection(const ServerState& state, const MatchPlayerState& matchPlayer)
@@ -161,9 +313,12 @@ namespace bomberman::server
                                                  matchPlayer.lastReceivedInputSeq,
                                                  matchPlayer.lastProcessedInputSeq);
 
+            tryPlaceBomb(state, matchPlayer);
+
             const int8_t moveX = buttonsToMoveX(matchPlayer.appliedButtons);
             const int8_t moveY = buttonsToMoveY(matchPlayer.appliedButtons);
             matchPlayer.pos = sim::stepMovementWithCollision(matchPlayer.pos, moveX, moveY, state.tiles);
+            matchPlayer.previousTickButtons = matchPlayer.appliedButtons;
 
             queueMatchPlayerCorrection(state, matchPlayer);
             samplePeerTransport(state, matchPlayer);

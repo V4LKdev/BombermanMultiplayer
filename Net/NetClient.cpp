@@ -898,9 +898,10 @@ namespace bomberman::net
 
         if (snapshot.serverTick % kSnapshotLogEveryN == 0)
         {
-            LOG_NET_SNAPSHOT_DEBUG("Received Snapshot tick={} playerCount={}",
+            LOG_NET_SNAPSHOT_DEBUG("Received Snapshot tick={} playerCount={} bombCount={}",
                                    snapshot.serverTick,
-                                   snapshot.playerCount);
+                                   snapshot.playerCount,
+                                   snapshot.bombCount);
         }
     }
 

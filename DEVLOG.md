@@ -1275,3 +1275,48 @@ Tighten a few correctness details around the new multiplayer prediction path bef
 - Local prediction now starts from real authority instead of inferred local scene state.
 - Short unreliable silence no longer kicks the player out of multiplayer prematurely.
 - Remote smoothing remains intentionally simple, but behaves more like actual interpolation and less like repeated snaps to the newest sample.
+
+## 2026-03-24 – Add Authoritative Bomb State, Placement, And Snapshot Replication
+
+### Goal
+Start the first real multiplayer gameplay-object slice beyond movement by making bombs authoritative on the server, visible in diagnostics, and replicated to clients as snapshot-owned world state.
+
+### Changes
+- Added authoritative bomb-related server state:
+  - player `alive`
+  - `activeBombCount`
+  - `maxBombs`
+  - `bombRange`
+  - server-owned active bomb storage
+- Added server-side bomb placement from existing input using authoritative rising-edge detection on the bomb button.
+- Validated placement against:
+  - alive state
+  - per-player bomb quota
+  - in-bounds walkable tile cell
+  - occupied bomb cell rejection
+- Logged successful authoritative bomb placements on the server.
+- Extended diagnostics to record authoritative bomb placements as simulation events and to report `bombs_placed`.
+- Refined input diagnostics by splitting `input_entries_too_late` into:
+  - direct/newest late entries
+  - buffered-history late entries
+- Bumped the multiplayer wire protocol to `v3`.
+- Extended `MsgSnapshot` to include active bombs with fixed snapshot capacity.
+- Kept snapshot bomb packing deterministic by sorting bombs in cell order before serialization.
+- Added multiplayer client-side bomb rendering from snapshots, including owner-color tinting and snapshot-authoritative creation/pruning.
+- Added an explicit snapshot overflow warning if active bombs ever exceed the current snapshot bomb capacity.
+
+### Validation
+- Rebuilt both targets after the protocol and scene changes:
+  - `Bomberman`
+  - `Bomberman_Server`
+- Manually tested:
+  - single-client bomb placement
+  - multi-client bomb visibility
+  - reconnect visibility of already active bombs
+  - owner cleanup removing that player’s bomb on disconnect
+  - delayed appearance under high latency, confirming snapshot-owned replication behavior
+
+### Result
+- Bombs now exist as real authoritative server-side gameplay objects instead of only planned state.
+- Clients can see persistent active bombs across joins and reconnects because snapshots now carry the current bomb state.
+- Diagnostics are more interpretable under impairment because late direct input and late redundant history are no longer merged into one opaque counter.

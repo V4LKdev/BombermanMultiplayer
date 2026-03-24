@@ -13,6 +13,7 @@
 #include <SDL.h>
 
 #include "Entities/Player.h"
+#include "Entities/Sprite.h"
 #include "Entities/Text.h"
 #include "Game.h"
 #include "Net/NetClient.h"
@@ -50,6 +51,28 @@ namespace bomberman
         constexpr int kGameplayStatusOffsetY = 12;
         constexpr uint32_t kLivePredictionLogIntervalMs = 1000;
         constexpr uint32_t kSimulationTickMs = 1000u / static_cast<uint32_t>(sim::kTickRate);
+        constexpr int kBombAnimationFrameCount = 4;
+
+        uint16_t packBombCellKey(const uint8_t col, const uint8_t row)
+        {
+            return static_cast<uint16_t>((static_cast<uint16_t>(row) << 8u) | static_cast<uint16_t>(col));
+        }
+
+        void attachBombAnimation(const std::shared_ptr<Sprite>& bombSprite)
+        {
+            if(!bombSprite)
+                return;
+
+            auto animation = std::make_shared<Animation>();
+            for(int frame = 0; frame < kBombAnimationFrameCount; ++frame)
+            {
+                animation->addAnimationEntity(AnimationEntity(tileSize * frame, 0, tileSize, tileSize));
+            }
+
+            animation->setSprite(bombSprite.get());
+            bombSprite->addAnimation(animation);
+            animation->play();
+        }
 
         bool snapshotEntryIsAlive(const net::MsgSnapshot::PlayerEntry& entry)
         {
@@ -178,6 +201,7 @@ namespace bomberman
     {
         logPredictionSummary();
         removeAllRemotePlayers();
+        removeAllSnapshotBombs();
         localPrediction_.reset();
         lastAppliedSnapshotTick_ = 0;
         lastAppliedCorrectionTick_ = 0;
@@ -261,6 +285,7 @@ namespace bomberman
          * Local position only comes from snapshots while prediction is disabled or unarmed.
          */
         applySnapshotToRemotePlayers(snapshot, localId);
+        applySnapshotBombs(snapshot);
         lastAppliedSnapshotTick_ = snapshot.serverTick;
     }
 
@@ -640,6 +665,22 @@ namespace bomberman
         pruneMissingRemotePlayers(seenRemoteIds);
     }
 
+    void MultiplayerLevelScene::applySnapshotBombs(const net::MsgSnapshot& snapshot)
+    {
+        std::unordered_set<uint16_t> seenBombCells;
+        seenBombCells.reserve(snapshot.bombCount);
+
+        for(uint8_t i = 0; i < snapshot.bombCount; ++i)
+        {
+            const auto& entry = snapshot.bombs[i];
+            const uint16_t bombCellKey = packBombCellKey(entry.col, entry.row);
+            seenBombCells.insert(bombCellKey);
+            updateOrCreateBombPresentation(entry);
+        }
+
+        pruneMissingBombPresentations(seenBombCells);
+    }
+
     void MultiplayerLevelScene::updateOrCreateRemotePlayer(const uint8_t playerId,
                                                            const int16_t xQ,
                                                            const int16_t yQ,
@@ -682,6 +723,32 @@ namespace bomberman
         updateRemotePlayerTagPosition(presentation);
     }
 
+    void MultiplayerLevelScene::updateOrCreateBombPresentation(const net::MsgSnapshot::BombEntry& entry)
+    {
+        const uint16_t bombCellKey = packBombCellKey(entry.col, entry.row);
+        auto [it, inserted] = bombPresentations_.try_emplace(bombCellKey);
+        BombPresentation& presentation = it->second;
+
+        if(inserted)
+        {
+            presentation.bombSprite =
+                std::make_shared<Sprite>(game->getAssetManager()->getTexture(Texture::Bomb), game->getRenderer());
+            presentation.bombSprite->setSize(scaledTileSize, scaledTileSize);
+            attachBombAnimation(presentation.bombSprite);
+            insertObject(presentation.bombSprite, backgroundObjectLastNumber);
+        }
+
+        presentation.ownerId = entry.ownerId;
+        presentation.radius = entry.radius;
+
+        const PlayerColor color = colorForPlayerId(entry.ownerId);
+        presentation.bombSprite->setColorMod(color.r, color.g, color.b);
+
+        const int screenX = fieldPositionX + static_cast<int>(entry.col) * scaledTileSize;
+        const int screenY = fieldPositionY + static_cast<int>(entry.row) * scaledTileSize;
+        presentation.bombSprite->setPosition(screenX, screenY);
+    }
+
     void MultiplayerLevelScene::pruneMissingRemotePlayers(const std::unordered_set<uint8_t>& seenRemoteIds)
     {
         for(auto it = remotePlayerPresentations_.begin(); it != remotePlayerPresentations_.end();)
@@ -701,6 +768,23 @@ namespace bomberman
         }
     }
 
+    void MultiplayerLevelScene::pruneMissingBombPresentations(const std::unordered_set<uint16_t>& seenBombCells)
+    {
+        for(auto it = bombPresentations_.begin(); it != bombPresentations_.end();)
+        {
+            if(seenBombCells.contains(it->first))
+            {
+                ++it;
+                continue;
+            }
+
+            if(it->second.bombSprite)
+                removeObject(it->second.bombSprite);
+
+            it = bombPresentations_.erase(it);
+        }
+    }
+
     void MultiplayerLevelScene::removeAllRemotePlayers()
     {
         for(auto& entry : remotePlayerPresentations_)
@@ -712,6 +796,18 @@ namespace bomberman
                 removeObject(presentation.playerTag);
         }
         remotePlayerPresentations_.clear();
+    }
+
+    void MultiplayerLevelScene::removeAllSnapshotBombs()
+    {
+        for(auto& entry : bombPresentations_)
+        {
+            auto& presentation = entry.second;
+            if(presentation.bombSprite)
+                removeObject(presentation.bombSprite);
+        }
+
+        bombPresentations_.clear();
     }
 
     void MultiplayerLevelScene::recordSnapshotSample(RemotePlayerPresentation& presentation,

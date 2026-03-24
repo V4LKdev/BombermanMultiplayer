@@ -172,6 +172,8 @@ namespace bomberman::server
         struct BufferedInputStats
         {
             uint8_t tooLateCount = 0;
+            uint8_t tooLateDirectCount = 0;
+            uint8_t tooLateBufferedCount = 0;
             uint8_t tooFarAheadCount = 0;
             uint32_t firstTooFarAheadSeq = 0;
             uint32_t lastTooFarAheadSeq = 0;
@@ -351,6 +353,8 @@ namespace bomberman::server
             {
                 ctx.diag->recordInputPacketFullyStale();
                 ctx.diag->recordInputEntriesTooLate(msgInput.count);
+                ctx.diag->recordInputEntriesTooLateDirect(1);
+                ctx.diag->recordInputEntriesTooLateBuffered(msgInput.count - 1u);
             }
 
             ctx.receiveResult = NetPacketResult::Ok;
@@ -375,6 +379,10 @@ namespace bomberman::server
                 if (seq <= matchPlayer.lastProcessedInputSeq)
                 {
                     ++stats.tooLateCount;
+                    if (isDirectEntry)
+                        ++stats.tooLateDirectCount;
+                    else
+                        ++stats.tooLateBufferedCount;
                     continue;
                 }
 
@@ -412,6 +420,8 @@ namespace bomberman::server
                 return;
 
             ctx.diag->recordInputEntriesTooLate(stats.tooLateCount);
+            ctx.diag->recordInputEntriesTooLateDirect(stats.tooLateDirectCount);
+            ctx.diag->recordInputEntriesTooLateBuffered(stats.tooLateBufferedCount);
             ctx.diag->recordInputEntriesTooFarAhead(stats.tooFarAheadCount);
         }
 

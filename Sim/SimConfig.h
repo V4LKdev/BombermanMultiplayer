@@ -1,10 +1,21 @@
 #ifndef BOMBERMAN_SIM_SIMCONFIG_H
 #define BOMBERMAN_SIM_SIMCONFIG_H
 
+#include <cstdint>
+
 namespace bomberman::sim
 {
     /// Simulation tick rate in Hz.
     constexpr int16_t kTickRate = 60;
+
+    /// Default number of simultaneously active bombs a player may own.
+    constexpr uint8_t kDefaultPlayerMaxBombs = 1;
+
+    /// Default explosion radius in tiles for newly placed bombs.
+    constexpr uint8_t kDefaultPlayerBombRange = 1;
+
+    /// Default authoritative bomb fuse in simulation ticks.
+    constexpr uint32_t kDefaultBombFuseTicks = static_cast<uint32_t>(kTickRate) * 3u / 2u;
 
     /// Player movement speed in tiles per second.
     constexpr double kPlayerSpeedTilesPerSecond = 4.0;

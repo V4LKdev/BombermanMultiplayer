@@ -73,8 +73,35 @@ namespace bomberman::net
             {
                 case NetSimulationEventType::Gap:              return "Gap";
                 case NetSimulationEventType::BufferedRecovery: return "BufferedRecovery";
+                case NetSimulationEventType::BombPlaced:       return "BombPlaced";
                 default:                                       return "Unknown";
             }
+        }
+
+        /** @brief Packs one bomb-placement cell/radius triple into a recent-event detail field. */
+        constexpr uint32_t packBombPlacementDetail(const uint8_t col, const uint8_t row, const uint8_t radius)
+        {
+            return static_cast<uint32_t>(col) |
+                   (static_cast<uint32_t>(row) << 8u) |
+                   (static_cast<uint32_t>(radius) << 16u);
+        }
+
+        /** @brief Unpacks the bomb-placement cell column from a packed detail field. */
+        constexpr uint8_t unpackBombPlacementCol(const uint32_t detail)
+        {
+            return static_cast<uint8_t>(detail & 0xFFu);
+        }
+
+        /** @brief Unpacks the bomb-placement cell row from a packed detail field. */
+        constexpr uint8_t unpackBombPlacementRow(const uint32_t detail)
+        {
+            return static_cast<uint8_t>((detail >> 8u) & 0xFFu);
+        }
+
+        /** @brief Unpacks the bomb-placement radius from a packed detail field. */
+        constexpr uint8_t unpackBombPlacementRadius(const uint32_t detail)
+        {
+            return static_cast<uint8_t>((detail >> 16u) & 0xFFu);
         }
 
         /** @brief Formats one input bitmask using the same compact hex style as network logs. */
@@ -297,6 +324,22 @@ namespace bomberman::net
         summary_.inputEntriesTooLate += count;
     }
 
+    void NetDiagnostics::recordInputEntriesTooLateDirect(const uint32_t count)
+    {
+        if (!enabled_ || !sessionActive_ || count == 0)
+            return;
+
+        summary_.inputEntriesTooLateDirect += count;
+    }
+
+    void NetDiagnostics::recordInputEntriesTooLateBuffered(const uint32_t count)
+    {
+        if (!enabled_ || !sessionActive_ || count == 0)
+            return;
+
+        summary_.inputEntriesTooLateBuffered += count;
+    }
+
     void NetDiagnostics::recordInputEntriesTooFarAhead(const uint32_t count)
     {
         if (!enabled_ || !sessionActive_ || count == 0)
@@ -355,6 +398,27 @@ namespace bomberman::net
         event.simulationType = NetSimulationEventType::BufferedRecovery;
         event.peerId = peerId;
         event.seq = inputSeq;
+        event.detailB = serverTick;
+        recordRecentEvent(std::move(event));
+    }
+
+    void NetDiagnostics::recordBombPlaced(const uint8_t peerId,
+                                          const uint8_t col,
+                                          const uint8_t row,
+                                          const uint8_t radius,
+                                          const uint32_t serverTick)
+    {
+        if (!enabled_ || !sessionActive_)
+            return;
+
+        summary_.bombsPlaced++;
+
+        NetEvent event{};
+        event.type = NetEventType::Simulation;
+        event.timestampMs = nowMs();
+        event.simulationType = NetSimulationEventType::BombPlaced;
+        event.peerId = peerId;
+        event.detailA = packBombPlacementDetail(col, row, radius);
         event.detailB = serverTick;
         recordRecentEvent(std::move(event));
     }
@@ -463,12 +527,15 @@ namespace bomberman::net
         writeKeyValue("input_packets_received", summary_.inputPacketsReceived);
         writeKeyValue("input_packets_fully_stale", summary_.inputPacketsFullyStale);
         writeKeyValue("input_entries_too_late", summary_.inputEntriesTooLate);
+        writeKeyValue("input_entries_too_late_direct", summary_.inputEntriesTooLateDirect);
+        writeKeyValue("input_entries_too_late_buffered", summary_.inputEntriesTooLateBuffered);
         writeKeyValue("input_entries_too_far_ahead", summary_.inputEntriesTooFarAhead);
         out << '\n';
 
         writeSectionHeader("Simulation continuity");
         writeKeyValue("simulation_gaps", summary_.simulationGaps);
         writeKeyValue("buffered_input_recoveries", summary_.bufferedInputRecoveries);
+        writeKeyValue("bombs_placed", summary_.bombsPlaced);
         out << '\n';
 
         writeSectionHeader("Per-peer input continuity");
@@ -602,11 +669,31 @@ namespace bomberman::net
 
                     case NetEventType::Simulation:
                         out << " peer=" << static_cast<int>(event.peerId)
-                            << " seq=" << event.seq
                             << " sim=" << toString(event.simulationType)
                             << " server_tick=" << event.detailB;
                         if (event.simulationType == NetSimulationEventType::Gap)
-                            out << " held_mask=" << formatInputMask(event.detailA);
+                        {
+                            out << " seq=" << event.seq
+                                << " held_mask=" << formatInputMask(event.detailA);
+                        }
+                        else if (event.simulationType == NetSimulationEventType::BufferedRecovery)
+                        {
+                            out << " seq=" << event.seq;
+                        }
+                        else if (event.simulationType == NetSimulationEventType::BombPlaced)
+                        {
+                            out << " cell=("
+                                << static_cast<int>(unpackBombPlacementCol(event.detailA))
+                                << ','
+                                << static_cast<int>(unpackBombPlacementRow(event.detailA))
+                                << ')'
+                                << " radius=" << static_cast<int>(unpackBombPlacementRadius(event.detailA));
+                        }
+                        else if (event.seq != 0)
+                        {
+                            out << " seq=" << event.seq;
+                        }
+
                         break;
 
                     case NetEventType::SessionBegin:

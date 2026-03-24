@@ -49,6 +49,18 @@ namespace bomberman::server
      */
     constexpr uint32_t kMaxBufferedInputLead = kServerInputBufferSize - 1;
 
+    // ----- Match gameplay-state constants -----
+
+    /**
+     * @brief Maximum number of simultaneously active bombs the server stores for one match.
+     *
+     * One bomb occupies one tile, so using the full tile-map area as the
+     * storage bound keeps the representation future-proof for higher per-player
+     * bomb caps without forcing a protocol or state-layout change later.
+     */
+    constexpr std::size_t kServerBombCapacity = static_cast<std::size_t>(tileArrayWidth) *
+                                                static_cast<std::size_t>(tileArrayHeight);
+
     // ----- Server phase -----
 
     /**
@@ -125,6 +137,10 @@ namespace bomberman::server
     {
         uint8_t playerId = 0;       ///< Stable authoritative player seat in [0, net::kMaxPlayers).
         sim::TilePos pos{};         ///< Authoritative center position in tile-space Q8.
+        bool alive = true;          ///< True while this player is alive in the current round.
+        uint8_t activeBombCount = 0; ///< Number of currently active bombs owned by this player.
+        uint8_t maxBombs = sim::kDefaultPlayerMaxBombs; ///< Current bomb-cap loadout.
+        uint8_t bombRange = sim::kDefaultPlayerBombRange; ///< Current blast-radius loadout.
 
         // ----- Input ring buffer -----
         std::array<InputRingEntry, kServerInputBufferSize> inputRing{}; ///< Indexed by `seq % @ref kServerInputBufferSize`.
@@ -133,6 +149,7 @@ namespace bomberman::server
 
         uint8_t lastAppliedButtons = 0; ///< Fallback buttons reused when the next sequence misses its deadline.
         uint8_t appliedButtons = 0;     ///< Buttons applied during the current authoritative simulation tick.
+        uint8_t previousTickButtons = 0; ///< Buttons applied during the previous authoritative simulation tick.
 
         // ----- Consume timeline -----
         bool inputTimelineStarted = false;  ///< True once the fixed-delay consume timeline has been armed.
@@ -143,6 +160,34 @@ namespace bomberman::server
         uint16_t consecutiveInputGaps = 0;
         uint32_t nextTooFarAheadWarnTick = 0;
         uint32_t nextGapWarnTick = 0;
+    };
+
+    /**
+     * @brief Tile cell coordinate used by authoritative bomb state.
+     *
+     * Cell coordinates are stored in tile-map space, not world-pixel space, so
+     * later explosion propagation and tile destruction can work directly
+     * against @ref ServerState::tiles.
+     */
+    struct BombCell
+    {
+        uint8_t col = 0;
+        uint8_t row = 0;
+    };
+
+    /**
+     * @brief Authoritative state for one active bomb in the current match.
+     *
+     * Bombs snapshot their owner-derived gameplay properties at placement
+     * time, so player changes do not retroactively affect already-placed bombs.
+     */
+    struct BombState
+    {
+        uint8_t ownerId = 0;      ///< Player seat that placed the bomb.
+        BombCell cell{};          ///< Tile-map cell currently occupied by the bomb.
+        uint32_t placedTick = 0;  ///< Authoritative server tick when the bomb was accepted.
+        uint32_t explodeTick = 0; ///< Authoritative server tick when the bomb should detonate.
+        uint8_t radius = 0;       ///< Explosion radius snapped from the owner's loadout at placement time.
     };
 
     // ----- Shared server session state -----
@@ -169,6 +214,8 @@ namespace bomberman::server
         std::array<std::optional<PlayerSlot>, net::kMaxPlayers> playerSlots{};
         /** @brief Stable-address active in-match state keyed by authoritative player id. */
         std::array<std::optional<MatchPlayerState>, net::kMaxPlayers> matchPlayers{};
+        /** @brief Active authoritative bombs for the current round. */
+        std::array<std::optional<BombState>, kServerBombCapacity> bombs{};
 
         std::array<uint8_t, net::kMaxPlayers> playerIdPool{}; ///< Sorted free-list of available player ids.
         uint8_t playerIdPoolSize = 0; ///< Number of valid entries currently stored in `playerIdPool`.

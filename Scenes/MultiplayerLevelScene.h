@@ -20,6 +20,7 @@
 namespace bomberman
 {
     namespace net { class NetClient; }
+    class Sprite;
     class Text;
 
     /**
@@ -90,6 +91,14 @@ namespace bomberman
             MovementDirection facingDirection = MovementDirection::Right;
             float ticksSinceLatestSnapshot = 0.0f;
             bool receivedSnapshotThisUpdate = false;
+        };
+
+        /** @brief Scene-owned presentation state for one snapshot-authoritative bomb. */
+        struct BombPresentation
+        {
+            std::shared_ptr<Sprite> bombSprite = nullptr;
+            uint8_t ownerId = 0;
+            uint8_t radius = 0;
         };
 
         /** @brief Rolling per-session telemetry mirrored into periodic diagnostic logs. */
@@ -163,12 +172,20 @@ namespace bomberman
 
         /** @brief Applies snapshot membership and state updates to all remote player presentations. */
         void applySnapshotToRemotePlayers(const net::MsgSnapshot& snapshot, uint8_t localId);
+        /** @brief Applies snapshot-owned bomb membership and positions to scene presentation. */
+        void applySnapshotBombs(const net::MsgSnapshot& snapshot);
         /** @brief Creates or refreshes one remote player's snapshot-owned presentation state. */
         void updateOrCreateRemotePlayer(uint8_t playerId, int16_t xQ, int16_t yQ, uint32_t snapshotTick);
+        /** @brief Creates or refreshes one snapshot-owned bomb presentation for the given tile cell. */
+        void updateOrCreateBombPresentation(const net::MsgSnapshot::BombEntry& entry);
         /** @brief Removes remote player presentations absent from the newest authoritative snapshot. */
         void pruneMissingRemotePlayers(const std::unordered_set<uint8_t>& seenRemoteIds);
+        /** @brief Removes bomb presentations absent from the newest authoritative snapshot. */
+        void pruneMissingBombPresentations(const std::unordered_set<uint16_t>& seenBombCells);
         /** @brief Removes every remote player presentation object owned by this scene. */
         void removeAllRemotePlayers();
+        /** @brief Removes every snapshot-owned bomb presentation object owned by this scene. */
+        void removeAllSnapshotBombs();
 
         /** @brief Stores one remote snapshot sample for interpolation and movement inference. */
         static void recordSnapshotSample(RemotePlayerPresentation& presentation,
@@ -203,6 +220,7 @@ namespace bomberman
         uint32_t livePredictionLogAccumulatorMs_ = 0;
 
         std::unordered_map<uint8_t, RemotePlayerPresentation> remotePlayerPresentations_;
+        std::unordered_map<uint16_t, BombPresentation> bombPresentations_;
         bool gameplayConnectionDegraded_ = false;
         bool returningToMenu_ = false;
     };

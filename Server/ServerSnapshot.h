@@ -25,7 +25,7 @@ namespace bomberman::server
     /**
      * @brief Builds a `MsgSnapshot` from the current authoritative in-match server state.
      *
-     * Packs only active `matchPlayers` into the snapshot payload.
+     * Packs active `matchPlayers` plus active bombs into the snapshot payload.
      */
     [[nodiscard]]
     net::MsgSnapshot buildSnapshot(const ServerState& state);

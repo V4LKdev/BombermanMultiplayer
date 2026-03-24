@@ -68,7 +68,8 @@ namespace bomberman::net
     enum class NetSimulationEventType : uint8_t
     {
         Gap,
-        BufferedRecovery
+        BufferedRecovery,
+        BombPlaced
     };
 
     /** @brief Discrete diagnostics event stored in the recent-event ring buffer. */
@@ -147,10 +148,13 @@ namespace bomberman::net
         uint64_t inputPacketsReceived = 0;   ///< Total input packets received and parsed successfully.
         uint64_t inputPacketsFullyStale = 0; ///< Input packets whose newest entry was already consumed on arrival.
         uint64_t inputEntriesTooLate = 0;    ///< Input entries that arrived after their sequence had already been processed.
+        uint64_t inputEntriesTooLateDirect = 0; ///< Late entries that were the newest/direct command of their received batch.
+        uint64_t inputEntriesTooLateBuffered = 0; ///< Late entries that arrived only as buffered redundant batch history.
         uint64_t inputEntriesTooFarAhead = 0; ///< Input entries rejected for being too far ahead of the accepted receive window.
 
         uint64_t simulationGaps = 0; ///< Times a consume deadline was reached without the exact input, so previous buttons were reused.
         uint64_t bufferedInputRecoveries = 0; ///< Times the exact input packet missed its deadline, but redundant batch history filled the seq before a gap occurred.
+        uint64_t bombsPlaced = 0; ///< Authoritative bomb placements accepted by the server simulation.
     };
 
     /**
@@ -214,6 +218,12 @@ namespace bomberman::net
         /** @brief Records input entries that arrived after their sequence had already been processed. */
         void recordInputEntriesTooLate(uint32_t count);
 
+        /** @brief Records late entries that were the newest/direct command of their received batch. */
+        void recordInputEntriesTooLateDirect(uint32_t count);
+
+        /** @brief Records late entries that arrived only as redundant buffered history. */
+        void recordInputEntriesTooLateBuffered(uint32_t count);
+
         /** @brief Records input entries rejected for being too far ahead of the accepted receive window. */
         void recordInputEntriesTooFarAhead(uint32_t count);
 
@@ -222,6 +232,9 @@ namespace bomberman::net
 
         /** @brief Records a buffered-input recovery where redundant history supplied the exact seq before consume time. */
         void recordBufferedInputRecovery(uint8_t peerId, uint32_t inputSeq, uint32_t serverTick);
+
+        /** @brief Records one authoritative bomb placement accepted by the server simulation. */
+        void recordBombPlaced(uint8_t peerId, uint8_t col, uint8_t row, uint8_t radius, uint32_t serverTick);
 
         // ---- Latest per-peer state sampling ----
 

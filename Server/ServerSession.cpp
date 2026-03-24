@@ -46,6 +46,18 @@ namespace bomberman::server
             if (index.has_value())
                 state.peerSessions[index.value()].reset();
         }
+
+        /** @brief Removes all active bombs owned by the given player seat. */
+        void clearOwnedBombState(ServerState& state, const uint8_t ownerId)
+        {
+            for (auto& bombEntry : state.bombs)
+            {
+                if (!bombEntry.has_value() || bombEntry->ownerId != ownerId)
+                    continue;
+
+                bombEntry.reset();
+            }
+        }
     } // namespace
 
     // =================================================================================================================
@@ -72,6 +84,10 @@ namespace bomberman::server
 
         // Reset all active match-player slots.
         for (auto& slot : state.matchPlayers)
+            slot.reset();
+
+        // Reset all active bomb slots for the new session.
+        for (auto& slot : state.bombs)
             slot.reset();
 
         // Reset durable player slots for the new dedicated-server session.
@@ -270,10 +286,16 @@ namespace bomberman::server
         auto& matchPlayer = matchEntry.value();
         matchPlayer.playerId = playerId;
         matchPlayer.pos = spawnPos;
+        matchPlayer.alive = true;
+        matchPlayer.activeBombCount = 0;
+        matchPlayer.maxBombs = sim::kDefaultPlayerMaxBombs;
+        matchPlayer.bombRange = sim::kDefaultPlayerBombRange;
+        matchPlayer.previousTickButtons = 0;
     }
 
     void destroyMatchPlayerState(ServerState& state, const uint8_t playerId)
     {
+        clearOwnedBombState(state, playerId);
         state.matchPlayers[playerId].reset();
     }
 
