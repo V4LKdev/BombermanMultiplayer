@@ -4,6 +4,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -69,7 +70,8 @@ namespace bomberman::net
     {
         Gap,
         BufferedRecovery,
-        BombPlaced
+        BombPlaced,
+        RoundEnded
     };
 
     /** @brief Discrete diagnostics event stored in the recent-event ring buffer. */
@@ -155,6 +157,11 @@ namespace bomberman::net
         uint64_t simulationGaps = 0; ///< Times a consume deadline was reached without the exact input, so previous buttons were reused.
         uint64_t bufferedInputRecoveries = 0; ///< Times the exact input packet missed its deadline, but redundant batch history filled the seq before a gap occurred.
         uint64_t bombsPlaced = 0; ///< Authoritative bomb placements accepted by the server simulation.
+        uint64_t bricksDestroyed = 0; ///< Total bricks destroyed by authoritative explosions.
+        uint64_t roundsEnded = 0; ///< Total rounds that reached a server-side end state.
+        uint64_t roundsDrawn = 0; ///< Total rounds that ended with no surviving player.
+        uint64_t helloRejectsGameInProgress = 0; ///< Hello packets rejected because the current round could not be bootstrapped cleanly.
+        std::array<uint64_t, kMaxPlayers> roundWinsByPeer{}; ///< Round wins keyed by authoritative player id.
     };
 
     /**
@@ -235,6 +242,12 @@ namespace bomberman::net
 
         /** @brief Records one authoritative bomb placement accepted by the server simulation. */
         void recordBombPlaced(uint8_t peerId, uint8_t col, uint8_t row, uint8_t radius, uint32_t serverTick);
+        /** @brief Records bricks destroyed by one authoritative explosion resolution. */
+        void recordBricksDestroyed(uint32_t count);
+        /** @brief Records one authoritative round-end outcome. */
+        void recordRoundEnded(std::optional<uint8_t> winnerPlayerId, bool endedInDraw, uint32_t serverTick);
+        /** @brief Records a reject reason that should surface in diagnostics summaries. */
+        void recordRejectReason(MsgReject::EReason reason);
 
         // ---- Latest per-peer state sampling ----
 

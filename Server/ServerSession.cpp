@@ -58,6 +58,19 @@ namespace bomberman::server
                 bombEntry.reset();
             }
         }
+
+        /** @brief Returns true when no active in-match player state remains in this server session. */
+        [[nodiscard]]
+        bool hasNoActiveMatchPlayers(const ServerState& state)
+        {
+            for (const auto& matchEntry : state.matchPlayers)
+            {
+                if (matchEntry.has_value())
+                    return false;
+            }
+
+            return true;
+        }
     } // namespace
 
     // =================================================================================================================
@@ -117,6 +130,8 @@ namespace bomberman::server
         }
         state.mapSeed = seed;
         sim::generateTileMap(state.mapSeed, state.tiles);
+        state.roundWinnerPlayerId.reset();
+        state.roundEndedInDraw = false;
 
         if (overrideMapSeed)
             LOG_SERVER_INFO("Map generated with provided seed={}", state.mapSeed);
@@ -268,6 +283,15 @@ namespace bomberman::server
 
             destroyMatchPlayerState(state, playerId);
             releasePlayerId(state, playerId);
+
+            if (hasNoActiveMatchPlayers(state))
+            {
+                state.phase = ServerPhase::Lobby;
+                state.roundWinnerPlayerId.reset();
+                state.roundEndedInDraw = false;
+                sim::generateTileMap(state.mapSeed, state.tiles);
+                LOG_SERVER_INFO("Round state reset to lobby after the last player disconnected");
+            }
         }
 
         clearPeerSessionStorage(state, peer);
@@ -287,6 +311,7 @@ namespace bomberman::server
         matchPlayer.playerId = playerId;
         matchPlayer.pos = spawnPos;
         matchPlayer.alive = true;
+        matchPlayer.inputLocked = false;
         matchPlayer.activeBombCount = 0;
         matchPlayer.maxBombs = sim::kDefaultPlayerMaxBombs;
         matchPlayer.bombRange = sim::kDefaultPlayerBombRange;

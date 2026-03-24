@@ -209,6 +209,22 @@ namespace bomberman::net
         uint32_t lastCorrectionTick() const;
 
         /**
+         * @brief Pops the oldest pending reliable bomb-placement event for the current session.
+         *
+         * Returns `false` when no pending event is queued.
+         */
+        [[nodiscard]]
+        bool tryDequeueBombPlaced(MsgBombPlaced& out);
+
+        /**
+         * @brief Pops the oldest pending reliable explosion-resolution event for the current session.
+         *
+         * Returns `false` when no pending event is queued.
+         */
+        [[nodiscard]]
+        bool tryDequeueExplosionResolved(MsgExplosionResolved& out);
+
+        /**
          * @brief Returns milliseconds since the last snapshot or correction.
          *
          * If gameplay traffic has not arrived yet for the current session, the
@@ -288,6 +304,8 @@ namespace bomberman::net
         void handleLevelInfo(const uint8_t* payload, std::size_t payloadSize);
         void handleSnapshot(const uint8_t* payload, std::size_t payloadSize) const;
         void handleCorrection(const uint8_t* payload, std::size_t payloadSize) const;
+        void handleBombPlaced(const uint8_t* payload, std::size_t payloadSize) const;
+        void handleExplosionResolved(const uint8_t* payload, std::size_t payloadSize) const;
 
         // ----- pumpNetwork() helpers -----
 

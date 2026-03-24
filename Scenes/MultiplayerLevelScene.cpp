@@ -52,8 +52,11 @@ namespace bomberman
         constexpr uint32_t kLivePredictionLogIntervalMs = 1000;
         constexpr uint32_t kSimulationTickMs = 1000u / static_cast<uint32_t>(sim::kTickRate);
         constexpr int kBombAnimationFrameCount = 4;
+        constexpr int kExplosionAnimationStartFrame = 1;
+        constexpr int kExplosionAnimationFrameCount = 11;
+        constexpr uint32_t kExplosionLifetimeMs = 800;
 
-        uint16_t packBombCellKey(const uint8_t col, const uint8_t row)
+        uint16_t packCellKey(const uint8_t col, const uint8_t row)
         {
             return static_cast<uint16_t>((static_cast<uint16_t>(row) << 8u) | static_cast<uint16_t>(col));
         }
@@ -74,10 +77,33 @@ namespace bomberman
             animation->play();
         }
 
+        void attachExplosionAnimation(const std::shared_ptr<Sprite>& explosionSprite)
+        {
+            if(!explosionSprite)
+                return;
+
+            auto animation = std::make_shared<Animation>();
+            for(int frame = 0; frame < kExplosionAnimationFrameCount; ++frame)
+            {
+                animation->addAnimationEntity(
+                    AnimationEntity(tileSize * (kExplosionAnimationStartFrame + frame), 0, tileSize, tileSize));
+            }
+
+            animation->setSprite(explosionSprite.get());
+            explosionSprite->addAnimation(animation);
+            animation->play();
+        }
+
         bool snapshotEntryIsAlive(const net::MsgSnapshot::PlayerEntry& entry)
         {
             const auto flags = static_cast<uint8_t>(entry.flags);
             return (flags & static_cast<uint8_t>(net::MsgSnapshot::PlayerEntry::EPlayerFlags::Alive)) != 0;
+        }
+
+        bool snapshotEntryInputLocked(const net::MsgSnapshot::PlayerEntry& entry)
+        {
+            const auto flags = static_cast<uint8_t>(entry.flags);
+            return (flags & static_cast<uint8_t>(net::MsgSnapshot::PlayerEntry::EPlayerFlags::InputLocked)) != 0;
         }
 
         PlayerColor colorForPlayerId(const uint8_t playerId)
@@ -128,6 +154,7 @@ namespace bomberman
         : LevelScene(game, stage, prevScore, mapSeed)
     {
         initializeLevelWorld(mapSeed);
+        explosionSound_ = std::make_shared<Sound>(game->getAssetManager()->getSound(SoundEnum::Explosion));
     }
 
     // =================================================================================================================
@@ -144,11 +171,13 @@ namespace bomberman
          * Runtime order:
          * 1) consume any newer owner correction first so local prediction owns local presentation.
          * 2) consume the newest snapshot for remote presentation and local bootstrap fallback.
-         * 3) tick scene objects after state application, then finish tag/camera/diagnostic updates.
+         * 3) apply any pending reliable gameplay events so discrete world changes win over stale snapshots.
+         * 4) tick scene objects after state application, then finish tag/camera/diagnostic updates.
          */
         updateGameplayConnectionHealth(*netClient);
         applyLatestCorrectionIfAvailable(*netClient);
         applyLatestSnapshotIfAvailable();
+        applyPendingGameplayEvents(*netClient);
         finalizeFrameUpdate(delta);
     }
 
@@ -188,9 +217,25 @@ namespace bomberman
         }
     }
 
+    void MultiplayerLevelScene::applyPendingGameplayEvents(net::NetClient& netClient)
+    {
+        net::MsgBombPlaced bombPlaced{};
+        while(netClient.tryDequeueBombPlaced(bombPlaced))
+        {
+            applyBombPlacedEvent(bombPlaced);
+        }
+
+        net::MsgExplosionResolved explosion{};
+        while(netClient.tryDequeueExplosionResolved(explosion))
+        {
+            applyExplosionResolvedEvent(explosion);
+        }
+    }
+
     void MultiplayerLevelScene::finalizeFrameUpdate(const unsigned int delta)
     {
         updateSceneObjects(delta);
+        updateExplosionPresentations(delta);
         updateRemotePlayerPresentations(delta);
         updateLocalPlayerTagPosition();
         updateCamera();
@@ -205,7 +250,10 @@ namespace bomberman
         localPrediction_.reset();
         lastAppliedSnapshotTick_ = 0;
         lastAppliedCorrectionTick_ = 0;
+        lastAppliedGameplayEventTick_ = 0;
         localPlayerId_.reset();
+        localPlayerAlive_ = true;
+        localPlayerInputLocked_ = false;
         livePredictionTelemetry_ = {};
         localFacingDirection_ = MovementDirection::Right;
         livePredictionLogAccumulatorMs_ = 0;
@@ -224,6 +272,9 @@ namespace bomberman
             gameplayStatusText_.reset();
         }
 
+        removeAllExplosionPresentations();
+        brickPresentations_.clear();
+
         LevelScene::onExit();
     }
 
@@ -241,6 +292,11 @@ namespace bomberman
 
     void MultiplayerLevelScene::onNetInputQueued(const uint32_t inputSeq, const uint8_t buttons)
     {
+        if(!localPlayerAlive_)
+            return;
+        if(localPlayerInputLocked_)
+            return;
+
         if(!game->isPredictionEnabled())
         {
             updateLocalPresentationFromInputButtons(buttons);
@@ -271,6 +327,9 @@ namespace bomberman
             return;
 
         if(snapshot.serverTick <= lastAppliedSnapshotTick_)
+            return;
+
+        if(snapshot.serverTick < lastAppliedGameplayEventTick_)
             return;
 
         const net::NetClient* netClient = game->getNetClient();
@@ -538,7 +597,7 @@ namespace bomberman
 
     void MultiplayerLevelScene::syncLocalPresentationFromOwnedState(const net::LocalPlayerState& localState)
     {
-        if(!player)
+        if(!player || !localPlayerAlive_)
             return;
 
         /*
@@ -618,14 +677,66 @@ namespace bomberman
         syncPlayerSpriteToSimPosition();
     }
 
+    void MultiplayerLevelScene::setLocalPlayerAlivePresentation(const bool alive)
+    {
+        localPlayerAlive_ = alive;
+
+        if(!player)
+            return;
+
+        if(alive)
+            return;
+
+        localPlayerInputLocked_ = true;
+        player->setMovementDirection(MovementDirection::None);
+        player->setPosition(-scaledTileSize * 4, -scaledTileSize * 4);
+
+        if(localPlayerTag_)
+        {
+            localPlayerTag_->setPosition(-scaledTileSize * 4, -scaledTileSize * 4);
+        }
+    }
+
+    void MultiplayerLevelScene::setLocalPlayerInputLock(const bool locked)
+    {
+        const bool wasLocked = localPlayerInputLocked_;
+        localPlayerInputLocked_ = locked;
+
+        if(!player)
+            return;
+
+        if(localPlayerInputLocked_)
+        {
+            if(!wasLocked && game->isPredictionEnabled())
+            {
+                localPrediction_.suspend();
+            }
+            player->setMovementDirection(MovementDirection::None);
+        }
+    }
+
     void MultiplayerLevelScene::updateLocalPlayerTagPosition()
     {
-        if(!player || !localPlayerTag_)
+        if(!player || !localPlayerTag_ || !localPlayerAlive_)
             return;
 
         const int tagX = player->getPositionX() + player->getWidth() / 2 - localPlayerTag_->getWidth() / 2;
         const int tagY = player->getPositionY() - localPlayerTag_->getHeight() - kNameTagOffsetPx;
         localPlayerTag_->setPosition(tagX, tagY);
+    }
+
+    void MultiplayerLevelScene::removeRemotePlayerPresentation(const uint8_t playerId)
+    {
+        const auto it = remotePlayerPresentations_.find(playerId);
+        if(it == remotePlayerPresentations_.end())
+            return;
+
+        if(it->second.playerSprite)
+            removeObject(it->second.playerSprite);
+        if(it->second.playerTag)
+            removeObject(it->second.playerTag);
+
+        remotePlayerPresentations_.erase(it);
     }
 
     // =================================================================================================================
@@ -641,6 +752,7 @@ namespace bomberman
         {
             const auto& entry = snapshot.players[i];
             const bool alive = snapshotEntryIsAlive(entry);
+            const bool inputLocked = snapshotEntryInputLocked(entry);
 
             if(entry.playerId == localId)
             {
@@ -648,6 +760,8 @@ namespace bomberman
                  * Local entries flow through dedicated local ownership rules rather than the
                  * remote snapshot and interpolation path.
                  */
+                setLocalPlayerAlivePresentation(alive);
+                setLocalPlayerInputLock(inputLocked);
                 if(alive)
                 {
                     applyAuthoritativeLocalSnapshot(entry);
@@ -673,7 +787,7 @@ namespace bomberman
         for(uint8_t i = 0; i < snapshot.bombCount; ++i)
         {
             const auto& entry = snapshot.bombs[i];
-            const uint16_t bombCellKey = packBombCellKey(entry.col, entry.row);
+            const uint16_t bombCellKey = packCellKey(entry.col, entry.row);
             seenBombCells.insert(bombCellKey);
             updateOrCreateBombPresentation(entry);
         }
@@ -725,7 +839,7 @@ namespace bomberman
 
     void MultiplayerLevelScene::updateOrCreateBombPresentation(const net::MsgSnapshot::BombEntry& entry)
     {
-        const uint16_t bombCellKey = packBombCellKey(entry.col, entry.row);
+        const uint16_t bombCellKey = packCellKey(entry.col, entry.row);
         auto [it, inserted] = bombPresentations_.try_emplace(bombCellKey);
         BombPresentation& presentation = it->second;
 
@@ -808,6 +922,136 @@ namespace bomberman
         }
 
         bombPresentations_.clear();
+    }
+
+    void MultiplayerLevelScene::applyBombPlacedEvent(const net::MsgBombPlaced& bombPlaced)
+    {
+        if(bombPlaced.serverTick < lastAppliedGameplayEventTick_)
+            return;
+
+        net::MsgSnapshot::BombEntry entry{};
+        entry.ownerId = bombPlaced.ownerId;
+        entry.col = bombPlaced.col;
+        entry.row = bombPlaced.row;
+        entry.radius = bombPlaced.radius;
+        updateOrCreateBombPresentation(entry);
+        lastAppliedGameplayEventTick_ = std::max(lastAppliedGameplayEventTick_, bombPlaced.serverTick);
+    }
+
+    void MultiplayerLevelScene::applyExplosionResolvedEvent(const net::MsgExplosionResolved& explosion)
+    {
+        if(explosion.serverTick < lastAppliedGameplayEventTick_)
+            return;
+
+        removeBombPresentation(explosion.originCol, explosion.originRow);
+
+        for(uint8_t i = 0; i < explosion.destroyedBrickCount; ++i)
+        {
+            const auto& brickCell = explosion.destroyedBricks[i];
+            destroyBrickPresentation(brickCell.col, brickCell.row);
+        }
+
+        for(uint8_t i = 0; i < explosion.blastCellCount; ++i)
+        {
+            spawnExplosionPresentation(explosion.blastCells[i]);
+        }
+
+        if(explosionSound_)
+        {
+            explosionSound_->play();
+        }
+
+        for(uint8_t playerId = 0; playerId < net::kMaxPlayers; ++playerId)
+        {
+            const uint8_t playerBit = static_cast<uint8_t>(1u << playerId);
+            if((explosion.killedPlayerMask & playerBit) == 0)
+                continue;
+
+            if(localPlayerId_.has_value() && localPlayerId_.value() == playerId)
+            {
+                setLocalPlayerInputLock(true);
+                setLocalPlayerAlivePresentation(false);
+                continue;
+            }
+
+            removeRemotePlayerPresentation(playerId);
+        }
+
+        lastAppliedGameplayEventTick_ = std::max(lastAppliedGameplayEventTick_, explosion.serverTick);
+    }
+
+    void MultiplayerLevelScene::destroyBrickPresentation(const uint8_t col, const uint8_t row)
+    {
+        const uint16_t cellKey = packCellKey(col, row);
+        const auto it = brickPresentations_.find(cellKey);
+        if(it != brickPresentations_.end())
+        {
+            if(it->second)
+                removeObject(it->second);
+            brickPresentations_.erase(it);
+        }
+
+        if(row < tileArrayHeight && col < tileArrayWidth && tiles[row][col] == Tile::Brick)
+        {
+            tiles[row][col] = Tile::Grass;
+        }
+    }
+
+    void MultiplayerLevelScene::removeBombPresentation(const uint8_t col, const uint8_t row)
+    {
+        const uint16_t bombCellKey = packCellKey(col, row);
+        const auto it = bombPresentations_.find(bombCellKey);
+        if(it == bombPresentations_.end())
+            return;
+
+        if(it->second.bombSprite)
+            removeObject(it->second.bombSprite);
+        bombPresentations_.erase(it);
+    }
+
+    void MultiplayerLevelScene::spawnExplosionPresentation(const net::MsgCell& cell)
+    {
+        auto explosionSprite =
+            std::make_shared<Sprite>(game->getAssetManager()->getTexture(Texture::Explosion), game->getRenderer());
+        explosionSprite->setSize(scaledTileSize, scaledTileSize);
+        attachExplosionAnimation(explosionSprite);
+
+        const int screenX = fieldPositionX + static_cast<int>(cell.col) * scaledTileSize;
+        const int screenY = fieldPositionY + static_cast<int>(cell.row) * scaledTileSize;
+        explosionSprite->setPosition(screenX, screenY);
+        addObject(explosionSprite);
+
+        explosionPresentations_.push_back({explosionSprite, kExplosionLifetimeMs});
+    }
+
+    void MultiplayerLevelScene::updateExplosionPresentations(const unsigned int delta)
+    {
+        for(auto it = explosionPresentations_.begin(); it != explosionPresentations_.end();)
+        {
+            auto& presentation = *it;
+            if(presentation.remainingLifetimeMs > delta)
+            {
+                presentation.remainingLifetimeMs -= delta;
+                ++it;
+                continue;
+            }
+
+            if(presentation.explosionSprite)
+                removeObject(presentation.explosionSprite);
+
+            it = explosionPresentations_.erase(it);
+        }
+    }
+
+    void MultiplayerLevelScene::removeAllExplosionPresentations()
+    {
+        for(auto& presentation : explosionPresentations_)
+        {
+            if(presentation.explosionSprite)
+                removeObject(presentation.explosionSprite);
+        }
+
+        explosionPresentations_.clear();
     }
 
     void MultiplayerLevelScene::recordSnapshotSample(RemotePlayerPresentation& presentation,
@@ -941,6 +1185,23 @@ namespace bomberman
     {
         /* Player IDs are zero-indexed, but the player-facing label is 1-indexed. */
         return "P" + std::to_string(static_cast<unsigned int>(playerId) + 1u);
+    }
+
+    void MultiplayerLevelScene::onCollisionObjectSpawned(const Tile tile, const std::shared_ptr<Object>& object)
+    {
+        if(tile != Tile::Brick || !object || scaledTileSize <= 0)
+            return;
+
+        const int col = (object->getPositionX() - fieldPositionX) / scaledTileSize;
+        const int row = (object->getPositionY() - fieldPositionY) / scaledTileSize;
+        if(col < 0 || row < 0 ||
+           col >= static_cast<int>(tileArrayWidth) ||
+           row >= static_cast<int>(tileArrayHeight))
+        {
+            return;
+        }
+
+        brickPresentations_[packCellKey(static_cast<uint8_t>(col), static_cast<uint8_t>(row))] = object;
     }
 
     // =================================================================================================================

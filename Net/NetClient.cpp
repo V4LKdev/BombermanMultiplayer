@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstring>
+#include <deque>
 
 #include <enet/enet.h>
 
@@ -53,6 +54,8 @@ namespace bomberman::net
                 case Input:
                 case Snapshot:
                 case Correction:
+                case BombPlaced:
+                case ExplosionResolved:
                 default:
                     return false;
             }
@@ -105,6 +108,9 @@ namespace bomberman::net
         };
         CachedLevelInfo cachedLevelInfo{};
 
+        std::deque<MsgBombPlaced> pendingBombPlacedEvents{};
+        std::deque<MsgExplosionResolved> pendingExplosionEvents{};
+
         // ----- Protocol handlers -----
         static void onWelcome(NetClient& client,
                               const PacketHeader& /*header*/,
@@ -145,6 +151,22 @@ namespace bomberman::net
         {
             client.handleCorrection(payload, payloadSize);
         }
+
+        static void onBombPlaced(NetClient& client,
+                                 const PacketHeader& /*header*/,
+                                 const uint8_t* payload,
+                                 std::size_t payloadSize)
+        {
+            client.handleBombPlaced(payload, payloadSize);
+        }
+
+        static void onExplosionResolved(NetClient& client,
+                                        const PacketHeader& /*header*/,
+                                        const uint8_t* payload,
+                                        std::size_t payloadSize)
+        {
+            client.handleExplosionResolved(payload, payloadSize);
+        }
     };
 
     // =================================================================================================================
@@ -162,6 +184,8 @@ namespace bomberman::net
         impl_->dispatcher.bind(LevelInfo, &Impl::onLevelInfo);
         impl_->dispatcher.bind(Snapshot, &Impl::onSnapshot);
         impl_->dispatcher.bind(Correction, &Impl::onCorrection);
+        impl_->dispatcher.bind(BombPlaced, &Impl::onBombPlaced);
+        impl_->dispatcher.bind(ExplosionResolved, &Impl::onExplosionResolved);
     }
 
     NetClient::~NetClient() noexcept
@@ -735,6 +759,30 @@ namespace bomberman::net
         return impl_->cachedCorrection.correction.serverTick;
     }
 
+    bool NetClient::tryDequeueBombPlaced(MsgBombPlaced& out)
+    {
+        if (impl_ == nullptr || !isConnected() || impl_->pendingBombPlacedEvents.empty())
+        {
+            return false;
+        }
+
+        out = impl_->pendingBombPlacedEvents.front();
+        impl_->pendingBombPlacedEvents.pop_front();
+        return true;
+    }
+
+    bool NetClient::tryDequeueExplosionResolved(MsgExplosionResolved& out)
+    {
+        if (impl_ == nullptr || !isConnected() || impl_->pendingExplosionEvents.empty())
+        {
+            return false;
+        }
+
+        out = impl_->pendingExplosionEvents.front();
+        impl_->pendingExplosionEvents.pop_front();
+        return true;
+    }
+
     uint32_t NetClient::gameplaySilenceMs() const
     {
         if (impl_ == nullptr || !isConnected())
@@ -828,6 +876,10 @@ namespace bomberman::net
                 break;
             case Banned:
                 LOG_NET_CONN_WARN("Server rejected: banned");
+                state_ = FailedHandshake;
+                break;
+            case GameInProgress:
+                LOG_NET_CONN_WARN("Server rejected: game already in progress");
                 state_ = FailedHandshake;
                 break;
             case Other:
@@ -940,6 +992,73 @@ namespace bomberman::net
         }
     }
 
+    void NetClient::handleBombPlaced(const uint8_t* payload, std::size_t payloadSize) const
+    {
+        if (!impl_ || !isConnected())
+        {
+            LOG_NET_SNAPSHOT_DEBUG("Received BombPlaced payload while not connected - ignoring");
+            return;
+        }
+
+        MsgBombPlaced bombPlaced{};
+        if (!deserializeMsgBombPlaced(payload, payloadSize, bombPlaced))
+        {
+            LOG_NET_PROTO_WARN("Failed to parse BombPlaced payload");
+            return;
+        }
+
+        constexpr std::size_t kMaxPendingGameplayEvents = 64;
+        if (impl_->pendingBombPlacedEvents.size() >= kMaxPendingGameplayEvents)
+        {
+            impl_->pendingBombPlacedEvents.pop_front();
+        }
+
+        impl_->pendingBombPlacedEvents.push_back(bombPlaced);
+        impl_->lastGameplayReceiveTime = SteadyClock::now();
+
+        LOG_NET_SNAPSHOT_DEBUG("Received BombPlaced tick={} ownerId={} cell=({}, {}) radius={} explodeTick={}",
+                               bombPlaced.serverTick,
+                               bombPlaced.ownerId,
+                               bombPlaced.col,
+                               bombPlaced.row,
+                               bombPlaced.radius,
+                               bombPlaced.explodeTick);
+    }
+
+    void NetClient::handleExplosionResolved(const uint8_t* payload, std::size_t payloadSize) const
+    {
+        if (!impl_ || !isConnected())
+        {
+            LOG_NET_SNAPSHOT_DEBUG("Received ExplosionResolved payload while not connected - ignoring");
+            return;
+        }
+
+        MsgExplosionResolved explosion{};
+        if (!deserializeMsgExplosionResolved(payload, payloadSize, explosion))
+        {
+            LOG_NET_PROTO_WARN("Failed to parse ExplosionResolved payload");
+            return;
+        }
+
+        constexpr std::size_t kMaxPendingGameplayEvents = 64;
+        if (impl_->pendingExplosionEvents.size() >= kMaxPendingGameplayEvents)
+        {
+            impl_->pendingExplosionEvents.pop_front();
+        }
+
+        impl_->pendingExplosionEvents.push_back(explosion);
+        impl_->lastGameplayReceiveTime = SteadyClock::now();
+
+        LOG_NET_SNAPSHOT_DEBUG("Received ExplosionResolved tick={} ownerId={} origin=({}, {}) blastCells={} destroyedBricks={} killedMask=0x{:02x}",
+                               explosion.serverTick,
+                               explosion.ownerId,
+                               explosion.originCol,
+                               explosion.originRow,
+                               explosion.blastCellCount,
+                               explosion.destroyedBrickCount,
+                               explosion.killedPlayerMask);
+    }
+
     // =================================================================================================================
     // ===== Internal Helpers ==========================================================================================
     // =================================================================================================================
@@ -1021,6 +1140,8 @@ namespace bomberman::net
             impl_->cachedSnapshot = {};
             impl_->cachedCorrection = {};
             impl_->cachedLevelInfo = {};
+            impl_->pendingBombPlacedEvents.clear();
+            impl_->pendingExplosionEvents.clear();
         }
     }
 

@@ -12,7 +12,9 @@
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
+#include "Entities/Sound.h"
 #include "Net/ClientPrediction.h"
 #include "Net/NetCommon.h"
 #include "Scenes/LevelScene.h"
@@ -101,6 +103,13 @@ namespace bomberman
             uint8_t radius = 0;
         };
 
+        /** @brief One short-lived explosion visual spawned from a reliable authoritative event. */
+        struct ExplosionPresentation
+        {
+            std::shared_ptr<Sprite> explosionSprite = nullptr;
+            uint32_t remainingLifetimeMs = 0;
+        };
+
         /** @brief Rolling per-session telemetry mirrored into periodic diagnostic logs. */
         struct LivePredictionTelemetry
         {
@@ -124,6 +133,8 @@ namespace bomberman
         void applyLatestCorrectionIfAvailable(const net::NetClient& netClient);
         /** @brief Applies the newest unapplied gameplay snapshot, if any. */
         void applyLatestSnapshotIfAvailable();
+        /** @brief Applies any pending reliable gameplay events after snapshot state for this frame. */
+        void applyPendingGameplayEvents(net::NetClient& netClient);
         /** @brief Ticks scene objects, remote presentation, camera, and diagnostics after state application. */
         void finalizeFrameUpdate(unsigned int delta);
 
@@ -165,8 +176,14 @@ namespace bomberman
         void logPredictionSummary() const;
         /** @brief Applies the snapshot-owned local state path when prediction is disabled or unarmed. */
         void applyAuthoritativeLocalSnapshot(const net::MsgSnapshot::PlayerEntry& entry);
+        /** @brief Toggles local-player presentation visibility from authoritative alive state. */
+        void setLocalPlayerAlivePresentation(bool alive);
+        /** @brief Toggles local-player control lock from authoritative snapshot state. */
+        void setLocalPlayerInputLock(bool locked);
         /** @brief Repositions the local multiplayer tag above the current player sprite. */
         void updateLocalPlayerTagPosition();
+        /** @brief Removes one remote-player presentation immediately after an authoritative kill event. */
+        void removeRemotePlayerPresentation(uint8_t playerId);
 
         // ----- Remote Player Presentation -----
 
@@ -186,6 +203,20 @@ namespace bomberman
         void removeAllRemotePlayers();
         /** @brief Removes every snapshot-owned bomb presentation object owned by this scene. */
         void removeAllSnapshotBombs();
+        /** @brief Applies one reliable authoritative bomb-placement event for presentation acceleration. */
+        void applyBombPlacedEvent(const net::MsgBombPlaced& bombPlaced);
+        /** @brief Applies one reliable authoritative explosion-resolution event to client world presentation. */
+        void applyExplosionResolvedEvent(const net::MsgExplosionResolved& explosion);
+        /** @brief Removes one locally tracked brick presentation and updates collision tiles for that cell. */
+        void destroyBrickPresentation(uint8_t col, uint8_t row);
+        /** @brief Removes one bomb presentation immediately, if present. */
+        void removeBombPresentation(uint8_t col, uint8_t row);
+        /** @brief Spawns one short-lived explosion sprite at the given tile cell. */
+        void spawnExplosionPresentation(const net::MsgCell& cell);
+        /** @brief Retires expired explosion sprites after their visual lifetime ends. */
+        void updateExplosionPresentations(unsigned int delta);
+        /** @brief Removes every active explosion sprite owned by this scene. */
+        void removeAllExplosionPresentations();
 
         /** @brief Stores one remote snapshot sample for interpolation and movement inference. */
         static void recordSnapshotSample(RemotePlayerPresentation& presentation,
@@ -206,6 +237,8 @@ namespace bomberman
         static std::string formatPlayerTag(uint8_t playerId);
         /** @brief Leaves the multiplayer scene and optionally disconnects the active network client. */
         void returnToMenu(bool disconnectClient, std::string_view reason);
+        /** @brief Tracks spawned collision objects by tile cell so reliable destruction can remove them cleanly. */
+        void onCollisionObjectSpawned(Tile tile, const std::shared_ptr<Object>& object) override;
 
         // ----- State -----
 
@@ -218,9 +251,15 @@ namespace bomberman
         LivePredictionTelemetry livePredictionTelemetry_{};
         MovementDirection localFacingDirection_ = MovementDirection::Right;
         uint32_t livePredictionLogAccumulatorMs_ = 0;
+        uint32_t lastAppliedGameplayEventTick_ = 0;
+        bool localPlayerAlive_ = true;
+        bool localPlayerInputLocked_ = false;
+        std::shared_ptr<Sound> explosionSound_ = nullptr;
 
         std::unordered_map<uint8_t, RemotePlayerPresentation> remotePlayerPresentations_;
         std::unordered_map<uint16_t, BombPresentation> bombPresentations_;
+        std::unordered_map<uint16_t, std::shared_ptr<Object>> brickPresentations_;
+        std::vector<ExplosionPresentation> explosionPresentations_;
         bool gameplayConnectionDegraded_ = false;
         bool returningToMenu_ = false;
     };

@@ -47,6 +47,10 @@ namespace bomberman::server
             {
                 flags |= static_cast<uint8_t>(net::MsgSnapshot::PlayerEntry::EPlayerFlags::Alive);
             }
+            if (matchPlayer.inputLocked)
+            {
+                flags |= static_cast<uint8_t>(net::MsgSnapshot::PlayerEntry::EPlayerFlags::InputLocked);
+            }
 
             // Temporary invulnerability is not replicated yet.
             entry.flags = static_cast<net::MsgSnapshot::PlayerEntry::EPlayerFlags>(flags);
@@ -77,7 +81,8 @@ namespace bomberman::server
         if (activeBombCount > net::kMaxSnapshotBombs &&
             state.serverTick % net::kSnapshotLogEveryN == 0)
         {
-            LOG_NET_SNAPSHOT_WARN("Snapshot bomb overflow tick={} activeBombCount={} snapshotCapacity={} - truncating",
+            // This should never happen in normal gameplay. If it does, the protocol and snapshot size should be adjusted
+            LOG_NET_SNAPSHOT_ERROR("Snapshot bomb overflow tick={} activeBombCount={} snapshotCapacity={} - truncating",
                                   state.serverTick,
                                   activeBombCount,
                                   static_cast<int>(net::kMaxSnapshotBombs));

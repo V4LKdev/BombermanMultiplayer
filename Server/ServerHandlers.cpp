@@ -12,6 +12,7 @@
 #include "Net/NetSend.h"
 #include "Net/PacketDispatch.h"
 #include "ServerState.h"
+#include "Sim/TileMapGen.h"
 #include "Util/Log.h"
 
 using namespace bomberman::net;
@@ -43,6 +44,7 @@ namespace bomberman::server
                 case VersionMismatch: return "version mismatch";
                 case ServerFull:      return "server full";
                 case Banned:          return "banned";
+                case GameInProgress:  return "game in progress";
                 case Other:           return "other";
                 default:              return "unknown";
             }
@@ -94,6 +96,8 @@ namespace bomberman::server
             MsgReject reject{};
             reject.reason = reason;
             reject.expectedProtocolVersion = reason == MsgReject::EReason::VersionMismatch ? kProtocolVersion : 0;
+            if (ctx.diag)
+                ctx.diag->recordRejectReason(reason);
 
             recordPeerLifecycle(ctx.diag,
                                 NetPeerLifecycleType::PeerRejected,
@@ -150,6 +154,34 @@ namespace bomberman::server
         {
             const auto* session = getPeerSession(peer);
             return session != nullptr && session->playerId.has_value();
+        }
+
+        /**
+         * @brief Returns true when the current round has diverged beyond what a fresh connect can bootstrap cleanly.
+         *
+         * The current connect bootstrap includes the map seed plus snapshots.
+         * That is enough for bombs and alive-state recovery, but not for
+         * destroyed-brick map mutations yet, so we reject new joins once the
+         * authoritative tile map diverges from the seed-generated baseline.
+         */
+        [[nodiscard]]
+        bool roundRequiresAdditionalBootstrap(const ServerState& state)
+        {
+            if (state.phase == ServerPhase::StartingMatch || state.phase == ServerPhase::EndOfMatch)
+                return true;
+
+            sim::TileMap pristineTiles{};
+            sim::generateTileMap(state.mapSeed, pristineTiles);
+            for (std::size_t row = 0; row < tileArrayHeight; ++row)
+            {
+                for (std::size_t col = 0; col < tileArrayWidth; ++col)
+                {
+                    if (pristineTiles[row][col] != state.tiles[row][col])
+                        return true;
+                }
+            }
+
+            return false;
         }
 
         /** @brief Returns the active in-match authoritative state for an accepted peer session, if any. */
@@ -272,6 +304,9 @@ namespace bomberman::server
             // TODO: individual spawn points per player.
             acceptPeerSession(ctx.state, *session, playerId, playerName);
             createMatchPlayerState(ctx.state, playerId, kDefaultSpawnPos);
+            ctx.state.phase = ServerPhase::InMatch;
+            ctx.state.roundWinnerPlayerId.reset();
+            ctx.state.roundEndedInDraw = false;
 
             recordPeerLifecycle(ctx.diag,
                                 NetPeerLifecycleType::PlayerAccepted,
@@ -512,6 +547,16 @@ namespace bomberman::server
 
         const std::string_view playerName(msgHello.name, boundedStrLen(msgHello.name, kPlayerNameMax));
         LOG_NET_CONN_INFO("Hello from \"{}\" (peer {})", playerName, ctx.peer->incomingPeerID);
+
+        if (roundRequiresAdditionalBootstrap(ctx.state))
+        {
+            LOG_NET_CONN_WARN("Rejecting Hello from peer {} because the current round has diverged beyond the connect bootstrap (phase={})",
+                              ctx.peer->incomingPeerID,
+                              static_cast<int>(ctx.state.phase));
+            ctx.receiveResult = NetPacketResult::Rejected;
+            sendReject(ctx, MsgReject::EReason::GameInProgress);
+            return;
+        }
 
         const std::optional<uint8_t> reservedPlayerId = reserveHelloPlayerId(ctx);
         if (!reservedPlayerId.has_value())

@@ -27,6 +27,16 @@ namespace bomberman::net
         clearHistory();
     }
 
+    void ClientPrediction::suspend() noexcept
+    {
+        phase_ = PredictionPhase::AwaitingBaseline;
+        lastRecordedInputSeq_ = 0;
+        lastAuthoritativeInputSeq_ = 0;
+        recoveryCatchUpSeq_ = 0;
+        currentState_ = {};
+        clearHistory();
+    }
+
     // =================================================================================================================
     // ===== Local Input Path ==========================================================================================
     // =================================================================================================================

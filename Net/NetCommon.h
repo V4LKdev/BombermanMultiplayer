@@ -30,7 +30,7 @@ namespace bomberman::net
 
     // ----- Protocol Constants -----
 
-    constexpr uint16_t      kProtocolVersion = 3;
+    constexpr uint16_t      kProtocolVersion = 5;
 
     constexpr uint16_t      kDefaultServerPort = 12345;  ///< Default server port used by both client and server.
     constexpr std::size_t   kMaxPacketSize = 1400;       ///< Upper packet size bound (below typical 1500-byte MTU).
@@ -45,6 +45,11 @@ namespace bomberman::net
     constexpr std::size_t   kPlayerNameMax = 16;
     constexpr uint8_t       kMaxPlayers = 4;             ///< Maximum supported player count in a game instance.
     constexpr uint8_t       kMaxSnapshotBombs = kMaxPlayers * 4; ///< Maximum bombs carried by one snapshot payload.
+    constexpr std::size_t   kMaxExplosionBlastCells =
+        1u + 4u * (static_cast<std::size_t>((::bomberman::tileArrayWidth > ::bomberman::tileArrayHeight) ?
+            ::bomberman::tileArrayWidth :
+            ::bomberman::tileArrayHeight) - 1u); ///< Maximum cells a cross-shaped blast can touch.
+    constexpr std::size_t   kMaxExplosionDestroyedBricks = kMaxExplosionBlastCells - 1u; ///< Upper bound for bricks one blast can destroy.
 
     /** @brief First valid input sequence number. Seq 0 means "no input received yet". */
     constexpr uint32_t      kFirstInputSeq = 1;
@@ -162,6 +167,30 @@ namespace bomberman::net
         sizeof(int16_t) +  // xQ
         sizeof(int16_t);   // yQ
 
+    constexpr std::size_t kMsgBombPlacedSize =
+        sizeof(uint32_t) + // serverTick
+        sizeof(uint32_t) + // explodeTick
+        sizeof(uint8_t) +  // ownerId
+        sizeof(uint8_t) +  // col
+        sizeof(uint8_t) +  // row
+        sizeof(uint8_t);   // radius
+
+    constexpr std::size_t kMsgExplosionResolvedSize =
+        sizeof(uint32_t) + // serverTick
+        sizeof(uint8_t) +  // ownerId
+        sizeof(uint8_t) +  // originCol
+        sizeof(uint8_t) +  // originRow
+        sizeof(uint8_t) +  // radius
+        sizeof(uint8_t) +  // killedPlayerMask
+        sizeof(uint8_t) +  // blastCellCount
+        sizeof(uint8_t) +  // destroyedBrickCount
+        kMaxExplosionBlastCells *
+            (sizeof(uint8_t) + // col
+             sizeof(uint8_t)) + // row
+        kMaxExplosionDestroyedBricks *
+            (sizeof(uint8_t) + // col
+             sizeof(uint8_t)); // row
+
     /** @brief Compile-time checks for expected wire sizes. */
     static_assert(sizeof(char) == 1, "Unexpected char size");
 
@@ -173,6 +202,8 @@ namespace bomberman::net
     static_assert(kMsgInputSize      == 21,  "MsgInput size mismatch");
     static_assert(kMsgSnapshotSize   == 94,  "MsgSnapshot size mismatch");
     static_assert(kMsgCorrectionSize == 12,  "MsgCorrection size mismatch");
+    static_assert(kMsgBombPlacedSize == 12,  "MsgBombPlaced size mismatch");
+    static_assert(kMsgExplosionResolvedSize == 493, "MsgExplosionResolved size mismatch");
 
     constexpr std::size_t kSnapshotPlayersOffset =
         sizeof(uint32_t) + // serverTick
@@ -191,6 +222,21 @@ namespace bomberman::net
         sizeof(uint8_t) +  // row
         sizeof(uint8_t);   // radius
 
+    constexpr std::size_t kExplosionBlastCellsOffset =
+        sizeof(uint32_t) + // serverTick
+        sizeof(uint8_t) +  // ownerId
+        sizeof(uint8_t) +  // originCol
+        sizeof(uint8_t) +  // originRow
+        sizeof(uint8_t) +  // radius
+        sizeof(uint8_t) +  // killedPlayerMask
+        sizeof(uint8_t) +  // blastCellCount
+        sizeof(uint8_t);   // destroyedBrickCount
+    constexpr std::size_t kExplosionCellEntrySize =
+        sizeof(uint8_t) +  // col
+        sizeof(uint8_t);   // row
+    constexpr std::size_t kExplosionDestroyedBricksOffset =
+        kExplosionBlastCellsOffset + kMaxExplosionBlastCells * kExplosionCellEntrySize;
+
     // ----- Message Types -----
 
     /** @brief Message type identifiers used in packet headers. */
@@ -204,7 +250,9 @@ namespace bomberman::net
 
         Input      = 0x10,
         Snapshot   = 0x11,
-        Correction = 0x12
+        Correction = 0x12,
+        BombPlaced = 0x13,
+        ExplosionResolved = 0x14
     };
 
     /** @brief Checks whether a raw byte value corresponds to a valid @ref EMsgType. */
@@ -216,7 +264,9 @@ namespace bomberman::net
                raw == static_cast<uint8_t>(EMsgType::LevelInfo)  ||
                raw == static_cast<uint8_t>(EMsgType::Input)      ||
                raw == static_cast<uint8_t>(EMsgType::Snapshot)   ||
-               raw == static_cast<uint8_t>(EMsgType::Correction);
+               raw == static_cast<uint8_t>(EMsgType::Correction) ||
+               raw == static_cast<uint8_t>(EMsgType::BombPlaced) ||
+               raw == static_cast<uint8_t>(EMsgType::ExplosionResolved);
     }
 
     /** @brief Returns a human-readable name for a protocol message type. */
@@ -232,6 +282,8 @@ namespace bomberman::net
             case EMsgType::Input:      return "Input";
             case EMsgType::Snapshot:   return "Snapshot";
             case EMsgType::Correction: return "Correction";
+            case EMsgType::BombPlaced: return "BombPlaced";
+            case EMsgType::ExplosionResolved: return "ExplosionResolved";
             default:                   return "Unknown";
         }
     }
@@ -257,9 +309,43 @@ namespace bomberman::net
                 return EChannel::SnapshotUnreliable;
             case EMsgType::Correction:
                 return EChannel::CorrectionUnreliable;
+            case EMsgType::BombPlaced:
+            case EMsgType::ExplosionResolved:
+                return EChannel::GameplayReliable;
             default:
                 return EChannel::ControlReliable;
         }
+    }
+
+    /** @brief Returns true when the given player-id bitmask uses only valid player bits. */
+    constexpr bool isValidPlayerMask(const uint8_t mask)
+    {
+        return (mask & static_cast<uint8_t>(~((1u << kMaxPlayers) - 1u))) == 0;
+    }
+
+    /** @brief Returns the payload offset of the explosion blast-cell entry at `index`. */
+    constexpr std::size_t explosionBlastCellOffset(std::size_t index)
+    {
+        return kExplosionBlastCellsOffset + index * kExplosionCellEntrySize;
+    }
+
+    /** @brief Returns the payload offset of the explosion destroyed-brick entry at `index`. */
+    constexpr std::size_t explosionDestroyedBrickOffset(std::size_t index)
+    {
+        return kExplosionDestroyedBricksOffset + index * kExplosionCellEntrySize;
+    }
+
+    /** @brief Returns true when the given cell lies within the current tile-map bounds. */
+    constexpr bool isValidTileCell(const uint8_t col, const uint8_t row)
+    {
+        return col < ::bomberman::tileArrayWidth && row < ::bomberman::tileArrayHeight;
+    }
+
+    /** @brief Packs one tile cell into a monotonic key for ordering and deduplication. */
+    constexpr uint16_t tileCellKey(const uint8_t col, const uint8_t row)
+    {
+        return static_cast<uint16_t>(row) * static_cast<uint16_t>(::bomberman::tileArrayWidth) +
+               static_cast<uint16_t>(col);
     }
 
     /** @brief Returns true when a message was received on its expected ENet channel. */
@@ -284,6 +370,8 @@ namespace bomberman::net
             case EMsgType::Input:      return kMsgInputSize;
             case EMsgType::Snapshot:   return kMsgSnapshotSize;
             case EMsgType::Correction: return kMsgCorrectionSize;
+            case EMsgType::BombPlaced: return kMsgBombPlacedSize;
+            case EMsgType::ExplosionResolved: return kMsgExplosionResolvedSize;
             default:                   return 0;
         }
     }
@@ -336,7 +424,7 @@ namespace bomberman::net
             VersionMismatch = 0x01,
             ServerFull = 0x02,
             Banned = 0x03,
-            // TODO: Game Ongoing
+            GameInProgress = 0x04,
             Other = 0xFF
         };
 
@@ -372,6 +460,13 @@ namespace bomberman::net
         uint8_t inputs[kMaxInputBatchSize]{};   ///< Button bitmasks, zero-padded beyond count.
     };
 
+    /** @brief Compact tile cell payload reused by reliable gameplay events. */
+    struct MsgCell
+    {
+        uint8_t col = 0;                        ///< Tile-map column.
+        uint8_t row = 0;                        ///< Tile-map row.
+    };
+
     /**
      * @brief Snapshot payload broadcast by the server to all clients.
      *
@@ -399,12 +494,14 @@ namespace bomberman::net
             {
                 None = 0x00,            ///< No replicated player flags are set.
                 Alive = 0x01,           ///< Player is alive if set, dead if unset.
-                Invulnerable = 0x02     ///< Player is invulnerable if set (e.g. spawn protection).
+                Invulnerable = 0x02,    ///< Player is invulnerable if set (e.g. spawn protection).
+                InputLocked = 0x04      ///< Player input/movement is server-locked if set.
             };
 
             static constexpr uint8_t kKnownFlags =
                 static_cast<uint8_t>(EPlayerFlags::Alive) |
-                static_cast<uint8_t>(EPlayerFlags::Invulnerable);
+                static_cast<uint8_t>(EPlayerFlags::Invulnerable) |
+                static_cast<uint8_t>(EPlayerFlags::InputLocked);
 
             EPlayerFlags flags = EPlayerFlags::None; ///< Player alive status and other state flags.
         };
@@ -435,6 +532,43 @@ namespace bomberman::net
         uint32_t lastProcessedInputSeq = 0; ///< Highest input seq the server has processed for this player.
         int16_t xQ = 0;                     ///< Corrected X position in tile-space Q8.
         int16_t yQ = 0;                     ///< Corrected Y position in tile-space Q8.
+    };
+
+    /**
+     * @brief Reliable discrete bomb-placement event sent by the server.
+     *
+     * This message is presentation-focused. Snapshots remain the long-lived
+     * authority for bomb existence and membership.
+     */
+    struct MsgBombPlaced
+    {
+        uint32_t serverTick = 0;            ///< Server tick at which the bomb placement was accepted.
+        uint32_t explodeTick = 0;           ///< Server tick at which this bomb is scheduled to explode.
+        uint8_t ownerId = 0;                ///< Player identifier [0, kMaxPlayers) that owns this bomb.
+        uint8_t col = 0;                    ///< Tile-map column occupied by the bomb.
+        uint8_t row = 0;                    ///< Tile-map row occupied by the bomb.
+        uint8_t radius = 0;                 ///< Explosion radius snapped at placement time.
+    };
+
+    /**
+     * @brief Reliable authoritative explosion-resolution event sent by the server.
+     *
+     * Carries the resolved blast footprint and the set of bricks destroyed by
+     * the detonation so connected clients can update world presentation
+     * immediately without waiting for a future snapshot extension.
+     */
+    struct MsgExplosionResolved
+    {
+        uint32_t serverTick = 0;                ///< Server tick at which the bomb explosion resolved.
+        uint8_t ownerId = 0;                    ///< Player identifier [0, kMaxPlayers) that owned the bomb.
+        uint8_t originCol = 0;                  ///< Explosion origin column.
+        uint8_t originRow = 0;                  ///< Explosion origin row.
+        uint8_t radius = 0;                     ///< Radius snapped from the bomb that detonated.
+        uint8_t killedPlayerMask = 0;           ///< Bitmask of player ids killed by this resolved explosion.
+        uint8_t blastCellCount = 0;             ///< Number of valid entries stored in `blastCells`.
+        uint8_t destroyedBrickCount = 0;        ///< Number of valid entries stored in `destroyedBricks`.
+        MsgCell blastCells[kMaxExplosionBlastCells]{};              ///< Blast footprint cells in propagation order.
+        MsgCell destroyedBricks[kMaxExplosionDestroyedBricks]{};    ///< Brick cells destroyed by this detonation.
     };
 
     // =================================================================================================================
@@ -655,6 +789,7 @@ namespace bomberman::net
                 break;
             case MsgReject::EReason::ServerFull:
             case MsgReject::EReason::Banned:
+            case MsgReject::EReason::GameInProgress:
             case MsgReject::EReason::Other:
                 outReject.expectedProtocolVersion = 0;
                 break;
@@ -900,6 +1035,188 @@ namespace bomberman::net
         return true;
     }
 
+    /** @brief Serializes `MsgBombPlaced` to fixed-size wire payload. */
+    inline void serializeMsgBombPlaced(const MsgBombPlaced& bombPlaced, uint8_t* out) noexcept
+    {
+        writeU32LE(out, bombPlaced.serverTick);
+        writeU32LE(out + 4, bombPlaced.explodeTick);
+        out[8] = bombPlaced.ownerId;
+        out[9] = bombPlaced.col;
+        out[10] = bombPlaced.row;
+        out[11] = bombPlaced.radius;
+    }
+
+    /** @brief Deserializes `MsgBombPlaced` from fixed-size wire payload. */
+    [[nodiscard]]
+    inline bool deserializeMsgBombPlaced(const uint8_t* in, std::size_t inSize, MsgBombPlaced& outBombPlaced)
+    {
+        if (inSize < kMsgBombPlacedSize)
+        {
+            return false;
+        }
+
+        outBombPlaced.serverTick = readU32LE(in);
+        outBombPlaced.explodeTick = readU32LE(in + 4);
+        outBombPlaced.ownerId = in[8];
+        outBombPlaced.col = in[9];
+        outBombPlaced.row = in[10];
+        outBombPlaced.radius = in[11];
+
+        if (outBombPlaced.ownerId >= kMaxPlayers)
+        {
+            return false;
+        }
+        if (!isValidTileCell(outBombPlaced.col, outBombPlaced.row))
+        {
+            return false;
+        }
+        if (outBombPlaced.radius == 0 || outBombPlaced.explodeTick < outBombPlaced.serverTick)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    /** @brief Serializes `MsgExplosionResolved` to fixed-size wire payload. */
+    inline void serializeMsgExplosionResolved(const MsgExplosionResolved& explosion, uint8_t* out) noexcept
+    {
+        writeU32LE(out, explosion.serverTick);
+        out[4] = explosion.ownerId;
+        out[5] = explosion.originCol;
+        out[6] = explosion.originRow;
+        out[7] = explosion.radius;
+        out[8] = explosion.killedPlayerMask;
+        out[9] = static_cast<uint8_t>((explosion.blastCellCount <= kMaxExplosionBlastCells) ?
+            explosion.blastCellCount :
+            kMaxExplosionBlastCells);
+        out[10] = static_cast<uint8_t>((explosion.destroyedBrickCount <= kMaxExplosionDestroyedBricks) ?
+            explosion.destroyedBrickCount :
+            kMaxExplosionDestroyedBricks);
+
+        for (std::size_t i = 0; i < kMaxExplosionBlastCells; ++i)
+        {
+            const std::size_t offset = explosionBlastCellOffset(i);
+            out[offset] = explosion.blastCells[i].col;
+            out[offset + 1] = explosion.blastCells[i].row;
+        }
+
+        for (std::size_t i = 0; i < kMaxExplosionDestroyedBricks; ++i)
+        {
+            const std::size_t offset = explosionDestroyedBrickOffset(i);
+            out[offset] = explosion.destroyedBricks[i].col;
+            out[offset + 1] = explosion.destroyedBricks[i].row;
+        }
+    }
+
+    /** @brief Deserializes `MsgExplosionResolved` from fixed-size wire payload. */
+    [[nodiscard]]
+    inline bool deserializeMsgExplosionResolved(const uint8_t* in,
+                                                std::size_t inSize,
+                                                MsgExplosionResolved& outExplosion)
+    {
+        if (inSize < kMsgExplosionResolvedSize)
+        {
+            return false;
+        }
+
+        outExplosion.serverTick = readU32LE(in);
+        outExplosion.ownerId = in[4];
+        outExplosion.originCol = in[5];
+        outExplosion.originRow = in[6];
+        outExplosion.radius = in[7];
+        outExplosion.killedPlayerMask = in[8];
+        outExplosion.blastCellCount = in[9];
+        outExplosion.destroyedBrickCount = in[10];
+
+        if (outExplosion.ownerId >= kMaxPlayers)
+        {
+            return false;
+        }
+        if (!isValidTileCell(outExplosion.originCol, outExplosion.originRow))
+        {
+            return false;
+        }
+        if (outExplosion.radius == 0)
+        {
+            return false;
+        }
+        if (!isValidPlayerMask(outExplosion.killedPlayerMask))
+        {
+            return false;
+        }
+        if (outExplosion.blastCellCount == 0 || outExplosion.blastCellCount > kMaxExplosionBlastCells)
+        {
+            return false;
+        }
+        if (outExplosion.destroyedBrickCount > kMaxExplosionDestroyedBricks ||
+            outExplosion.destroyedBrickCount > outExplosion.blastCellCount)
+        {
+            return false;
+        }
+
+        std::array<bool, static_cast<std::size_t>(::bomberman::tileArrayWidth) *
+                              static_cast<std::size_t>(::bomberman::tileArrayHeight)> seenBlastCells{};
+        std::array<bool, static_cast<std::size_t>(::bomberman::tileArrayWidth) *
+                              static_cast<std::size_t>(::bomberman::tileArrayHeight)> seenDestroyedBricks{};
+
+        for (std::size_t i = 0; i < kMaxExplosionBlastCells; ++i)
+        {
+            const std::size_t offset = explosionBlastCellOffset(i);
+            auto& cell = outExplosion.blastCells[i];
+            cell.col = in[offset];
+            cell.row = in[offset + 1];
+
+            if (i < outExplosion.blastCellCount)
+            {
+                if (!isValidTileCell(cell.col, cell.row))
+                {
+                    return false;
+                }
+
+                const std::size_t cellIndex = tileCellKey(cell.col, cell.row);
+                if (seenBlastCells[cellIndex])
+                {
+                    return false;
+                }
+
+                seenBlastCells[cellIndex] = true;
+            }
+        }
+
+        if (outExplosion.blastCells[0].col != outExplosion.originCol ||
+            outExplosion.blastCells[0].row != outExplosion.originRow)
+        {
+            return false;
+        }
+
+        for (std::size_t i = 0; i < kMaxExplosionDestroyedBricks; ++i)
+        {
+            const std::size_t offset = explosionDestroyedBrickOffset(i);
+            auto& cell = outExplosion.destroyedBricks[i];
+            cell.col = in[offset];
+            cell.row = in[offset + 1];
+
+            if (i < outExplosion.destroyedBrickCount)
+            {
+                if (!isValidTileCell(cell.col, cell.row))
+                {
+                    return false;
+                }
+
+                const std::size_t cellIndex = tileCellKey(cell.col, cell.row);
+                if (!seenBlastCells[cellIndex] || seenDestroyedBricks[cellIndex])
+                {
+                    return false;
+                }
+
+                seenDestroyedBricks[cellIndex] = true;
+            }
+        }
+
+        return true;
+    }
+
     // =================================================================================================================
     // ===== Packet Builders ===========================================================================================
     // =================================================================================================================
@@ -1010,6 +1327,35 @@ namespace bomberman::net
         std::array<uint8_t, kPacketHeaderSize + kMsgCorrectionSize> bytes{};
         serializeHeader(header, bytes.data());
         serializeMsgCorrection(corr, bytes.data() + kPacketHeaderSize);
+
+        return bytes;
+    }
+
+    /** @brief Builds a full BombPlaced packet (header + payload). */
+    inline std::array<uint8_t, kPacketHeaderSize + kMsgBombPlacedSize> makeBombPlacedPacket(const MsgBombPlaced& bombPlaced)
+    {
+        PacketHeader header{};
+        header.type = EMsgType::BombPlaced;
+        header.payloadSize = static_cast<uint16_t>(kMsgBombPlacedSize);
+
+        std::array<uint8_t, kPacketHeaderSize + kMsgBombPlacedSize> bytes{};
+        serializeHeader(header, bytes.data());
+        serializeMsgBombPlaced(bombPlaced, bytes.data() + kPacketHeaderSize);
+
+        return bytes;
+    }
+
+    /** @brief Builds a full ExplosionResolved packet (header + payload). */
+    inline std::array<uint8_t, kPacketHeaderSize + kMsgExplosionResolvedSize> makeExplosionResolvedPacket(
+        const MsgExplosionResolved& explosion)
+    {
+        PacketHeader header{};
+        header.type = EMsgType::ExplosionResolved;
+        header.payloadSize = static_cast<uint16_t>(kMsgExplosionResolvedSize);
+
+        std::array<uint8_t, kPacketHeaderSize + kMsgExplosionResolvedSize> bytes{};
+        serializeHeader(header, bytes.data());
+        serializeMsgExplosionResolved(explosion, bytes.data() + kPacketHeaderSize);
 
         return bytes;
     }

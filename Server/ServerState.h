@@ -138,6 +138,7 @@ namespace bomberman::server
         uint8_t playerId = 0;       ///< Stable authoritative player seat in [0, net::kMaxPlayers).
         sim::TilePos pos{};         ///< Authoritative center position in tile-space Q8.
         bool alive = true;          ///< True while this player is alive in the current round.
+        bool inputLocked = false;   ///< True while the server disallows gameplay input and movement for this player.
         uint8_t activeBombCount = 0; ///< Number of currently active bombs owned by this player.
         uint8_t maxBombs = sim::kDefaultPlayerMaxBombs; ///< Current bomb-cap loadout.
         uint8_t bombRange = sim::kDefaultPlayerBombRange; ///< Current blast-radius loadout.
@@ -223,6 +224,8 @@ namespace bomberman::server
         // TODO: Promote this from per-session to per-round once lobby/match flow exists, while keeping the CLI override path.
         uint32_t mapSeed = 0; ///< Seed used to generate the current authoritative tile map for this round.
         sim::TileMap tiles{}; ///< Authoritative collision map shared by all server-side movement steps.
+        std::optional<uint8_t> roundWinnerPlayerId{}; ///< Winner of the current or most recent round, if one exists.
+        bool roundEndedInDraw = false; ///< True when the current or most recent round ended with no surviving player.
 
         // TODO: Feed phase transitions and derived idle state into NetDiagnostics once lobby flow exists.
         net::NetDiagnostics diag; ///< Diagnostics recorder for this session.

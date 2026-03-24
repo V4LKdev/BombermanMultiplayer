@@ -74,6 +74,7 @@ namespace bomberman::net
                 case NetSimulationEventType::Gap:              return "Gap";
                 case NetSimulationEventType::BufferedRecovery: return "BufferedRecovery";
                 case NetSimulationEventType::BombPlaced:       return "BombPlaced";
+                case NetSimulationEventType::RoundEnded:       return "RoundEnded";
                 default:                                       return "Unknown";
             }
         }
@@ -423,6 +424,50 @@ namespace bomberman::net
         recordRecentEvent(std::move(event));
     }
 
+    void NetDiagnostics::recordBricksDestroyed(const uint32_t count)
+    {
+        if (!enabled_ || !sessionActive_ || count == 0)
+            return;
+
+        summary_.bricksDestroyed += count;
+    }
+
+    void NetDiagnostics::recordRoundEnded(const std::optional<uint8_t> winnerPlayerId,
+                                          const bool endedInDraw,
+                                          const uint32_t serverTick)
+    {
+        if (!enabled_ || !sessionActive_)
+            return;
+
+        summary_.roundsEnded++;
+        if (endedInDraw)
+        {
+            summary_.roundsDrawn++;
+        }
+        else if (winnerPlayerId.has_value() && winnerPlayerId.value() < kMaxPlayers)
+        {
+            summary_.roundWinsByPeer[winnerPlayerId.value()]++;
+        }
+
+        NetEvent event{};
+        event.type = NetEventType::Simulation;
+        event.timestampMs = nowMs();
+        event.simulationType = NetSimulationEventType::RoundEnded;
+        event.peerId = winnerPlayerId.value_or(0xFF);
+        event.detailA = endedInDraw ? 1u : 0u;
+        event.detailB = serverTick;
+        recordRecentEvent(std::move(event));
+    }
+
+    void NetDiagnostics::recordRejectReason(const MsgReject::EReason reason)
+    {
+        if (!enabled_ || !sessionActive_)
+            return;
+
+        if (reason == MsgReject::EReason::GameInProgress)
+            summary_.helloRejectsGameInProgress++;
+    }
+
     void NetDiagnostics::samplePeerTransport(const uint8_t peerId,
                                              const uint32_t rttMs,
                                              const uint32_t rttVarianceMs,
@@ -536,6 +581,18 @@ namespace bomberman::net
         writeKeyValue("simulation_gaps", summary_.simulationGaps);
         writeKeyValue("buffered_input_recoveries", summary_.bufferedInputRecoveries);
         writeKeyValue("bombs_placed", summary_.bombsPlaced);
+        writeKeyValue("bricks_destroyed", summary_.bricksDestroyed);
+        writeKeyValue("rounds_ended", summary_.roundsEnded);
+        writeKeyValue("rounds_drawn", summary_.roundsDrawn);
+        writeKeyValue("hello_rejects_game_in_progress", summary_.helloRejectsGameInProgress);
+        out << "round_wins_by_peer=";
+        for (std::size_t i = 0; i < summary_.roundWinsByPeer.size(); ++i)
+        {
+            if (i > 0)
+                out << ',';
+            out << summary_.roundWinsByPeer[i];
+        }
+        out << '\n';
         out << '\n';
 
         writeSectionHeader("Per-peer input continuity");
@@ -688,6 +745,13 @@ namespace bomberman::net
                                 << static_cast<int>(unpackBombPlacementRow(event.detailA))
                                 << ')'
                                 << " radius=" << static_cast<int>(unpackBombPlacementRadius(event.detailA));
+                        }
+                        else if (event.simulationType == NetSimulationEventType::RoundEnded)
+                        {
+                            if (event.detailA != 0)
+                                out << " result=draw";
+                            else
+                                out << " winner_peer=" << static_cast<int>(event.peerId);
                         }
                         else if (event.seq != 0)
                         {

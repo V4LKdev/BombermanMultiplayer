@@ -263,6 +263,9 @@ namespace bomberman
                         case net::MsgReject::EReason::Banned:
                             setConnectStatus("Access denied", {220, 80, 80, 255});
                             break;
+                        case net::MsgReject::EReason::GameInProgress:
+                            setConnectStatus("Match already running", {220, 80, 80, 255});
+                            break;
                         case net::MsgReject::EReason::Other:
                         default:
                             setConnectStatus("Connection rejected", {220, 80, 80, 255});
