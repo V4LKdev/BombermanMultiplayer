@@ -168,6 +168,17 @@ namespace bomberman::net
         [[nodiscard]]
         bool sendLobbyReady(bool ready) const;
 
+        /**
+         * @brief Acknowledges that the gameplay scene for `matchId` has been constructed locally.
+         *
+         * This is a low-frequency reliable control message used only during the
+         * authoritative match-start bootstrap.
+         *
+         * @return `true` if the request was queued successfully.
+         */
+        [[nodiscard]]
+        bool sendMatchLoaded(uint32_t matchId) const;
+
         /** @brief Flushes any queued outgoing ENet packets immediately. */
         void flushOutgoing() const;
 
@@ -202,6 +213,16 @@ namespace bomberman::net
          */
         [[nodiscard]]
         bool tryGetLatestLobbyState(MsgLobbyState& out) const;
+
+        /**
+         * @brief Consumes the newest unhandled LevelInfo bootstrap for the current session.
+         *
+         * Returns `false` until a newer bootstrap arrives. Once returned
+         * successfully, the same cached bootstrap is not returned again until a
+         * later `LevelInfo` replaces it.
+         */
+        [[nodiscard]]
+        bool consumePendingLevelInfo(MsgLevelInfo& out);
 
         /**
          * @brief Copies the newest cached snapshot for the current session.
@@ -283,6 +304,22 @@ namespace bomberman::net
         [[nodiscard]]
         uint32_t gameplaySilenceMs() const;
 
+        /** @brief Copies the newest cached match-start timing edge for the current session. */
+        [[nodiscard]]
+        bool tryGetLatestMatchStart(MsgMatchStart& out) const;
+
+        /** @brief Returns true after the server has explicitly started `matchId` for this session. */
+        [[nodiscard]]
+        bool hasMatchStarted(uint32_t matchId) const;
+
+        /** @brief Returns true after the server has explicitly cancelled `matchId` back to the lobby. */
+        [[nodiscard]]
+        bool isMatchCancelled(uint32_t matchId) const;
+
+        /** @brief Copies the newest cached authoritative match result for the current session. */
+        [[nodiscard]]
+        bool tryGetLatestMatchResult(MsgMatchResult& out) const;
+
         /**
          * @brief Returns the cached map seed from the current session's latest `LevelInfo`.
          *
@@ -332,6 +369,20 @@ namespace bomberman::net
         /** @brief Destroys ENet peer and host resources without changing logical state. */
         void destroyTransport() const;
 
+        /** @brief Clears the local per-match input sequence/history used for gameplay batching. */
+        void resetLocalInputStream();
+
+        /**
+         * @brief Resets local client state that must restart from a fresh baseline on each new match bootstrap.
+         *
+         * This currently includes local input sequencing plus gameplay receive timers.
+         * Future reconnect/bootstrap variants can replace this with a server-provided baseline.
+         */
+        void resetLocalMatchBootstrapState();
+
+        /** @brief Clears match-scoped caches so a newer bootstrap cannot inherit stale gameplay state. */
+        void clearActiveMatchRuntimeCaches();
+
         /**
          * @brief Clears per-attempt and per-session data without changing connection state.
          * @param clearRejectReason When false, preserves the current reject reason for UI/reporting.
@@ -354,6 +405,9 @@ namespace bomberman::net
         void handleReject(const uint8_t* payload, std::size_t payloadSize);
         void handleLevelInfo(const uint8_t* payload, std::size_t payloadSize);
         void handleLobbyState(const uint8_t* payload, std::size_t payloadSize) const;
+        void handleMatchStart(const uint8_t* payload, std::size_t payloadSize);
+        void handleMatchCancelled(const uint8_t* payload, std::size_t payloadSize);
+        void handleMatchResult(const uint8_t* payload, std::size_t payloadSize);
         void handleSnapshot(const uint8_t* payload, std::size_t payloadSize) const;
         void handleCorrection(const uint8_t* payload, std::size_t payloadSize) const;
         void handleBombPlaced(const uint8_t* payload, std::size_t payloadSize) const;

@@ -26,6 +26,7 @@ namespace bomberman::server
     net::MsgSnapshot buildSnapshot(const ServerState& state)
     {
         net::MsgSnapshot snapshot{};
+        snapshot.matchId = state.currentMatchId;
         snapshot.serverTick = state.serverTick;
 
         uint8_t playerCount = 0;

@@ -30,7 +30,7 @@ namespace bomberman::net
 
     // ----- Protocol Constants -----
 
-    constexpr uint16_t      kProtocolVersion = 7;
+    constexpr uint16_t      kProtocolVersion = 8;
 
     constexpr uint16_t      kDefaultServerPort = 12345;  ///< Default server port used by both client and server.
     constexpr std::size_t   kMaxPacketSize = 1400;       ///< Upper packet size bound (below typical 1500-byte MTU).
@@ -139,10 +139,28 @@ namespace bomberman::net
         sizeof(uint16_t);  // expectedProtocolVersion
 
     constexpr std::size_t kMsgLevelInfoSize =
-        sizeof(uint32_t);  // mapSeed
+        sizeof(uint32_t) +  // matchId
+        sizeof(uint32_t);   // mapSeed
 
     constexpr std::size_t kMsgLobbyReadySize =
         sizeof(uint8_t);   // ready
+
+    constexpr std::size_t kMsgMatchLoadedSize =
+        sizeof(uint32_t);  // matchId
+
+    constexpr std::size_t kMsgMatchStartSize =
+        sizeof(uint32_t) +  // matchId
+        sizeof(uint32_t) +  // goShowServerTick
+        sizeof(uint32_t);   // unlockServerTick
+
+    constexpr std::size_t kMsgMatchCancelledSize =
+        sizeof(uint32_t);  // matchId
+
+    constexpr std::size_t kMsgMatchResultSize =
+        sizeof(uint32_t) +  // matchId
+        sizeof(uint8_t) +   // result
+        sizeof(uint8_t) +   // winnerPlayerId
+        kPlayerNameMax;     // winnerName
 
     constexpr std::size_t kMsgLobbyStateSeatSize =
         sizeof(uint8_t) +  // flags
@@ -150,6 +168,9 @@ namespace bomberman::net
         kPlayerNameMax;    // name (fixed-size field)
 
     constexpr std::size_t kMsgLobbyStateSize =
+        sizeof(uint8_t) +   // phase
+        sizeof(uint8_t) +   // countdownSecondsRemaining
+        sizeof(uint16_t) +  // reserved
         kMaxPlayers * kMsgLobbyStateSeatSize;
 
     constexpr std::size_t kMsgInputSize =
@@ -158,6 +179,7 @@ namespace bomberman::net
         kMaxInputBatchSize; // inputs[kMaxInputBatchSize]
 
     constexpr std::size_t kMsgSnapshotSize =
+        sizeof(uint32_t) + // matchId
         sizeof(uint32_t) + // serverTick
         sizeof(uint8_t) +  // playerCount
         sizeof(uint8_t) +  // bombCount
@@ -173,12 +195,14 @@ namespace bomberman::net
              sizeof(uint8_t));   // radius
 
     constexpr std::size_t kMsgCorrectionSize =
+        sizeof(uint32_t) + // matchId
         sizeof(uint32_t) + // serverTick
         sizeof(uint32_t) + // lastProcessedInputSeq
         sizeof(int16_t) +  // xQ
         sizeof(int16_t);   // yQ
 
     constexpr std::size_t kMsgBombPlacedSize =
+        sizeof(uint32_t) + // matchId
         sizeof(uint32_t) + // serverTick
         sizeof(uint32_t) + // explodeTick
         sizeof(uint8_t) +  // ownerId
@@ -187,6 +211,7 @@ namespace bomberman::net
         sizeof(uint8_t);   // radius
 
     constexpr std::size_t kMsgExplosionResolvedSize =
+        sizeof(uint32_t) + // matchId
         sizeof(uint32_t) + // serverTick
         sizeof(uint8_t) +  // ownerId
         sizeof(uint8_t) +  // originCol
@@ -209,17 +234,22 @@ namespace bomberman::net
     static_assert(kMsgHelloSize      == 18,  "MsgHello size mismatch");
     static_assert(kMsgWelcomeSize    == 5,   "MsgWelcome size mismatch");
     static_assert(kMsgRejectSize     == 3,   "MsgReject size mismatch");
-    static_assert(kMsgLevelInfoSize  == 4,   "MsgLevelInfo size mismatch");
+    static_assert(kMsgLevelInfoSize  == 8,   "MsgLevelInfo size mismatch");
     static_assert(kMsgLobbyReadySize == 1,   "MsgLobbyReady size mismatch");
+    static_assert(kMsgMatchLoadedSize == 4,  "MsgMatchLoaded size mismatch");
+    static_assert(kMsgMatchStartSize == 12,  "MsgMatchStart size mismatch");
+    static_assert(kMsgMatchCancelledSize == 4, "MsgMatchCancelled size mismatch");
+    static_assert(kMsgMatchResultSize == 22, "MsgMatchResult size mismatch");
     static_assert(kMsgLobbyStateSeatSize == 18, "MsgLobbyState seat size mismatch");
-    static_assert(kMsgLobbyStateSize == 72, "MsgLobbyState size mismatch");
+    static_assert(kMsgLobbyStateSize == 76, "MsgLobbyState size mismatch");
     static_assert(kMsgInputSize      == 21,  "MsgInput size mismatch");
-    static_assert(kMsgSnapshotSize   == 94,  "MsgSnapshot size mismatch");
-    static_assert(kMsgCorrectionSize == 12,  "MsgCorrection size mismatch");
-    static_assert(kMsgBombPlacedSize == 12,  "MsgBombPlaced size mismatch");
-    static_assert(kMsgExplosionResolvedSize == 493, "MsgExplosionResolved size mismatch");
+    static_assert(kMsgSnapshotSize   == 98,  "MsgSnapshot size mismatch");
+    static_assert(kMsgCorrectionSize == 16,  "MsgCorrection size mismatch");
+    static_assert(kMsgBombPlacedSize == 16,  "MsgBombPlaced size mismatch");
+    static_assert(kMsgExplosionResolvedSize == 497, "MsgExplosionResolved size mismatch");
 
     constexpr std::size_t kSnapshotPlayersOffset =
+        sizeof(uint32_t) + // matchId
         sizeof(uint32_t) + // serverTick
         sizeof(uint8_t) +  // playerCount
         sizeof(uint8_t);   // bombCount
@@ -237,6 +267,7 @@ namespace bomberman::net
         sizeof(uint8_t);   // radius
 
     constexpr std::size_t kExplosionBlastCellsOffset =
+        sizeof(uint32_t) + // matchId
         sizeof(uint32_t) + // serverTick
         sizeof(uint8_t) +  // ownerId
         sizeof(uint8_t) +  // originCol
@@ -263,6 +294,10 @@ namespace bomberman::net
         LevelInfo  = 0x04,
         LobbyState = 0x05,
         LobbyReady = 0x06,
+        MatchLoaded = 0x07,
+        MatchStart = 0x08,
+        MatchCancelled = 0x09,
+        MatchResult = 0x0A,
 
         Input      = 0x10,
         Snapshot   = 0x11,
@@ -280,6 +315,10 @@ namespace bomberman::net
                raw == static_cast<uint8_t>(EMsgType::LevelInfo)  ||
                raw == static_cast<uint8_t>(EMsgType::LobbyState) ||
                raw == static_cast<uint8_t>(EMsgType::LobbyReady) ||
+               raw == static_cast<uint8_t>(EMsgType::MatchLoaded) ||
+               raw == static_cast<uint8_t>(EMsgType::MatchStart) ||
+               raw == static_cast<uint8_t>(EMsgType::MatchCancelled) ||
+               raw == static_cast<uint8_t>(EMsgType::MatchResult) ||
                raw == static_cast<uint8_t>(EMsgType::Input)      ||
                raw == static_cast<uint8_t>(EMsgType::Snapshot)   ||
                raw == static_cast<uint8_t>(EMsgType::Correction) ||
@@ -299,6 +338,10 @@ namespace bomberman::net
             case EMsgType::LevelInfo:  return "LevelInfo";
             case EMsgType::LobbyState: return "LobbyState";
             case EMsgType::LobbyReady: return "LobbyReady";
+            case EMsgType::MatchLoaded: return "MatchLoaded";
+            case EMsgType::MatchStart: return "MatchStart";
+            case EMsgType::MatchCancelled: return "MatchCancelled";
+            case EMsgType::MatchResult: return "MatchResult";
             case EMsgType::Input:      return "Input";
             case EMsgType::Snapshot:   return "Snapshot";
             case EMsgType::Correction: return "Correction";
@@ -311,7 +354,8 @@ namespace bomberman::net
     /**
      * @brief Returns the required ENet channel for a protocol message type.
      *
-     * @note `LevelInfo`, `LobbyState`, and `LobbyReady` all use reliable control
+     * @note `LevelInfo`, `LobbyState`, `LobbyReady`, `MatchLoaded`, `MatchStart`,
+     * and `MatchCancelled` all use reliable control
      * messages owned by higher-level session and match flow.
      */
     constexpr EChannel expectedChannelFor(EMsgType type)
@@ -324,6 +368,10 @@ namespace bomberman::net
             case EMsgType::LevelInfo:
             case EMsgType::LobbyState:
             case EMsgType::LobbyReady:
+            case EMsgType::MatchLoaded:
+            case EMsgType::MatchStart:
+            case EMsgType::MatchCancelled:
+            case EMsgType::MatchResult:
                 return EChannel::ControlReliable;
             case EMsgType::Input:
                 return EChannel::InputUnreliable;
@@ -340,9 +388,9 @@ namespace bomberman::net
     }
 
     /** @brief Returns true when the given player-id bitmask uses only valid player bits. */
-    constexpr bool isValidPlayerMask(const uint8_t mask)
+    constexpr bool isValidPlayerMask(const uint32_t mask)
     {
-        return (mask & static_cast<uint8_t>(~((1u << kMaxPlayers) - 1u))) == 0;
+        return (mask & ~((1u << kMaxPlayers) - 1u)) == 0;
     }
 
     /** @brief Returns the payload offset of the explosion blast-cell entry at `index`. */
@@ -391,6 +439,10 @@ namespace bomberman::net
             case EMsgType::LevelInfo:  return kMsgLevelInfoSize;
             case EMsgType::LobbyState: return kMsgLobbyStateSize;
             case EMsgType::LobbyReady: return kMsgLobbyReadySize;
+            case EMsgType::MatchLoaded: return kMsgMatchLoadedSize;
+            case EMsgType::MatchStart: return kMsgMatchStartSize;
+            case EMsgType::MatchCancelled: return kMsgMatchCancelledSize;
+            case EMsgType::MatchResult: return kMsgMatchResultSize;
             case EMsgType::Input:      return kMsgInputSize;
             case EMsgType::Snapshot:   return kMsgSnapshotSize;
             case EMsgType::Correction: return kMsgCorrectionSize;
@@ -458,14 +510,15 @@ namespace bomberman::net
     };
 
     /**
-     * @brief Match bootstrap payload sent reliably by the server when gameplay setup is needed.
+     * @brief Match bootstrap payload sent reliably by the server when a match begins.
      *
-     * @note This is a temporary handshake-adjacent bootstrap message. The
-     * current contract keeps it separate from `Welcome` so it can later move
-     * out of the handshake without changing the wire type itself.
+     * Carries the current authoritative match identifier and the map seed
+     * needed to instantiate the shared gameplay scene or later
+     * resync/reconnect into the same round.
      */
     struct MsgLevelInfo
     {
+        uint32_t matchId = 0; ///< Monotonic authoritative match identifier for this bootstrap.
         uint32_t mapSeed = 0; ///< 32-bit seed for the shared tile-map generator.
     };
 
@@ -473,6 +526,41 @@ namespace bomberman::net
     struct MsgLobbyReady
     {
         uint8_t ready = 0; ///< `1` marks ready, `0` clears ready.
+    };
+
+    /** @brief Client acknowledgement that the gameplay scene for one match bootstrap is loaded. */
+    struct MsgMatchLoaded
+    {
+        uint32_t matchId = 0; ///< Authoritative match identifier being acknowledged.
+    };
+
+    /** @brief Explicit reliable start edge sent once all current match participants have loaded. */
+    struct MsgMatchStart
+    {
+        uint32_t matchId = 0;          ///< Authoritative match identifier being started.
+        uint32_t goShowServerTick = 0; ///< Authoritative server tick at which `GO!` should appear.
+        uint32_t unlockServerTick = 0; ///< Authoritative server tick at which gameplay input unlocks.
+    };
+
+    /** @brief Explicit pre-start cancel edge sent when the current bootstrap is aborted back to lobby. */
+    struct MsgMatchCancelled
+    {
+        uint32_t matchId = 0; ///< Authoritative match identifier that was cancelled before start.
+    };
+
+    /** @brief Reliable end-of-match result edge sent before the automatic return to lobby. */
+    struct MsgMatchResult
+    {
+        enum class EResult : uint8_t
+        {
+            Draw = 0x00,
+            Win = 0x01
+        };
+
+        uint32_t matchId = 0;              ///< Authoritative match identifier that just ended.
+        EResult result = EResult::Draw;    ///< End-of-match result type.
+        uint8_t winnerPlayerId = 0xFF;     ///< Winning player id for `Win`, otherwise `0xFF`.
+        char winnerName[kPlayerNameMax]{}; ///< Winner display name for `Win`, otherwise zeroed.
     };
 
     /**
@@ -483,6 +571,12 @@ namespace bomberman::net
      */
     struct MsgLobbyState
     {
+        enum class EPhase : uint8_t
+        {
+            Idle = 0x00,
+            Countdown = 0x01
+        };
+
         struct SeatEntry
         {
             enum class ESeatFlags : uint8_t
@@ -501,6 +595,9 @@ namespace bomberman::net
             char name[kPlayerNameMax]{};         ///< Seat display name, NUL-terminated and zero-padded when occupied.
         };
 
+        EPhase phase = EPhase::Idle;           ///< Lobby presentation phase.
+        uint8_t countdownSecondsRemaining = 0; ///< Remaining whole countdown seconds during `Countdown`.
+        uint16_t reserved = 0;                 ///< Reserved for future lobby-flow wire extensions.
         SeatEntry seats[kMaxPlayers]{}; ///< Stable player-id keyed lobby seats.
     };
 
@@ -542,6 +639,7 @@ namespace bomberman::net
      */
     struct MsgSnapshot
     {
+        uint32_t matchId = 0;           ///< Authoritative match identifier that produced this snapshot.
         uint32_t serverTick = 0;        ///< Authoritative server tick at which this snapshot was produced.
         uint8_t playerCount = 0;        ///< Number of active entries stored in `players`.
         uint8_t bombCount = 0;          ///< Number of active entries stored in `bombs`.
@@ -590,6 +688,7 @@ namespace bomberman::net
      */
     struct MsgCorrection
     {
+        uint32_t matchId = 0;               ///< Authoritative match identifier that produced this correction.
         uint32_t serverTick = 0;            ///< Server tick at which this correction applies.
         uint32_t lastProcessedInputSeq = 0; ///< Highest input seq the server has processed for this player.
         int16_t xQ = 0;                     ///< Corrected X position in tile-space Q8.
@@ -604,6 +703,7 @@ namespace bomberman::net
      */
     struct MsgBombPlaced
     {
+        uint32_t matchId = 0;               ///< Authoritative match identifier that accepted this bomb placement.
         uint32_t serverTick = 0;            ///< Server tick at which the bomb placement was accepted.
         uint32_t explodeTick = 0;           ///< Server tick at which this bomb is scheduled to explode.
         uint8_t ownerId = 0;                ///< Player identifier [0, kMaxPlayers) that owns this bomb.
@@ -621,6 +721,7 @@ namespace bomberman::net
      */
     struct MsgExplosionResolved
     {
+        uint32_t matchId = 0;                   ///< Authoritative match identifier that resolved this explosion.
         uint32_t serverTick = 0;                ///< Server tick at which the bomb explosion resolved.
         uint8_t ownerId = 0;                    ///< Player identifier [0, kMaxPlayers) that owned the bomb.
         uint8_t originCol = 0;                  ///< Explosion origin column.
@@ -724,6 +825,13 @@ namespace bomberman::net
         return (flags & static_cast<uint8_t>(~MsgLobbyState::SeatEntry::kKnownFlags)) == 0;
     }
 
+    /** @brief Returns true when one lobby-state phase field contains a known encoding. */
+    constexpr bool isValidLobbyPhase(const uint8_t rawPhase)
+    {
+        return rawPhase == static_cast<uint8_t>(MsgLobbyState::EPhase::Idle) ||
+               rawPhase == static_cast<uint8_t>(MsgLobbyState::EPhase::Countdown);
+    }
+
     /** @brief Sets one lobby-seat display name with truncation and zero padding. */
     inline void setLobbySeatName(MsgLobbyState::SeatEntry& seat, std::string_view name)
     {
@@ -733,11 +841,27 @@ namespace bomberman::net
         std::memcpy(seat.name, name.data(), copyLen);
     }
 
+    /** @brief Sets one match-result winner display name with truncation and zero padding. */
+    inline void setMatchResultWinnerName(MsgMatchResult& matchResult, std::string_view name)
+    {
+        std::memset(matchResult.winnerName, 0, kPlayerNameMax);
+
+        const std::size_t copyLen = (name.size() < (kPlayerNameMax - 1)) ? name.size() : (kPlayerNameMax - 1);
+        std::memcpy(matchResult.winnerName, name.data(), copyLen);
+    }
+
     /** @brief Returns the visible lobby-seat display name. */
     [[nodiscard]]
     inline std::string_view lobbySeatName(const MsgLobbyState::SeatEntry& seat)
     {
         return std::string_view(seat.name, boundedStrLen(seat.name, kPlayerNameMax - 1));
+    }
+
+    /** @brief Returns the visible winner display name carried by one match-result payload. */
+    [[nodiscard]]
+    inline std::string_view matchResultWinnerName(const MsgMatchResult& matchResult)
+    {
+        return std::string_view(matchResult.winnerName, boundedStrLen(matchResult.winnerName, kPlayerNameMax - 1));
     }
 
     /** @brief Returns true when one lobby seat is currently occupied. */
@@ -752,6 +876,13 @@ namespace bomberman::net
     {
         return (static_cast<uint8_t>(seat.flags) &
                 static_cast<uint8_t>(MsgLobbyState::SeatEntry::ESeatFlags::Ready)) != 0;
+    }
+
+    /** @brief Returns true when the authoritative lobby is in the visible pre-match countdown phase. */
+    constexpr bool lobbyCountdownActive(const MsgLobbyState& lobbyState)
+    {
+        return lobbyState.phase == MsgLobbyState::EPhase::Countdown &&
+               lobbyState.countdownSecondsRemaining > 0;
     }
 
     // =================================================================================================================
@@ -901,7 +1032,8 @@ namespace bomberman::net
     /** @brief Serializes `MsgLevelInfo` to fixed-size wire payload. */
     inline void serializeMsgLevelInfo(const MsgLevelInfo& info, uint8_t* out) noexcept
     {
-        writeU32LE(out, info.mapSeed);
+        writeU32LE(out, info.matchId);
+        writeU32LE(out + 4, info.mapSeed);
     }
 
     /** @brief Deserializes `MsgLevelInfo` from fixed-size wire payload. */
@@ -912,7 +1044,12 @@ namespace bomberman::net
         {
             return false;
         }
-        outInfo.mapSeed = readU32LE(in);
+        outInfo.matchId = readU32LE(in);
+        outInfo.mapSeed = readU32LE(in + 4);
+        if (outInfo.matchId == 0)
+        {
+            return false;
+        }
         return true;
     }
 
@@ -946,12 +1083,125 @@ namespace bomberman::net
         return true;
     }
 
+    /** @brief Serializes `MsgMatchLoaded` to fixed-size wire payload. */
+    inline void serializeMsgMatchLoaded(const MsgMatchLoaded& loaded, uint8_t* out) noexcept
+    {
+        writeU32LE(out, loaded.matchId);
+    }
+
+    /** @brief Deserializes `MsgMatchLoaded` from fixed-size wire payload. */
+    [[nodiscard]]
+    inline bool deserializeMsgMatchLoaded(const uint8_t* in, std::size_t inSize, MsgMatchLoaded& outLoaded)
+    {
+        if (inSize < kMsgMatchLoadedSize)
+        {
+            return false;
+        }
+
+        outLoaded.matchId = readU32LE(in);
+        return outLoaded.matchId != 0;
+    }
+
+    /** @brief Serializes `MsgMatchStart` to fixed-size wire payload. */
+    inline void serializeMsgMatchStart(const MsgMatchStart& matchStart, uint8_t* out) noexcept
+    {
+        writeU32LE(out, matchStart.matchId);
+        writeU32LE(out + 4, matchStart.goShowServerTick);
+        writeU32LE(out + 8, matchStart.unlockServerTick);
+    }
+
+    /** @brief Deserializes `MsgMatchStart` from fixed-size wire payload. */
+    [[nodiscard]]
+    inline bool deserializeMsgMatchStart(const uint8_t* in, std::size_t inSize, MsgMatchStart& outMatchStart)
+    {
+        if (inSize < kMsgMatchStartSize)
+        {
+            return false;
+        }
+
+        outMatchStart.matchId = readU32LE(in);
+        outMatchStart.goShowServerTick = readU32LE(in + 4);
+        outMatchStart.unlockServerTick = readU32LE(in + 8);
+        return outMatchStart.matchId != 0 &&
+               outMatchStart.goShowServerTick != 0 &&
+               outMatchStart.unlockServerTick != 0 &&
+               outMatchStart.goShowServerTick <= outMatchStart.unlockServerTick;
+    }
+
+    /** @brief Serializes `MsgMatchCancelled` to fixed-size wire payload. */
+    inline void serializeMsgMatchCancelled(const MsgMatchCancelled& cancelled, uint8_t* out) noexcept
+    {
+        writeU32LE(out, cancelled.matchId);
+    }
+
+    /** @brief Deserializes `MsgMatchCancelled` from fixed-size wire payload. */
+    [[nodiscard]]
+    inline bool deserializeMsgMatchCancelled(const uint8_t* in,
+                                             std::size_t inSize,
+                                             MsgMatchCancelled& outCancelled)
+    {
+        if (inSize < kMsgMatchCancelledSize)
+        {
+            return false;
+        }
+
+        outCancelled.matchId = readU32LE(in);
+        return outCancelled.matchId != 0;
+    }
+
+    /** @brief Serializes `MsgMatchResult` to fixed-size wire payload. */
+    inline void serializeMsgMatchResult(const MsgMatchResult& matchResult, uint8_t* out) noexcept
+    {
+        writeU32LE(out, matchResult.matchId);
+        out[4] = static_cast<uint8_t>(matchResult.result);
+        out[5] = matchResult.winnerPlayerId;
+        std::memset(out + 6, 0, kPlayerNameMax);
+        const std::size_t nameLen = boundedStrLen(matchResult.winnerName, kPlayerNameMax - 1);
+        std::memcpy(out + 6, matchResult.winnerName, nameLen);
+    }
+
+    /** @brief Deserializes `MsgMatchResult` from fixed-size wire payload. */
+    [[nodiscard]]
+    inline bool deserializeMsgMatchResult(const uint8_t* in, std::size_t inSize, MsgMatchResult& outMatchResult)
+    {
+        if (inSize < kMsgMatchResultSize)
+        {
+            return false;
+        }
+
+        outMatchResult.matchId = readU32LE(in);
+        outMatchResult.result = static_cast<MsgMatchResult::EResult>(in[4]);
+        outMatchResult.winnerPlayerId = in[5];
+        std::memcpy(outMatchResult.winnerName, in + 6, kPlayerNameMax);
+        outMatchResult.winnerName[kPlayerNameMax - 1] = '\0';
+
+        switch (outMatchResult.result)
+        {
+            case MsgMatchResult::EResult::Draw:
+                outMatchResult.winnerPlayerId = 0xFF;
+                std::memset(outMatchResult.winnerName, 0, kPlayerNameMax);
+                return outMatchResult.matchId != 0;
+            case MsgMatchResult::EResult::Win:
+                if (outMatchResult.matchId == 0 || outMatchResult.winnerPlayerId >= kMaxPlayers)
+                {
+                    return false;
+                }
+                return !matchResultWinnerName(outMatchResult).empty();
+            default:
+                return false;
+        }
+    }
+
     /** @brief Serializes `MsgLobbyState` to fixed-size wire payload. */
     inline void serializeMsgLobbyState(const MsgLobbyState& lobbyState, uint8_t* out) noexcept
     {
+        out[0] = static_cast<uint8_t>(lobbyState.phase);
+        out[1] = lobbyState.countdownSecondsRemaining;
+        writeU16LE(out + 2, 0);
+
         for (std::size_t i = 0; i < kMaxPlayers; ++i)
         {
-            const auto offset = i * kMsgLobbyStateSeatSize;
+            const auto offset = 4 + i * kMsgLobbyStateSeatSize;
             const auto& seat = lobbyState.seats[i];
 
             out[offset] = static_cast<uint8_t>(seat.flags);
@@ -971,9 +1221,22 @@ namespace bomberman::net
             return false;
         }
 
+        if (!isValidLobbyPhase(in[0]))
+        {
+            return false;
+        }
+
+        outLobbyState.phase = static_cast<MsgLobbyState::EPhase>(in[0]);
+        outLobbyState.countdownSecondsRemaining = in[1];
+        outLobbyState.reserved = readU16LE(in + 2);
+        if (outLobbyState.phase != MsgLobbyState::EPhase::Countdown)
+        {
+            outLobbyState.countdownSecondsRemaining = 0;
+        }
+
         for (std::size_t i = 0; i < kMaxPlayers; ++i)
         {
-            const auto offset = i * kMsgLobbyStateSeatSize;
+            const auto offset = 4 + i * kMsgLobbyStateSeatSize;
             auto& seat = outLobbyState.seats[i];
 
             const uint8_t rawFlags = in[offset];
@@ -1062,11 +1325,12 @@ namespace bomberman::net
      */
     inline void serializeMsgSnapshot(const MsgSnapshot& snap, uint8_t* out) noexcept
     {
-        writeU32LE(out, snap.serverTick);
+        writeU32LE(out, snap.matchId);
+        writeU32LE(out + 4, snap.serverTick);
         const uint8_t playerCount = (snap.playerCount <= kMaxPlayers) ? snap.playerCount : kMaxPlayers;
         const uint8_t bombCount = (snap.bombCount <= kMaxSnapshotBombs) ? snap.bombCount : kMaxSnapshotBombs;
-        out[4] = playerCount;
-        out[5] = bombCount;
+        out[8] = playerCount;
+        out[9] = bombCount;
 
         for (std::size_t i = 0; i < kMaxPlayers; ++i)
         {
@@ -1098,9 +1362,10 @@ namespace bomberman::net
             return false;
         }
 
-        outSnap.serverTick = readU32LE(in);
-        outSnap.playerCount = in[4];
-        outSnap.bombCount = in[5];
+        outSnap.matchId = readU32LE(in);
+        outSnap.serverTick = readU32LE(in + 4);
+        outSnap.playerCount = in[8];
+        outSnap.bombCount = in[9];
         if (outSnap.playerCount > kMaxPlayers)
         {
             return false;
@@ -1198,10 +1463,11 @@ namespace bomberman::net
     /** @brief Serializes `MsgCorrection` to fixed-size wire payload. */
     inline void serializeMsgCorrection(const MsgCorrection& corr, uint8_t* out) noexcept
     {
-        writeU32LE(out, corr.serverTick);
-        writeU32LE(out + 4, corr.lastProcessedInputSeq);
-        writeU16LE(out + 8, static_cast<uint16_t>(corr.xQ));
-        writeU16LE(out + 10, static_cast<uint16_t>(corr.yQ));
+        writeU32LE(out, corr.matchId);
+        writeU32LE(out + 4, corr.serverTick);
+        writeU32LE(out + 8, corr.lastProcessedInputSeq);
+        writeU16LE(out + 12, static_cast<uint16_t>(corr.xQ));
+        writeU16LE(out + 14, static_cast<uint16_t>(corr.yQ));
     }
 
     /** @brief Deserializes `MsgCorrection` from fixed-size wire payload. */
@@ -1212,22 +1478,24 @@ namespace bomberman::net
         {
             return false;
         }
-        outCorr.serverTick = readU32LE(in);
-        outCorr.lastProcessedInputSeq = readU32LE(in + 4);
-        outCorr.xQ = static_cast<int16_t>(readU16LE(in + 8));
-        outCorr.yQ = static_cast<int16_t>(readU16LE(in + 10));
+        outCorr.matchId = readU32LE(in);
+        outCorr.serverTick = readU32LE(in + 4);
+        outCorr.lastProcessedInputSeq = readU32LE(in + 8);
+        outCorr.xQ = static_cast<int16_t>(readU16LE(in + 12));
+        outCorr.yQ = static_cast<int16_t>(readU16LE(in + 14));
         return true;
     }
 
     /** @brief Serializes `MsgBombPlaced` to fixed-size wire payload. */
     inline void serializeMsgBombPlaced(const MsgBombPlaced& bombPlaced, uint8_t* out) noexcept
     {
-        writeU32LE(out, bombPlaced.serverTick);
-        writeU32LE(out + 4, bombPlaced.explodeTick);
-        out[8] = bombPlaced.ownerId;
-        out[9] = bombPlaced.col;
-        out[10] = bombPlaced.row;
-        out[11] = bombPlaced.radius;
+        writeU32LE(out, bombPlaced.matchId);
+        writeU32LE(out + 4, bombPlaced.serverTick);
+        writeU32LE(out + 8, bombPlaced.explodeTick);
+        out[12] = bombPlaced.ownerId;
+        out[13] = bombPlaced.col;
+        out[14] = bombPlaced.row;
+        out[15] = bombPlaced.radius;
     }
 
     /** @brief Deserializes `MsgBombPlaced` from fixed-size wire payload. */
@@ -1239,12 +1507,13 @@ namespace bomberman::net
             return false;
         }
 
-        outBombPlaced.serverTick = readU32LE(in);
-        outBombPlaced.explodeTick = readU32LE(in + 4);
-        outBombPlaced.ownerId = in[8];
-        outBombPlaced.col = in[9];
-        outBombPlaced.row = in[10];
-        outBombPlaced.radius = in[11];
+        outBombPlaced.matchId = readU32LE(in);
+        outBombPlaced.serverTick = readU32LE(in + 4);
+        outBombPlaced.explodeTick = readU32LE(in + 8);
+        outBombPlaced.ownerId = in[12];
+        outBombPlaced.col = in[13];
+        outBombPlaced.row = in[14];
+        outBombPlaced.radius = in[15];
 
         if (outBombPlaced.ownerId >= kMaxPlayers)
         {
@@ -1265,16 +1534,17 @@ namespace bomberman::net
     /** @brief Serializes `MsgExplosionResolved` to fixed-size wire payload. */
     inline void serializeMsgExplosionResolved(const MsgExplosionResolved& explosion, uint8_t* out) noexcept
     {
-        writeU32LE(out, explosion.serverTick);
-        out[4] = explosion.ownerId;
-        out[5] = explosion.originCol;
-        out[6] = explosion.originRow;
-        out[7] = explosion.radius;
-        out[8] = explosion.killedPlayerMask;
-        out[9] = static_cast<uint8_t>((explosion.blastCellCount <= kMaxExplosionBlastCells) ?
+        writeU32LE(out, explosion.matchId);
+        writeU32LE(out + 4, explosion.serverTick);
+        out[8] = explosion.ownerId;
+        out[9] = explosion.originCol;
+        out[10] = explosion.originRow;
+        out[11] = explosion.radius;
+        out[12] = explosion.killedPlayerMask;
+        out[13] = static_cast<uint8_t>((explosion.blastCellCount <= kMaxExplosionBlastCells) ?
             explosion.blastCellCount :
             kMaxExplosionBlastCells);
-        out[10] = static_cast<uint8_t>((explosion.destroyedBrickCount <= kMaxExplosionDestroyedBricks) ?
+        out[14] = static_cast<uint8_t>((explosion.destroyedBrickCount <= kMaxExplosionDestroyedBricks) ?
             explosion.destroyedBrickCount :
             kMaxExplosionDestroyedBricks);
 
@@ -1304,14 +1574,15 @@ namespace bomberman::net
             return false;
         }
 
-        outExplosion.serverTick = readU32LE(in);
-        outExplosion.ownerId = in[4];
-        outExplosion.originCol = in[5];
-        outExplosion.originRow = in[6];
-        outExplosion.radius = in[7];
-        outExplosion.killedPlayerMask = in[8];
-        outExplosion.blastCellCount = in[9];
-        outExplosion.destroyedBrickCount = in[10];
+        outExplosion.matchId = readU32LE(in);
+        outExplosion.serverTick = readU32LE(in + 4);
+        outExplosion.ownerId = in[8];
+        outExplosion.originCol = in[9];
+        outExplosion.originRow = in[10];
+        outExplosion.radius = in[11];
+        outExplosion.killedPlayerMask = in[12];
+        outExplosion.blastCellCount = in[13];
+        outExplosion.destroyedBrickCount = in[14];
 
         if (outExplosion.ownerId >= kMaxPlayers)
         {
@@ -1491,6 +1762,93 @@ namespace bomberman::net
         MsgLobbyReady msg{};
         msg.ready = ready ? 1u : 0u;
         return makeLobbyReadyPacket(msg);
+    }
+
+    /** @brief Builds a full MatchLoaded packet (header + payload). */
+    inline std::array<uint8_t, kPacketHeaderSize + kMsgMatchLoadedSize> makeMatchLoadedPacket(const MsgMatchLoaded& loaded)
+    {
+        PacketHeader header{};
+        header.type = EMsgType::MatchLoaded;
+        header.payloadSize = static_cast<uint16_t>(kMsgMatchLoadedSize);
+
+        std::array<uint8_t, kPacketHeaderSize + kMsgMatchLoadedSize> bytes{};
+        serializeHeader(header, bytes.data());
+        serializeMsgMatchLoaded(loaded, bytes.data() + kPacketHeaderSize);
+
+        return bytes;
+    }
+
+    /** @brief Convenience overload building MatchLoaded directly from a match identifier. */
+    inline std::array<uint8_t, kPacketHeaderSize + kMsgMatchLoadedSize> makeMatchLoadedPacket(const uint32_t matchId)
+    {
+        MsgMatchLoaded loaded{};
+        loaded.matchId = matchId;
+        return makeMatchLoadedPacket(loaded);
+    }
+
+    /** @brief Builds a full MatchStart packet (header + payload). */
+    inline std::array<uint8_t, kPacketHeaderSize + kMsgMatchStartSize> makeMatchStartPacket(const MsgMatchStart& matchStart)
+    {
+        PacketHeader header{};
+        header.type = EMsgType::MatchStart;
+        header.payloadSize = static_cast<uint16_t>(kMsgMatchStartSize);
+
+        std::array<uint8_t, kPacketHeaderSize + kMsgMatchStartSize> bytes{};
+        serializeHeader(header, bytes.data());
+        serializeMsgMatchStart(matchStart, bytes.data() + kPacketHeaderSize);
+
+        return bytes;
+    }
+
+    /** @brief Convenience overload building MatchStart directly from match timing values. */
+    inline std::array<uint8_t, kPacketHeaderSize + kMsgMatchStartSize> makeMatchStartPacket(const uint32_t matchId,
+                                                                                             const uint32_t goShowServerTick,
+                                                                                             const uint32_t unlockServerTick)
+    {
+        MsgMatchStart matchStart{};
+        matchStart.matchId = matchId;
+        matchStart.goShowServerTick = goShowServerTick;
+        matchStart.unlockServerTick = unlockServerTick;
+        return makeMatchStartPacket(matchStart);
+    }
+
+    /** @brief Builds a full MatchCancelled packet (header + payload). */
+    inline std::array<uint8_t, kPacketHeaderSize + kMsgMatchCancelledSize> makeMatchCancelledPacket(
+        const MsgMatchCancelled& cancelled)
+    {
+        PacketHeader header{};
+        header.type = EMsgType::MatchCancelled;
+        header.payloadSize = static_cast<uint16_t>(kMsgMatchCancelledSize);
+
+        std::array<uint8_t, kPacketHeaderSize + kMsgMatchCancelledSize> bytes{};
+        serializeHeader(header, bytes.data());
+        serializeMsgMatchCancelled(cancelled, bytes.data() + kPacketHeaderSize);
+
+        return bytes;
+    }
+
+    /** @brief Convenience overload building MatchCancelled directly from a match identifier. */
+    inline std::array<uint8_t, kPacketHeaderSize + kMsgMatchCancelledSize> makeMatchCancelledPacket(
+        const uint32_t matchId)
+    {
+        MsgMatchCancelled cancelled{};
+        cancelled.matchId = matchId;
+        return makeMatchCancelledPacket(cancelled);
+    }
+
+    /** @brief Builds a full MatchResult packet (header + payload). */
+    inline std::array<uint8_t, kPacketHeaderSize + kMsgMatchResultSize> makeMatchResultPacket(
+        const MsgMatchResult& matchResult)
+    {
+        PacketHeader header{};
+        header.type = EMsgType::MatchResult;
+        header.payloadSize = static_cast<uint16_t>(kMsgMatchResultSize);
+
+        std::array<uint8_t, kPacketHeaderSize + kMsgMatchResultSize> bytes{};
+        serializeHeader(header, bytes.data());
+        serializeMsgMatchResult(matchResult, bytes.data() + kPacketHeaderSize);
+
+        return bytes;
     }
 
     /** @brief Builds a full LobbyState packet (header + payload). */

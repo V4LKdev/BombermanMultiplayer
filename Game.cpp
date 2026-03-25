@@ -259,7 +259,14 @@ namespace bomberman
         const bool right = keys[SDL_SCANCODE_RIGHT] || keys[SDL_SCANCODE_D];
         const bool up    = keys[SDL_SCANCODE_UP]    || keys[SDL_SCANCODE_W];
         const bool down  = keys[SDL_SCANCODE_DOWN]  || keys[SDL_SCANCODE_S];
-        const bool bomb  = keys[SDL_SCANCODE_SPACE] != 0;
+        const bool rawBombHeld = keys[SDL_SCANCODE_SPACE] != 0;
+
+        if (suppressBombInputUntilRelease_ && !rawBombHeld)
+        {
+            suppressBombInputUntilRelease_ = false;
+        }
+
+        const bool bomb = rawBombHeld && !suppressBombInputUntilRelease_;
 
         // Build button bitmask with opposing-direction cancellation.
         uint8_t buttons = 0;
@@ -274,6 +281,11 @@ namespace bomberman
         {
             sceneManager->getCurrentScene()->onNetInputQueued(inputSeq.value(), buttons);
         }
+    }
+
+    void Game::suppressBombInputUntilReleased()
+    {
+        suppressBombInputUntilRelease_ = true;
     }
 
     void Game::handleWindowFocusChanged(const bool hasFocus)

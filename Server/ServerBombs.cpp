@@ -300,6 +300,7 @@ namespace bomberman::server
             state.diag.recordBricksDestroyed(static_cast<uint32_t>(destroyedBrickCount));
 
             MsgExplosionResolved explosion{};
+            explosion.matchId = state.currentMatchId;
             explosion.serverTick = state.serverTick;
             explosion.ownerId = bomb.ownerId;
             explosion.originCol = bomb.cell.col;
@@ -442,6 +443,7 @@ namespace bomberman::server
                            bomb.explodeTick);
 
         MsgBombPlaced bombPlaced{};
+        bombPlaced.matchId = state.currentMatchId;
         bombPlaced.serverTick = state.serverTick;
         bombPlaced.explodeTick = bomb.explodeTick;
         bombPlaced.ownerId = bomb.ownerId;

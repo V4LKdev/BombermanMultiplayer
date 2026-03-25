@@ -4,8 +4,6 @@
 #include <random>
 
 #include "Const.h"
-#include "Sim/SpawnSlots.h"
-
 /**
  * @file Sim/TileMapGen.h
  * @brief Deterministic tile map generation shared by client and server.
@@ -44,15 +42,8 @@ namespace bomberman::sim
                 }
             }
         }
-
-        for (const auto& cell : kProtectedSpawnClearCells)
-        {
-            outTiles[cell.row][cell.col] = Tile::EmptyGrass;
-        }
     }
 
 } // namespace bomberman::sim
 
 #endif // BOMBERMAN_SIM_TILEMAPGEN_H
-
-

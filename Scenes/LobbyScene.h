@@ -1,6 +1,6 @@
 /**
  * @file LobbyScene.h
- * @brief Passive multiplayer lobby scene shown after a successful session accept.
+ * @brief Multiplayer lobby scene shown after a successful session accept.
  */
 
 #ifndef BOMBERMAN_SCENES_LOBBYSCENE_H
@@ -18,12 +18,14 @@
 
 namespace bomberman
 {
+    namespace net { class NetClient; }
+
     /**
-     * @brief Read-only multiplayer lobby scene backed by authoritative server seat state.
+     * @brief Multiplayer lobby scene backed by authoritative server seat state.
      *
-     * This scene intentionally does not own any match-start or ready-toggle
-     * interactions yet. It renders the current accepted seats and local
-     * connection state while the server remains in the passive lobby phase.
+     * Renders the current accepted seats, lets the local client toggle its
+     * authoritative ready state, and transitions into gameplay only after the
+     * server sends a real match bootstrap.
      */
     class LobbyScene final : public Scene
     {
@@ -43,12 +45,18 @@ namespace bomberman
         void update(unsigned int delta) override;
 
       private:
+        void handleReadyTogglePressed(net::NetClient& netClient);
+        bool tryEnterPendingMatch(net::NetClient& netClient);
+        void syncPendingReadyState(const net::MsgLobbyState& lobbyState, uint8_t localPlayerId);
+        void refreshLobbyPresentationIfChanged(const net::MsgLobbyState& lobbyState, uint8_t localPlayerId);
         void setStatus(std::string_view message, SDL_Color color);
+        void setCountdownText(std::string_view message, SDL_Color color);
         void rebuildLobbyPresentation(const net::MsgLobbyState& lobbyState, uint8_t localPlayerId);
         void returnToMenu(bool disconnectClient, std::string_view reason);
 
         std::shared_ptr<Text> titleText_ = nullptr;
         std::shared_ptr<Text> statusText_ = nullptr;
+        std::shared_ptr<Text> countdownText_ = nullptr;
         std::shared_ptr<Text> helpText_ = nullptr;
         std::shared_ptr<Text> seatHeaderText_ = nullptr;
         std::shared_ptr<Text> playerHeaderText_ = nullptr;

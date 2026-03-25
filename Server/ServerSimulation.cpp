@@ -10,7 +10,9 @@
 
 #include "Net/NetSend.h"
 #include "ServerBombs.h"
+#include "ServerFlow.h"
 #include "ServerSnapshot.h"
+#include "Sim/SimConfig.h"
 #include "Util/Log.h"
 
 using namespace bomberman::net;
@@ -28,6 +30,7 @@ namespace bomberman::server
         MsgCorrection buildCorrection(const ServerState& state, const MatchPlayerState& matchPlayer)
         {
             MsgCorrection corr{};
+            corr.matchId = state.currentMatchId;
             corr.serverTick = state.serverTick;
             corr.lastProcessedInputSeq = matchPlayer.lastProcessedInputSeq;
             corr.xQ = static_cast<int16_t>(std::clamp(matchPlayer.pos.xQ, INT16_MIN, INT16_MAX));
@@ -157,20 +160,23 @@ namespace bomberman::server
         /** @brief Advances one accepted match player through authoritative input, movement, correction, and diagnostics. */
         void simulateAcceptedMatchPlayer(ServerState& state, MatchPlayerState& matchPlayer)
         {
-            resolveMatchPlayerInputForTick(state, matchPlayer);
-            state.diag.samplePeerInputContinuity(matchPlayer.playerId,
-                                                 matchPlayer.lastReceivedInputSeq,
-                                                 matchPlayer.lastProcessedInputSeq);
-
             if (!matchPlayer.alive || matchPlayer.inputLocked)
             {
                 matchPlayer.appliedButtons = 0;
                 matchPlayer.lastAppliedButtons = 0;
                 matchPlayer.previousTickButtons = 0;
+                state.diag.samplePeerInputContinuity(matchPlayer.playerId,
+                                                     matchPlayer.lastReceivedInputSeq,
+                                                     matchPlayer.lastProcessedInputSeq);
                 queueMatchPlayerCorrection(state, matchPlayer);
                 samplePeerTransport(state, matchPlayer);
                 return;
             }
+
+            resolveMatchPlayerInputForTick(state, matchPlayer);
+            state.diag.samplePeerInputContinuity(matchPlayer.playerId,
+                                                 matchPlayer.lastReceivedInputSeq,
+                                                 matchPlayer.lastProcessedInputSeq);
 
             tryPlaceBomb(state, matchPlayer);
 
@@ -243,39 +249,14 @@ namespace bomberman::server
                 survivingPlayerId = matchEntry->playerId;
             }
 
-            /*
-             * Keep one-player development sessions playable. The server only
-             * treats the round as endable after at least two active seats were
-             * in the round.
-             */
-            if (activePlayerCount < 2 || alivePlayerCount > 1)
+            if (activePlayerCount == 0 || alivePlayerCount > 1)
                 return;
 
-            state.phase = ServerPhase::EndOfMatch;
-            state.roundWinnerPlayerId = (alivePlayerCount == 1) ? survivingPlayerId : std::nullopt;
-            state.roundEndedInDraw = (alivePlayerCount == 0);
-            state.diag.recordRoundEnded(state.roundWinnerPlayerId, state.roundEndedInDraw, state.serverTick);
-
-            for (auto& matchEntry : state.matchPlayers)
-            {
-                if (matchEntry.has_value())
-                    matchEntry->inputLocked = true;
-            }
-
-            if (state.roundEndedInDraw)
-            {
-                LOG_SERVER_INFO("Round ended tick={} result=draw activePlayers={} alivePlayers={}",
-                                state.serverTick,
-                                static_cast<int>(activePlayerCount),
-                                static_cast<int>(alivePlayerCount));
-                return;
-            }
-
-            LOG_SERVER_INFO("Round ended tick={} winnerPlayerId={} activePlayers={} alivePlayers={}",
-                            state.serverTick,
-                            static_cast<int>(state.roundWinnerPlayerId.value()),
-                            static_cast<int>(activePlayerCount),
-                            static_cast<int>(alivePlayerCount));
+            beginEndOfMatch(state,
+                            (alivePlayerCount == 1) ? survivingPlayerId : std::nullopt,
+                            alivePlayerCount == 0,
+                            activePlayerCount,
+                            alivePlayerCount);
         }
     } // namespace
 
@@ -287,6 +268,7 @@ namespace bomberman::server
     {
         ++state.serverTick;
         state.diag.advanceTick();
+        advanceServerFlow(state);
 
         if (state.phase != ServerPhase::InMatch && state.phase != ServerPhase::EndOfMatch)
             return;

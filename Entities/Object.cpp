@@ -46,6 +46,16 @@ namespace bomberman
         this->isAttachedToCamera = isAttached;
     }
 
+    void Object::setVisible(const bool isVisible)
+    {
+        visible = isVisible;
+    }
+
+    bool Object::isVisible() const
+    {
+        return visible;
+    }
+
     int Object::getWidth() const
     {
         return rect.w;
@@ -107,6 +117,9 @@ namespace bomberman
 
     void Object::draw(const SDL_Rect& camera) const
     {
+        if(!visible)
+            return;
+
         if(renderer != nullptr && texture != nullptr)
         {
             // change position according to camera

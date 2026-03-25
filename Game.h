@@ -91,6 +91,9 @@ namespace bomberman
         [[nodiscard]]
         bool isRemoteSmoothingEnabled() const;
 
+        /** @brief Suppresses bomb input until the space key is released once. */
+        void suppressBombInputUntilReleased();
+
         /** @brief Disconnects the multiplayer client if one is active. */
         void disconnectNetClientIfActive(bool blockUntilComplete = true);
 
@@ -116,6 +119,7 @@ namespace bomberman
         bool mute_ = false;                             ///< When true, all audio output is silenced at startup.
         bool hasKeyboardFocus_ = true;                  ///< True while the SDL window has keyboard focus.
         MultiplayerClientConfig multiplayerConfig_{};   ///< Startup config for client-side netcode behavior.
+        bool suppressBombInputUntilRelease_ = false;    ///< Prevents lobby-ready space presses from leaking into gameplay.
 
 
         /** @brief Updates internal focus state and clears local input when focus is lost. */

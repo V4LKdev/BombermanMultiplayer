@@ -7,6 +7,7 @@
 
 #include <random>
 
+#include "ServerFlow.h"
 #include "Sim/SpawnSlots.h"
 #include "Sim/TileMapGen.h"
 #include "Util/Log.h"
@@ -15,8 +16,7 @@ namespace bomberman::server
 {
     namespace
     {
-        static_assert(net::kMaxPlayers <= sim::kDefaultSpawnSlots.size(),
-                      "Spawn slot table must cover all supported multiplayer player ids");
+        static_assert(sim::kDefaultSpawnSlots.size() > 0, "Spawn slot table must not be empty");
 
         /**
          * @brief Maps an ENet incoming peer id to the stable peer-session storage slot.
@@ -63,18 +63,27 @@ namespace bomberman::server
             }
         }
 
-        /** @brief Returns true when no active in-match player state remains in this server session. */
         [[nodiscard]]
-        bool hasNoActiveMatchPlayers(const ServerState& state)
+        bool sameSeatOccupant(const PlayerSlot& slot, const std::string_view playerName, const ENetAddress& address)
         {
-            for (const auto& matchEntry : state.matchPlayers)
+            return slot.playerName == playerName &&
+                   slot.lastKnownAddress.host == address.host &&
+                   slot.lastKnownAddress.port == address.port;
+        }
+
+        [[nodiscard]]
+        uint8_t preservedSeatWins(const std::optional<PlayerSlot>& slotEntry,
+                                  const std::string_view playerName,
+                                  const ENetAddress& address)
+        {
+            if (!slotEntry.has_value())
             {
-                if (matchEntry.has_value())
-                    return false;
+                return 0;
             }
 
-            return true;
+            return sameSeatOccupant(slotEntry.value(), playerName, address) ? slotEntry->wins : 0;
         }
+
     } // namespace
 
     // =================================================================================================================
@@ -126,23 +135,40 @@ namespace bomberman::server
 
         LOG_SERVER_INFO("ServerState initialized");
 
-        // Generate the tile map with either the provided seed or a random seed.
-        uint32_t seed = mapSeed;
-        if (!overrideMapSeed)
-        {
-            seed = std::random_device{}();
-        }
-        state.mapSeed = seed;
+        state.fixedMapSeedOverride = overrideMapSeed ? std::optional<uint32_t>{mapSeed} : std::nullopt;
+        rollNextRoundMapSeed(state);
         sim::generateTileMap(state.mapSeed, state.tiles);
+        state.currentMatchId = 0;
+        state.nextMatchId = 1;
+        state.currentLobbyCountdownPlayerMask = 0;
+        state.currentLobbyCountdownDeadlineTick = 0;
+        state.currentLobbyCountdownLastBroadcastSecond = 0;
+        state.currentMatchPlayerMask = 0;
+        state.currentMatchLoadedMask = 0;
+        state.currentMatchStartDeadlineTick = 0;
+        state.currentMatchGoShowTick = 0;
+        state.currentMatchUnlockTick = 0;
+        state.currentEndOfMatchReturnTick = 0;
         state.roundWinnerPlayerId.reset();
         state.roundEndedInDraw = false;
 
-        if (overrideMapSeed)
+        if (state.fixedMapSeedOverride.has_value())
             LOG_SERVER_INFO("Map generated with provided seed={}", state.mapSeed);
         else
             LOG_SERVER_INFO("Map generated with random seed={}", state.mapSeed);
 
         state.diag.beginSession("server", diagEnabled);
+    }
+
+    void rollNextRoundMapSeed(ServerState& state)
+    {
+        if (state.fixedMapSeedOverride.has_value())
+        {
+            state.mapSeed = *state.fixedMapSeedOverride;
+            return;
+        }
+
+        state.mapSeed = std::random_device{}();
     }
 
     // =================================================================================================================
@@ -256,12 +282,13 @@ namespace bomberman::server
                            const std::string_view playerName)
     {
         auto& slotEntry = state.playerSlots[playerId];
+        const uint8_t wins = preservedSeatWins(slotEntry, playerName, session.peer->address);
         slotEntry.emplace();
         auto& slot = slotEntry.value();
         slot.playerId = playerId;
         slot.playerName = std::string(playerName);
         slot.ready = false;
-        slot.wins = 0;
+        slot.wins = wins;
         slot.lastKnownAddress = session.peer->address;
         slot.acceptedServerTick = state.serverTick;
         slot.lastDisconnectServerTick.reset();
@@ -283,23 +310,15 @@ namespace bomberman::server
         if (releasedPlayerId.has_value())
         {
             const uint8_t playerId = releasedPlayerId.value();
-            const bool hadActiveRoundState =
-                state.phase != ServerPhase::Lobby || !hasNoActiveMatchPlayers(state);
 
             if (auto& slotEntry = state.playerSlots[playerId]; slotEntry.has_value())
                 markReleasedPlayerSlot(slotEntry.value(), peer, state.serverTick);
 
             destroyMatchPlayerState(state, playerId);
             releasePlayerId(state, playerId);
-
-            if (hadActiveRoundState && hasNoActiveMatchPlayers(state))
-            {
-                state.phase = ServerPhase::Lobby;
-                state.roundWinnerPlayerId.reset();
-                state.roundEndedInDraw = false;
-                sim::generateTileMap(state.mapSeed, state.tiles);
-                LOG_SERVER_INFO("Round state reset to lobby after the last player disconnected");
-            }
+            clearPeerSessionStorage(state, peer);
+            handleAcceptedPlayerReleased(state, playerId);
+            return releasedPlayerId;
         }
 
         clearPeerSessionStorage(state, peer);
@@ -319,7 +338,7 @@ namespace bomberman::server
         matchPlayer.playerId = playerId;
         matchPlayer.pos = sim::spawnTilePosForPlayerId(playerId);
         matchPlayer.alive = true;
-        matchPlayer.inputLocked = false;
+        matchPlayer.inputLocked = true;
         matchPlayer.activeBombCount = 0;
         matchPlayer.maxBombs = sim::kDefaultPlayerMaxBombs;
         matchPlayer.bombRange = sim::kDefaultPlayerBombRange;

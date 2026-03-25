@@ -60,6 +60,10 @@ namespace bomberman::net
                 case ExplosionResolved:
                 case LobbyState:
                 case LevelInfo:
+                case MatchLoaded:
+                case MatchStart:
+                case MatchCancelled:
+                case MatchResult:
                 default:
                     return false;
             }
@@ -105,13 +109,6 @@ namespace bomberman::net
         };
         CachedCorrection cachedCorrection{};
 
-        struct CachedLevelInfo
-        {
-            MsgLevelInfo levelInfo{};
-            bool valid = false;
-        };
-        CachedLevelInfo cachedLevelInfo{};
-
         struct CachedLobbyState
         {
             MsgLobbyState lobbyState{};
@@ -119,7 +116,45 @@ namespace bomberman::net
         };
         CachedLobbyState cachedLobbyState{};
 
-        std::deque<GameplayEvent> pendingGameplayEvents{};
+        struct MatchFlowState
+        {
+            MsgLevelInfo levelInfo{};
+            bool hasLevelInfo = false;
+            bool levelInfoPending = false;
+            std::optional<MsgMatchStart> matchStart{};
+            std::optional<uint32_t> cancelledMatchId{};
+            std::optional<MsgMatchResult> matchResult{};
+            CachedSnapshot snapshot{};
+            CachedCorrection correction{};
+            std::deque<GameplayEvent> pendingGameplayEvents{};
+
+            void clearRuntime()
+            {
+                snapshot = {};
+                correction = {};
+                matchStart.reset();
+                cancelledMatchId.reset();
+                matchResult.reset();
+                pendingGameplayEvents.clear();
+            }
+
+            void beginBootstrap(const MsgLevelInfo& newLevelInfo)
+            {
+                clearRuntime();
+                levelInfo = newLevelInfo;
+                hasLevelInfo = true;
+                levelInfoPending = true;
+            }
+
+            void clearAll()
+            {
+                clearRuntime();
+                levelInfo = {};
+                hasLevelInfo = false;
+                levelInfoPending = false;
+            }
+        };
+        MatchFlowState matchFlow{};
 
         // ----- Protocol handlers -----
         static void onWelcome(NetClient& client,
@@ -152,6 +187,30 @@ namespace bomberman::net
                                  std::size_t payloadSize)
         {
             client.handleLobbyState(payload, payloadSize);
+        }
+
+        static void onMatchStart(NetClient& client,
+                                 const PacketHeader& /*header*/,
+                                 const uint8_t* payload,
+                                 std::size_t payloadSize)
+        {
+            client.handleMatchStart(payload, payloadSize);
+        }
+
+        static void onMatchCancelled(NetClient& client,
+                                     const PacketHeader& /*header*/,
+                                     const uint8_t* payload,
+                                     std::size_t payloadSize)
+        {
+            client.handleMatchCancelled(payload, payloadSize);
+        }
+
+        static void onMatchResult(NetClient& client,
+                                  const PacketHeader& /*header*/,
+                                  const uint8_t* payload,
+                                  std::size_t payloadSize)
+        {
+            client.handleMatchResult(payload, payloadSize);
         }
 
         static void onSnapshot(NetClient& client,
@@ -201,6 +260,9 @@ namespace bomberman::net
         impl_->dispatcher.bind(Reject, &Impl::onReject);
         impl_->dispatcher.bind(LevelInfo, &Impl::onLevelInfo);
         impl_->dispatcher.bind(LobbyState, &Impl::onLobbyState);
+        impl_->dispatcher.bind(MatchStart, &Impl::onMatchStart);
+        impl_->dispatcher.bind(MatchCancelled, &Impl::onMatchCancelled);
+        impl_->dispatcher.bind(MatchResult, &Impl::onMatchResult);
         impl_->dispatcher.bind(Snapshot, &Impl::onSnapshot);
         impl_->dispatcher.bind(Correction, &Impl::onCorrection);
         impl_->dispatcher.bind(BombPlaced, &Impl::onBombPlaced);
@@ -337,6 +399,40 @@ namespace bomberman::net
         destroyTransport();
         resetState();
         return completedGracefully;
+    }
+
+    void NetClient::clearActiveMatchRuntimeCaches()
+    {
+        if (impl_ == nullptr)
+        {
+            return;
+        }
+
+        impl_->matchFlow.clearRuntime();
+    }
+
+    void NetClient::resetLocalInputStream()
+    {
+        if (impl_ == nullptr)
+        {
+            return;
+        }
+
+        impl_->nextInputSeq = 0;
+        std::memset(impl_->inputHistory, 0, sizeof(impl_->inputHistory));
+    }
+
+    void NetClient::resetLocalMatchBootstrapState()
+    {
+        resetLocalInputStream();
+        if (impl_ == nullptr)
+        {
+            return;
+        }
+
+        impl_->lastGameplayReceiveTime = SteadyClock::now();
+        impl_->lastSnapshotReceiveTime = TimePoint{};
+        impl_->lastCorrectionReceiveTime = TimePoint{};
     }
 
     // =================================================================================================================
@@ -521,6 +617,16 @@ namespace bomberman::net
             return false;
         }
 
+        if (state_ == EConnectState::Handshaking &&
+            channelID == static_cast<uint8_t>(EChannel::ControlReliable) &&
+            !isHandshakeControlMessage(header.type))
+        {
+            LOG_NET_PROTO_ERROR("Unexpected control message {} received during handshake - failing handshake",
+                                msgTypeName(header.type));
+            failConnection(EConnectState::FailedHandshake);
+            return true;
+        }
+
         if (!impl_->dispatcher.dispatch(*this, header, payload, payloadSize))
         {
             LOG_NET_PACKET_TRACE("No handler for message type 0x{:02x}", static_cast<int>(header.type));
@@ -677,7 +783,6 @@ namespace bomberman::net
 
     std::optional<uint32_t> NetClient::sendInput(uint8_t buttons) const
     {
-        // TODO: Decide how to handle lobby input later.
         if (impl_ == nullptr || !isConnected())
         {
             return std::nullopt;
@@ -745,6 +850,24 @@ namespace bomberman::net
         return true;
     }
 
+    bool NetClient::sendMatchLoaded(const uint32_t matchId) const
+    {
+        if (impl_ == nullptr || !isConnected() || impl_->peer == nullptr || matchId == 0)
+        {
+            return false;
+        }
+
+        if (!queueReliableControl(impl_->peer, makeMatchLoadedPacket(matchId)))
+        {
+            LOG_NET_CONN_WARN("Failed to queue MatchLoaded matchId={}", matchId);
+            return false;
+        }
+
+        flushOutgoing();
+        LOG_NET_CONN_DEBUG("Queued MatchLoaded matchId={}", matchId);
+        return true;
+    }
+
     void NetClient::flushOutgoing() const
     {
         if (impl_ == nullptr || impl_->host == nullptr)
@@ -757,44 +880,44 @@ namespace bomberman::net
 
     bool NetClient::tryGetLatestSnapshot(MsgSnapshot& out) const
     {
-        if (impl_ == nullptr || !isConnected() || !impl_->cachedSnapshot.valid)
+        if (impl_ == nullptr || !isConnected() || !impl_->matchFlow.snapshot.valid)
         {
             return false;
         }
 
-        out = impl_->cachedSnapshot.snapshot;
+        out = impl_->matchFlow.snapshot.snapshot;
         return true;
     }
 
     uint32_t NetClient::lastSnapshotTick() const
     {
-        if (impl_ == nullptr || !isConnected() || !impl_->cachedSnapshot.valid)
+        if (impl_ == nullptr || !isConnected() || !impl_->matchFlow.snapshot.valid)
         {
             return 0;
         }
 
-        return impl_->cachedSnapshot.snapshot.serverTick;
+        return impl_->matchFlow.snapshot.snapshot.serverTick;
     }
 
     bool NetClient::tryGetLatestCorrection(MsgCorrection& out) const
     {
-        if (impl_ == nullptr || !isConnected() || !impl_->cachedCorrection.valid)
+        if (impl_ == nullptr || !isConnected() || !impl_->matchFlow.correction.valid)
         {
             return false;
         }
 
-        out = impl_->cachedCorrection.correction;
+        out = impl_->matchFlow.correction.correction;
         return true;
     }
 
     uint32_t NetClient::lastCorrectionTick() const
     {
-        if (impl_ == nullptr || !isConnected() || !impl_->cachedCorrection.valid)
+        if (impl_ == nullptr || !isConnected() || !impl_->matchFlow.correction.valid)
         {
             return 0;
         }
 
-        return impl_->cachedCorrection.correction.serverTick;
+        return impl_->matchFlow.correction.correction.serverTick;
     }
 
     bool NetClient::tryGetLatestLobbyState(MsgLobbyState& out) const
@@ -808,15 +931,27 @@ namespace bomberman::net
         return true;
     }
 
-    bool NetClient::tryDequeueGameplayEvent(GameplayEvent& out)
+    bool NetClient::consumePendingLevelInfo(MsgLevelInfo& out)
     {
-        if (impl_ == nullptr || !isConnected() || impl_->pendingGameplayEvents.empty())
+        if (impl_ == nullptr || !isConnected() || !impl_->matchFlow.hasLevelInfo || !impl_->matchFlow.levelInfoPending)
         {
             return false;
         }
 
-        out = impl_->pendingGameplayEvents.front();
-        impl_->pendingGameplayEvents.pop_front();
+        out = impl_->matchFlow.levelInfo;
+        impl_->matchFlow.levelInfoPending = false;
+        return true;
+    }
+
+    bool NetClient::tryDequeueGameplayEvent(GameplayEvent& out)
+    {
+        if (impl_ == nullptr || !isConnected() || impl_->matchFlow.pendingGameplayEvents.empty())
+        {
+            return false;
+        }
+
+        out = impl_->matchFlow.pendingGameplayEvents.front();
+        impl_->matchFlow.pendingGameplayEvents.pop_front();
         return true;
     }
 
@@ -840,13 +975,51 @@ namespace bomberman::net
         return static_cast<uint32_t>(elapsedMs(since));
     }
 
-    bool NetClient::tryGetMapSeed(uint32_t& outSeed) const
+    bool NetClient::tryGetLatestMatchStart(MsgMatchStart& out) const
     {
-        if (impl_ == nullptr || !impl_->cachedLevelInfo.valid)
+        if (impl_ == nullptr || !isConnected() || !impl_->matchFlow.matchStart.has_value())
         {
             return false;
         }
-        outSeed = impl_->cachedLevelInfo.levelInfo.mapSeed;
+
+        out = *impl_->matchFlow.matchStart;
+        return true;
+    }
+
+    bool NetClient::hasMatchStarted(const uint32_t matchId) const
+    {
+        return impl_ != nullptr &&
+               matchId != 0 &&
+               impl_->matchFlow.matchStart.has_value() &&
+               impl_->matchFlow.matchStart->matchId == matchId;
+    }
+
+    bool NetClient::isMatchCancelled(const uint32_t matchId) const
+    {
+        return impl_ != nullptr &&
+               matchId != 0 &&
+               impl_->matchFlow.cancelledMatchId.has_value() &&
+               impl_->matchFlow.cancelledMatchId.value() == matchId;
+    }
+
+    bool NetClient::tryGetLatestMatchResult(MsgMatchResult& out) const
+    {
+        if (impl_ == nullptr || !isConnected() || !impl_->matchFlow.matchResult.has_value())
+        {
+            return false;
+        }
+
+        out = *impl_->matchFlow.matchResult;
+        return true;
+    }
+
+    bool NetClient::tryGetMapSeed(uint32_t& outSeed) const
+    {
+        if (impl_ == nullptr || !impl_->matchFlow.hasLevelInfo)
+        {
+            return false;
+        }
+        outSeed = impl_->matchFlow.levelInfo.mapSeed;
         return true;
     }
 
@@ -955,8 +1128,21 @@ namespace bomberman::net
             return;
         }
 
-        impl_->cachedLevelInfo = {levelInfo, true};
-        LOG_NET_CONN_INFO("Received LevelInfo seed={}", levelInfo.mapSeed);
+        if (impl_->matchFlow.hasLevelInfo &&
+            levelInfo.matchId <= impl_->matchFlow.levelInfo.matchId)
+        {
+            LOG_NET_CONN_DEBUG("Ignoring stale or duplicate LevelInfo matchId={} latestMatchId={}",
+                               levelInfo.matchId,
+                               impl_->matchFlow.levelInfo.matchId);
+            return;
+        }
+
+        impl_->matchFlow.beginBootstrap(levelInfo);
+        impl_->cachedLobbyState = {};
+        resetLocalMatchBootstrapState();
+        LOG_NET_CONN_INFO("Received LevelInfo matchId={} seed={}",
+                          levelInfo.matchId,
+                          levelInfo.mapSeed);
     }
 
     void NetClient::handleLobbyState(const uint8_t* payload, std::size_t payloadSize) const
@@ -974,8 +1160,133 @@ namespace bomberman::net
             return;
         }
 
+        if (impl_->matchFlow.hasLevelInfo)
+        {
+            impl_->matchFlow.clearRuntime();
+            impl_->nextInputSeq = 0;
+            std::memset(impl_->inputHistory, 0, sizeof(impl_->inputHistory));
+            impl_->matchFlow.levelInfo = {};
+            impl_->matchFlow.hasLevelInfo = false;
+            impl_->matchFlow.levelInfoPending = false;
+        }
+
         impl_->cachedLobbyState = {lobbyState, true};
         LOG_NET_CONN_DEBUG("Received LobbyState update");
+    }
+
+    void NetClient::handleMatchStart(const uint8_t* payload, std::size_t payloadSize)
+    {
+        if (!impl_ || !isConnected())
+        {
+            LOG_NET_CONN_DEBUG("Received MatchStart payload while not connected - ignoring");
+            return;
+        }
+
+        MsgMatchStart matchStart{};
+        if (!deserializeMsgMatchStart(payload, payloadSize, matchStart))
+        {
+            LOG_NET_PROTO_WARN("Failed to parse MatchStart payload");
+            return;
+        }
+
+        if (impl_->matchFlow.matchStart.has_value() &&
+            matchStart.matchId <= impl_->matchFlow.matchStart->matchId)
+        {
+            LOG_NET_CONN_DEBUG("Ignoring stale or duplicate MatchStart matchId={} latestMatchId={}",
+                               matchStart.matchId,
+                               impl_->matchFlow.matchStart->matchId);
+            return;
+        }
+
+        if (!impl_->matchFlow.hasLevelInfo || matchStart.matchId != impl_->matchFlow.levelInfo.matchId)
+        {
+            LOG_NET_CONN_DEBUG("Ignoring MatchStart for inactive matchId={} currentMatchId={}",
+                               matchStart.matchId,
+                               impl_->matchFlow.hasLevelInfo ? impl_->matchFlow.levelInfo.matchId : 0u);
+            return;
+        }
+
+        impl_->matchFlow.matchStart = matchStart;
+        impl_->lastGameplayReceiveTime = SteadyClock::now();
+        LOG_NET_CONN_INFO("Received MatchStart matchId={} goTick={} unlockTick={}",
+                          matchStart.matchId,
+                          matchStart.goShowServerTick,
+                          matchStart.unlockServerTick);
+    }
+
+    void NetClient::handleMatchCancelled(const uint8_t* payload, std::size_t payloadSize)
+    {
+        if (!impl_ || !isConnected())
+        {
+            LOG_NET_CONN_DEBUG("Received MatchCancelled payload while not connected - ignoring");
+            return;
+        }
+
+        MsgMatchCancelled matchCancelled{};
+        if (!deserializeMsgMatchCancelled(payload, payloadSize, matchCancelled))
+        {
+            LOG_NET_PROTO_WARN("Failed to parse MatchCancelled payload");
+            return;
+        }
+
+        if (impl_->matchFlow.cancelledMatchId.has_value() &&
+            matchCancelled.matchId <= impl_->matchFlow.cancelledMatchId.value())
+        {
+            LOG_NET_CONN_DEBUG("Ignoring stale or duplicate MatchCancelled matchId={} latestMatchId={}",
+                               matchCancelled.matchId,
+                               impl_->matchFlow.cancelledMatchId.value());
+            return;
+        }
+
+        if (impl_->matchFlow.hasLevelInfo && impl_->matchFlow.levelInfo.matchId == matchCancelled.matchId)
+        {
+            clearActiveMatchRuntimeCaches();
+            resetLocalInputStream();
+            impl_->matchFlow.levelInfo = {};
+            impl_->matchFlow.hasLevelInfo = false;
+            impl_->matchFlow.levelInfoPending = false;
+        }
+
+        impl_->matchFlow.cancelledMatchId = matchCancelled.matchId;
+        LOG_NET_CONN_INFO("Received MatchCancelled matchId={}", matchCancelled.matchId);
+    }
+
+    void NetClient::handleMatchResult(const uint8_t* payload, std::size_t payloadSize)
+    {
+        if (!impl_ || !isConnected())
+        {
+            LOG_NET_CONN_DEBUG("Received MatchResult payload while not connected - ignoring");
+            return;
+        }
+
+        MsgMatchResult matchResult{};
+        if (!deserializeMsgMatchResult(payload, payloadSize, matchResult))
+        {
+            LOG_NET_PROTO_WARN("Failed to parse MatchResult payload");
+            return;
+        }
+
+        if (!impl_->matchFlow.hasLevelInfo || matchResult.matchId != impl_->matchFlow.levelInfo.matchId)
+        {
+            LOG_NET_CONN_DEBUG("Ignoring MatchResult for inactive matchId={} currentMatchId={}",
+                               matchResult.matchId,
+                               impl_->matchFlow.hasLevelInfo ? impl_->matchFlow.levelInfo.matchId : 0u);
+            return;
+        }
+
+        if (impl_->matchFlow.matchResult.has_value() &&
+            matchResult.matchId <= impl_->matchFlow.matchResult->matchId)
+        {
+            LOG_NET_CONN_DEBUG("Ignoring stale or duplicate MatchResult matchId={} latestMatchId={}",
+                               matchResult.matchId,
+                               impl_->matchFlow.matchResult->matchId);
+            return;
+        }
+
+        impl_->matchFlow.matchResult = matchResult;
+        LOG_NET_CONN_INFO("Received MatchResult matchId={} result={}",
+                          matchResult.matchId,
+                          matchResult.result == MsgMatchResult::EResult::Draw ? "draw" : "win");
     }
 
     void NetClient::handleSnapshot(const uint8_t* payload, std::size_t payloadSize) const
@@ -992,13 +1303,20 @@ namespace bomberman::net
             LOG_NET_PROTO_WARN("Failed to parse Snapshot payload");
             return;
         }
+        if (!impl_->matchFlow.hasLevelInfo || snapshot.matchId != impl_->matchFlow.levelInfo.matchId)
+        {
+            LOG_NET_SNAPSHOT_DEBUG("Ignoring Snapshot for inactive matchId={} currentMatchId={}",
+                                   snapshot.matchId,
+                                   impl_->matchFlow.hasLevelInfo ? impl_->matchFlow.levelInfo.matchId : 0u);
+            return;
+        }
 
-        if (impl_->cachedSnapshot.valid && snapshot.serverTick <= impl_->cachedSnapshot.snapshot.serverTick)
+        if (impl_->matchFlow.snapshot.valid && snapshot.serverTick <= impl_->matchFlow.snapshot.snapshot.serverTick)
         {
             return;
         }
 
-        impl_->cachedSnapshot = {snapshot, true};
+        impl_->matchFlow.snapshot = {snapshot, true};
         impl_->lastSnapshotReceiveTime = SteadyClock::now();
         impl_->lastGameplayReceiveTime = impl_->lastSnapshotReceiveTime;
 
@@ -1025,14 +1343,21 @@ namespace bomberman::net
             LOG_NET_PROTO_WARN("Failed to parse Correction payload");
             return;
         }
+        if (!impl_->matchFlow.hasLevelInfo || correction.matchId != impl_->matchFlow.levelInfo.matchId)
+        {
+            LOG_NET_SNAPSHOT_DEBUG("Ignoring Correction for inactive matchId={} currentMatchId={}",
+                                   correction.matchId,
+                                   impl_->matchFlow.hasLevelInfo ? impl_->matchFlow.levelInfo.matchId : 0u);
+            return;
+        }
 
         // Only cache the correction if it's newer than the currently cached one.
-        if (impl_->cachedCorrection.valid && correction.serverTick <= impl_->cachedCorrection.correction.serverTick)
+        if (impl_->matchFlow.correction.valid && correction.serverTick <= impl_->matchFlow.correction.correction.serverTick)
         {
             return;
         }
 
-        impl_->cachedCorrection = {correction, true};
+        impl_->matchFlow.correction = {correction, true};
         impl_->lastCorrectionReceiveTime = SteadyClock::now();
         impl_->lastGameplayReceiveTime = impl_->lastCorrectionReceiveTime;
 
@@ -1058,6 +1383,13 @@ namespace bomberman::net
         if (!deserializeMsgBombPlaced(payload, payloadSize, bombPlaced))
         {
             LOG_NET_PROTO_WARN("Failed to parse BombPlaced payload");
+            return;
+        }
+        if (!impl_->matchFlow.hasLevelInfo || bombPlaced.matchId != impl_->matchFlow.levelInfo.matchId)
+        {
+            LOG_NET_SNAPSHOT_DEBUG("Ignoring BombPlaced for inactive matchId={} currentMatchId={}",
+                                   bombPlaced.matchId,
+                                   impl_->matchFlow.hasLevelInfo ? impl_->matchFlow.levelInfo.matchId : 0u);
             return;
         }
 
@@ -1086,6 +1418,13 @@ namespace bomberman::net
             LOG_NET_PROTO_WARN("Failed to parse ExplosionResolved payload");
             return;
         }
+        if (!impl_->matchFlow.hasLevelInfo || explosion.matchId != impl_->matchFlow.levelInfo.matchId)
+        {
+            LOG_NET_SNAPSHOT_DEBUG("Ignoring ExplosionResolved for inactive matchId={} currentMatchId={}",
+                                   explosion.matchId,
+                                   impl_->matchFlow.hasLevelInfo ? impl_->matchFlow.levelInfo.matchId : 0u);
+            return;
+        }
 
         enqueueGameplayEvent(GameplayEvent::fromExplosionResolved(explosion));
 
@@ -1106,14 +1445,14 @@ namespace bomberman::net
             return;
         }
 
-        if (impl_->pendingGameplayEvents.size() >= kMaxPendingGameplayEvents)
+        if (impl_->matchFlow.pendingGameplayEvents.size() >= kMaxPendingGameplayEvents)
         {
             LOG_NET_SNAPSHOT_WARN(
                 "Pending reliable gameplay event queue overflow - dropping oldest event to preserve receive order");
-            impl_->pendingGameplayEvents.pop_front();
+            impl_->matchFlow.pendingGameplayEvents.pop_front();
         }
 
-        impl_->pendingGameplayEvents.push_back(event);
+        impl_->matchFlow.pendingGameplayEvents.push_back(event);
         impl_->lastGameplayReceiveTime = SteadyClock::now();
     }
 
@@ -1174,7 +1513,6 @@ namespace bomberman::net
         clearSessionState();
     }
 
-    // TODO: Clear seed/level info later also when the level/round has ended.
     void NetClient::clearSessionState(const bool clearRejectReason)
     {
         playerId_ = kInvalidPlayerId;
@@ -1185,8 +1523,7 @@ namespace bomberman::net
         }
         if (impl_)
         {
-            impl_->nextInputSeq = 0;
-            std::memset(impl_->inputHistory, 0, sizeof(impl_->inputHistory));
+            resetLocalInputStream();
             impl_->pendingPlayerName.clear();
             impl_->connectStartTime = TimePoint{};
             impl_->handshakeStartTime = TimePoint{};
@@ -1195,11 +1532,8 @@ namespace bomberman::net
             impl_->lastGameplayReceiveTime = TimePoint{};
             impl_->lastSnapshotReceiveTime = TimePoint{};
             impl_->lastCorrectionReceiveTime = TimePoint{};
-            impl_->cachedSnapshot = {};
-            impl_->cachedCorrection = {};
-            impl_->cachedLevelInfo = {};
+            impl_->matchFlow.clearAll();
             impl_->cachedLobbyState = {};
-            impl_->pendingGameplayEvents.clear();
         }
     }
 

@@ -13,6 +13,7 @@
 
 #include "Game.h"
 #include "Net/NetClient.h"
+#include "Scenes/MultiplayerLevelScene.h"
 #include "Util/Log.h"
 #include "Util/PlayerColors.h"
 
@@ -22,6 +23,7 @@ namespace bomberman
     {
         constexpr int kTitleY = 72;
         constexpr int kStatusY = 126;
+        constexpr int kCountdownY = 320;
         constexpr int kHelpY = 548;
         constexpr int kHeaderY = 182;
         constexpr int kSeatStartY = 220;
@@ -33,11 +35,33 @@ namespace bomberman
         constexpr int kWinsColumnOffset = 470;
         constexpr int kStateColumnOffset = 566;
         constexpr uint32_t kReadyToggleCooldownMs = 180;
+        constexpr uint32_t kReadyToggleResponseTimeoutMs = 4000;
+
+        [[nodiscard]]
+        bool lobbySeatEntriesEqual(const net::MsgLobbyState::SeatEntry& lhs, const net::MsgLobbyState::SeatEntry& rhs)
+        {
+            return lhs.flags == rhs.flags && lhs.wins == rhs.wins &&
+                   std::memcmp(lhs.name, rhs.name, sizeof(lhs.name)) == 0;
+        }
 
         [[nodiscard]]
         bool lobbyStatesEqual(const net::MsgLobbyState& lhs, const net::MsgLobbyState& rhs)
         {
-            return std::memcmp(&lhs, &rhs, sizeof(net::MsgLobbyState)) == 0;
+            if (lhs.phase != rhs.phase ||
+                lhs.countdownSecondsRemaining != rhs.countdownSecondsRemaining)
+            {
+                return false;
+            }
+
+            for (uint8_t playerId = 0; playerId < net::kMaxPlayers; ++playerId)
+            {
+                if (!lobbySeatEntriesEqual(lhs.seats[playerId], rhs.seats[playerId]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         [[nodiscard]]
@@ -158,11 +182,17 @@ namespace bomberman
 
         auto bodyFont = game->getAssetManager()->getFont(18);
         auto headerFont = game->getAssetManager()->getFont(16);
+        auto countdownFont = game->getAssetManager()->getFont(72);
         statusText_ = std::make_shared<Text>(bodyFont, game->getRenderer(), "Waiting for lobby...");
         statusText_->fitToContent();
         statusText_->setPosition(game->getWindowWidth() / 2 - statusText_->getWidth() / 2, kStatusY);
         statusText_->setColor(SDL_Color{0xFF, 0xD1, 0x66, 0xFF});
         addObject(statusText_);
+
+        countdownText_ = std::make_shared<Text>(countdownFont, game->getRenderer(), "");
+        countdownText_->fitToContent();
+        countdownText_->setPosition(-4096, -4096);
+        addObject(countdownText_);
 
         helpText_ = std::make_shared<Text>(bodyFont, game->getRenderer(), "SPACE READY  ESC TO LEAVE");
         helpText_->fitToContent();
@@ -235,50 +265,11 @@ namespace bomberman
         {
             auto* netClient = game->getNetClient();
             if (netClient == nullptr || netClient->connectState() != net::EConnectState::Connected)
-                return;
-
-            if (pendingReadyState_.has_value())
             {
-                LOG_NET_CONN_DEBUG("Ignoring LobbyReady toggle while the previous request is still pending");
                 return;
             }
 
-            const uint32_t nowMs = SDL_GetTicks();
-            if (lastReadyRequestMs_ != 0 && (nowMs - lastReadyRequestMs_) < kReadyToggleCooldownMs)
-            {
-                LOG_NET_CONN_DEBUG("Ignoring LobbyReady toggle within {} ms cooldown", kReadyToggleCooldownMs);
-                return;
-            }
-
-            net::MsgLobbyState lobbyState{};
-            if (!netClient->tryGetLatestLobbyState(lobbyState))
-            {
-                setStatus("Waiting for lobby...", SDL_Color{0xFF, 0xD1, 0x66, 0xFF});
-                return;
-            }
-
-            const uint8_t localPlayerId = netClient->playerId();
-            if (localPlayerId >= net::kMaxPlayers)
-                return;
-
-            const auto& localSeat = lobbyState.seats[localPlayerId];
-            if (!net::lobbySeatIsOccupied(localSeat))
-            {
-                LOG_NET_CONN_WARN("Ignoring LobbyReady toggle because local seat {} is not occupied", localPlayerId);
-                return;
-            }
-
-            const bool desiredReady = !net::lobbySeatIsReady(localSeat);
-            if (!netClient->sendLobbyReady(desiredReady))
-            {
-                setStatus("Failed to send ready update", SDL_Color{0xE0, 0x6A, 0x6A, 0xFF});
-                return;
-            }
-
-            pendingReadyState_ = desiredReady;
-            lastReadyRequestMs_ = nowMs;
-            setStatus(desiredReady ? "Marking ready..." : "Clearing ready...",
-                      SDL_Color{0xFF, 0xD1, 0x66, 0xFF});
+            handleReadyTogglePressed(*netClient);
         }
     }
 
@@ -298,6 +289,11 @@ namespace bomberman
             return;
         }
 
+        if (tryEnterPendingMatch(*netClient))
+        {
+            return;
+        }
+
         net::MsgLobbyState lobbyState{};
         if (!netClient->tryGetLatestLobbyState(lobbyState))
         {
@@ -307,19 +303,111 @@ namespace bomberman
 
         const uint8_t localPlayerId = netClient->playerId();
         if (pendingReadyState_.has_value() &&
-            localPlayerId < net::kMaxPlayers &&
-            net::lobbySeatIsOccupied(lobbyState.seats[localPlayerId]) &&
-            net::lobbySeatIsReady(lobbyState.seats[localPlayerId]) == pendingReadyState_.value())
+            lastReadyRequestMs_ != 0 &&
+            SDL_GetTicks() - lastReadyRequestMs_ >= kReadyToggleResponseTimeoutMs)
         {
             pendingReadyState_.reset();
+            lastReadyRequestMs_ = 0;
+            setStatus("Ready update delayed", SDL_Color{0xFF, 0xD1, 0x66, 0xFF});
+            LOG_NET_CONN_DEBUG("Lobby ready update timed out waiting for authoritative echo");
         }
 
-        if (!hasRenderedLobbyState_ || !lobbyStatesEqual(lastRenderedLobbyState_, lobbyState))
+        syncPendingReadyState(lobbyState, localPlayerId);
+        refreshLobbyPresentationIfChanged(lobbyState, localPlayerId);
+    }
+
+    void LobbyScene::handleReadyTogglePressed(net::NetClient& netClient)
+    {
+        if (pendingReadyState_.has_value())
         {
-            rebuildLobbyPresentation(lobbyState, localPlayerId);
-            lastRenderedLobbyState_ = lobbyState;
-            hasRenderedLobbyState_ = true;
+            LOG_NET_CONN_DEBUG("Ignoring LobbyReady toggle while the previous request is still pending");
+            return;
         }
+
+        const uint32_t nowMs = SDL_GetTicks();
+        if (lastReadyRequestMs_ != 0 && (nowMs - lastReadyRequestMs_) < kReadyToggleCooldownMs)
+        {
+            LOG_NET_CONN_DEBUG("Ignoring LobbyReady toggle within {} ms cooldown", kReadyToggleCooldownMs);
+            return;
+        }
+
+        net::MsgLobbyState lobbyState{};
+        if (!netClient.tryGetLatestLobbyState(lobbyState))
+        {
+            setStatus("Waiting for lobby...", SDL_Color{0xFF, 0xD1, 0x66, 0xFF});
+            return;
+        }
+
+        const uint8_t localPlayerId = netClient.playerId();
+        if (localPlayerId >= net::kMaxPlayers)
+        {
+            return;
+        }
+
+        const auto& localSeat = lobbyState.seats[localPlayerId];
+        if (!net::lobbySeatIsOccupied(localSeat))
+        {
+            LOG_NET_CONN_WARN("Ignoring LobbyReady toggle because local seat {} is not occupied", localPlayerId);
+            return;
+        }
+
+        const bool desiredReady = !net::lobbySeatIsReady(localSeat);
+        if (!netClient.sendLobbyReady(desiredReady))
+        {
+            setStatus("Failed to send ready update", SDL_Color{0xE0, 0x6A, 0x6A, 0xFF});
+            return;
+        }
+
+        pendingReadyState_ = desiredReady;
+        lastReadyRequestMs_ = nowMs;
+        setStatus(desiredReady ? "Marking ready..." : "Clearing ready...",
+                  SDL_Color{0xFF, 0xD1, 0x66, 0xFF});
+    }
+
+    bool LobbyScene::tryEnterPendingMatch(net::NetClient& netClient)
+    {
+        net::MsgLevelInfo levelInfo{};
+        if (!netClient.consumePendingLevelInfo(levelInfo))
+        {
+            return false;
+        }
+
+        LOG_NET_CONN_INFO("Lobby received match bootstrap matchId={} seed={} - entering multiplayer level",
+                          levelInfo.matchId,
+                          levelInfo.mapSeed);
+        game->suppressBombInputUntilReleased();
+        game->getSceneManager()->addScene("level", std::make_shared<MultiplayerLevelScene>(game, 1, 0, levelInfo));
+        game->getSceneManager()->activateScene("level");
+        game->getSceneManager()->removeScene("lobby");
+        return true;
+    }
+
+    void LobbyScene::syncPendingReadyState(const net::MsgLobbyState& lobbyState, const uint8_t localPlayerId)
+    {
+        if (!pendingReadyState_.has_value() ||
+            localPlayerId >= net::kMaxPlayers ||
+            !net::lobbySeatIsOccupied(lobbyState.seats[localPlayerId]))
+        {
+            return;
+        }
+
+        if (net::lobbySeatIsReady(lobbyState.seats[localPlayerId]) == pendingReadyState_.value())
+        {
+            pendingReadyState_.reset();
+            lastReadyRequestMs_ = 0;
+        }
+    }
+
+    void LobbyScene::refreshLobbyPresentationIfChanged(const net::MsgLobbyState& lobbyState, const uint8_t localPlayerId)
+    {
+        if (hasRenderedLobbyState_ && lobbyStatesEqual(lastRenderedLobbyState_, lobbyState))
+        {
+            return;
+        }
+
+        rebuildLobbyPresentation(lobbyState, localPlayerId);
+        lastRenderedLobbyState_ = lobbyState;
+        hasRenderedLobbyState_ = true;
     }
 
     void LobbyScene::setStatus(const std::string_view message, const SDL_Color color)
@@ -337,6 +425,22 @@ namespace bomberman
         statusText_->setPosition(game->getWindowWidth() / 2 - statusText_->getWidth() / 2, kStatusY);
     }
 
+    void LobbyScene::setCountdownText(const std::string_view message, const SDL_Color color)
+    {
+        countdownText_->setText(std::string(message));
+        countdownText_->fitToContent();
+        countdownText_->setColor(color);
+
+        if (message.empty())
+        {
+            countdownText_->setPosition(-4096, -4096);
+            return;
+        }
+
+        countdownText_->setPosition(game->getWindowWidth() / 2 - countdownText_->getWidth() / 2,
+                                    kCountdownY - countdownText_->getHeight() / 2);
+    }
+
     void LobbyScene::rebuildLobbyPresentation(const net::MsgLobbyState& lobbyState, const uint8_t localPlayerId)
     {
         const int leftX = tableLeftX(*game);
@@ -346,7 +450,32 @@ namespace bomberman
             populateSeatRow(seatRows_[playerId], leftX, playerId, lobbyState.seats[playerId], localPlayerId);
         }
 
-        if (pendingReadyState_.has_value())
+        const bool countdownActive = net::lobbyCountdownActive(lobbyState);
+        if (countdownActive)
+        {
+            setCountdownText(std::to_string(static_cast<unsigned int>(lobbyState.countdownSecondsRemaining)),
+                             SDL_Color{0xFF, 0xD1, 0x66, 0xFF});
+        }
+        else
+        {
+            setCountdownText("", SDL_Color{0xFF, 0xD1, 0x66, 0xFF});
+        }
+
+        std::string helpText = "SPACE READY  ESC TO LEAVE";
+        if (localPlayerId < net::kMaxPlayers && net::lobbySeatIsOccupied(lobbyState.seats[localPlayerId]) &&
+            net::lobbySeatIsReady(lobbyState.seats[localPlayerId]))
+        {
+            helpText = "SPACE UNREADY  ESC TO LEAVE";
+        }
+        helpText_->setText(helpText);
+        helpText_->fitToContent();
+        helpText_->setPosition(game->getWindowWidth() / 2 - helpText_->getWidth() / 2, kHelpY);
+
+        if (countdownActive)
+        {
+            setStatus("", SDL_Color{0xFF, 0xD1, 0x66, 0xFF});
+        }
+        else if (pendingReadyState_.has_value())
         {
             setStatus(pendingReadyState_.value() ? "Marking ready..." : "Clearing ready...",
                       SDL_Color{0xFF, 0xD1, 0x66, 0xFF});

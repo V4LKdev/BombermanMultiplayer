@@ -44,6 +44,9 @@ namespace bomberman
         /** @brief Constructs the multiplayer gameplay scene for the selected stage. */
         MultiplayerLevelScene(Game* game, unsigned int stage, unsigned int prevScore,
                               std::optional<uint32_t> mapSeed = std::nullopt);
+        /** @brief Constructs the multiplayer gameplay scene from an authoritative match bootstrap. */
+        MultiplayerLevelScene(Game* game, unsigned int stage, unsigned int prevScore,
+                              const net::MsgLevelInfo& levelInfo);
 
         // ----- Scene Hooks -----
 
@@ -60,9 +63,9 @@ namespace bomberman
         [[nodiscard]]
         bool usesEventDrivenLocalMovement() const override { return false; }
 
-        /** @brief Enables per-tick network input polling for the multiplayer scene. */
+        /** @brief Enables per-tick network input polling only while active gameplay is still locally valid. */
         [[nodiscard]]
-        bool wantsNetworkInputPolling() const override { return true; }
+        bool wantsNetworkInputPolling() const override;
 
       protected:
         /** @brief Runs one multiplayer frame in correction, snapshot, then presentation order. */
@@ -129,6 +132,22 @@ namespace bomberman
         /** @brief Returns the connected client or initiates a leave if the session is no longer valid. */
         [[nodiscard]]
         net::NetClient* requireConnectedNetClient();
+        /** @brief Applies shared multiplayer scene setup after the base level world has been initialized. */
+        void initializeMultiplayerScenePresentation();
+        /** @brief Retries the one-shot match-loaded acknowledgement until the server has accepted it. */
+        void ensureMatchLoadedAckSent(net::NetClient& netClient);
+        /** @brief Processes pre-start control edges while keeping the scene snapshot-authoritative and input-locked. */
+        [[nodiscard]]
+        bool updatePreStartFlow(net::NetClient& netClient);
+        /** @brief Refreshes local match-start timing and GO banner state from authoritative start metadata. */
+        void updateMatchStartFlow(net::NetClient& netClient);
+        /** @brief Returns to the lobby when the server has already reset authoritative flow back to lobby state. */
+        [[nodiscard]]
+        bool updateLobbyReturnFlow(net::NetClient& netClient);
+        /** @brief Applies the newest match result banner for the active session, if any. */
+        void updateMatchResultFlow(net::NetClient& netClient);
+        /** @brief Applies the newest correction, snapshot, and reliable gameplay events for the active session. */
+        void consumeAuthoritativeNetState(net::NetClient& netClient);
         /** @brief Applies the newest unapplied owner correction when prediction is active. */
         void applyLatestCorrectionIfAvailable(const net::NetClient& netClient);
         /** @brief Applies the newest unapplied gameplay snapshot, if any. */
@@ -176,8 +195,22 @@ namespace bomberman
         uint32_t pendingInputDepth() const;
         /** @brief Emits one end-of-session client-local prediction summary before the scene exits. */
         void logPredictionSummary() const;
+        /** @brief Returns true only while local-owner prediction and correction flow are still gameplay-relevant. */
+        [[nodiscard]]
+        bool shouldProcessOwnerPrediction() const;
+        /** @brief Returns the newest authoritative gameplay tick observed for the active match, if any. */
+        [[nodiscard]]
+        uint32_t currentAuthoritativeGameplayTick(const net::NetClient& netClient) const;
+        /** @brief Shows or updates the large centered gameplay banner text. */
+        void showCenterBanner(std::string_view message, SDL_Color color);
+        /** @brief Shows or updates the centered gameplay banner with an optional detail line above the main text. */
+        void showCenterBanner(std::string_view mainMessage, std::string_view detailMessage, SDL_Color color);
+        /** @brief Hides the large centered gameplay banner text. */
+        void hideCenterBanner();
         /** @brief Applies the snapshot-owned local state path when prediction is disabled or unarmed. */
         void applyAuthoritativeLocalSnapshot(const net::MsgSnapshot::PlayerEntry& entry);
+        /** @brief Shows the local death banner while the round is still unresolved. */
+        void updateDeathBannerFlow();
         /** @brief Toggles local-player presentation visibility from authoritative alive state. */
         void setLocalPlayerAlivePresentation(bool alive);
         /** @brief Toggles local-player control lock from authoritative snapshot state. */
@@ -239,6 +272,8 @@ namespace bomberman
         static std::string formatPlayerTag(uint8_t playerId);
         /** @brief Leaves the multiplayer scene and optionally disconnects the active network client. */
         void returnToMenu(bool disconnectClient, std::string_view reason);
+        /** @brief Returns from a cancelled pre-start bootstrap back into the multiplayer lobby. */
+        void returnToLobby(std::string_view reason);
         /** @brief Tracks spawned collision objects by tile cell so reliable destruction can remove them cleanly. */
         void onCollisionObjectSpawned(Tile tile, const std::shared_ptr<Object>& object) override;
 
@@ -247,8 +282,18 @@ namespace bomberman
         uint32_t lastAppliedSnapshotTick_ = 0;
         uint32_t lastAppliedCorrectionTick_ = 0;
         std::optional<uint8_t> localPlayerId_{};
+        uint32_t matchId_ = 0;
+        uint32_t matchBootstrapStartedMs_ = 0;
+        bool matchStarted_ = true;
+        bool gameplayUnlocked_ = true;
+        bool matchLoadedAckSent_ = true;
+        uint32_t goBannerHideTick_ = 0;
+        std::optional<net::MsgMatchStart> currentMatchStart_{};
+        std::optional<net::MsgMatchResult> currentMatchResult_{};
         std::shared_ptr<Text> localPlayerTag_ = nullptr;
         std::shared_ptr<Text> gameplayStatusText_ = nullptr;
+        std::shared_ptr<Text> centerBannerText_ = nullptr;
+        std::shared_ptr<Text> centerBannerDetailText_ = nullptr;
         net::ClientPrediction localPrediction_{};
         LivePredictionTelemetry livePredictionTelemetry_{};
         MovementDirection localFacingDirection_ = MovementDirection::Right;

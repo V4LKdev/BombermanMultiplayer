@@ -1,16 +1,41 @@
 /**
  * @file ServerHandlers.h
- * @brief Authoritative server receive-path entry point for typed protocol dispatch.
+ * @brief Authoritative server receive-path entry point and shared handler declarations.
  */
 
 #ifndef BOMBERMAN_SERVERHANDLERS_H
 #define BOMBERMAN_SERVERHANDLERS_H
 
-#include <enet/enet.h>
+#include "ServerState.h"
 
 namespace bomberman::server
 {
-    struct ServerState;
+    /** @brief Handles one validated Hello packet on the authoritative server receive path. */
+    void onHello(PacketDispatchContext& ctx,
+                 const net::PacketHeader& header,
+                 const uint8_t* payload,
+                 std::size_t payloadSize);
+
+    /** @brief Handles one authoritative lobby ready-toggle request from an accepted seat. */
+    void onLobbyReady(PacketDispatchContext& ctx,
+                      const net::PacketHeader& header,
+                      const uint8_t* payload,
+                      std::size_t payloadSize);
+
+    /** @brief Handles one authoritative match-loaded acknowledgement during `StartingMatch`. */
+    void onMatchLoaded(PacketDispatchContext& ctx,
+                       const net::PacketHeader& header,
+                       const uint8_t* payload,
+                       std::size_t payloadSize);
+
+    /** @brief Handles one validated gameplay input batch from an accepted in-match player. */
+    void onInput(PacketDispatchContext& ctx,
+                 const net::PacketHeader& header,
+                 const uint8_t* payload,
+                 std::size_t payloadSize);
+
+    /** @brief Rebuilds and broadcasts the current authoritative lobby state to all accepted peers. */
+    void broadcastLobbyState(ServerState& state);
 
     /**
      * @brief Validates and dispatches one received ENet packet for the dedicated server.
@@ -20,9 +45,6 @@ namespace bomberman::server
      * responsibility because ENet event ownership stays with the caller.
      */
     void handleReceiveEvent(const ENetEvent& event, ServerState& state);
-
-    /** @brief Rebuilds and broadcasts the current authoritative lobby state to all accepted peers. */
-    void broadcastLobbyState(ServerState& state);
 
 } // namespace bomberman::server
 

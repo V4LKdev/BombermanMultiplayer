@@ -61,6 +61,15 @@ namespace bomberman
          */
         void attachToCamera(bool isAttached = true);
         /**
+         * @brief Toggle whether this object should currently be drawn.
+         */
+        void setVisible(bool isVisible);
+        /**
+         * @brief Returns whether this object is currently drawable.
+         */
+        [[nodiscard]]
+        bool isVisible() const;
+        /**
          * @brief Get the Width of object
          *
          * @return int - width
@@ -145,6 +154,7 @@ namespace bomberman
 
       private:
         bool isAttachedToCamera = true; // follow to camera
+        bool visible = true;            // draw object when true
     };
 } // namespace bomberman
 

@@ -69,6 +69,7 @@ namespace bomberman::server
     enum class ServerPhase : uint8_t
     {
         Lobby,         ///< Accepting players and waiting for match start.
+        LobbyCountdown,///< All required players are ready and the lobby countdown is running.
         StartingMatch, ///< Transitioning accepted players from lobby into the next match.
         InMatch,       ///< Authoritative gameplay is active.
         EndOfMatch     ///< Match has finished and end-of-round presentation/results are active.
@@ -223,9 +224,20 @@ namespace bomberman::server
         std::array<uint8_t, net::kMaxPlayers> playerIdPool{}; ///< Sorted free-list of available player ids.
         uint8_t playerIdPoolSize = 0; ///< Number of valid entries currently stored in `playerIdPool`.
 
-        // TODO: Promote this from per-session to per-round once lobby/match flow exists, while keeping the CLI override path.
-        uint32_t mapSeed = 0; ///< Seed used to generate the current authoritative tile map for this round.
+        std::optional<uint32_t> fixedMapSeedOverride{}; ///< Fixed map seed reused for every round when the server was started with `--seed`.
+        uint32_t mapSeed = 0; ///< Seed prepared for the current or next authoritative round tile map.
         sim::TileMap tiles{}; ///< Authoritative collision map shared by all server-side movement steps.
+        uint32_t currentMatchId = 0; ///< Current authoritative match identifier, or 0 while the server is idle in the lobby.
+        uint32_t nextMatchId = 1; ///< Monotonic match-id generator used when the next round bootstrap begins.
+        uint32_t currentLobbyCountdownPlayerMask = 0; ///< Bitmask of players currently participating in the lobby countdown.
+        uint32_t currentLobbyCountdownDeadlineTick = 0; ///< Tick at which the lobby countdown should commit into match bootstrap.
+        uint8_t currentLobbyCountdownLastBroadcastSecond = 0; ///< Last whole countdown second already broadcast through LobbyState.
+        uint32_t currentMatchPlayerMask = 0; ///< Bitmask of player ids participating in the current match/bootstrap set.
+        uint32_t currentMatchLoadedMask = 0; ///< Bitmask of participants that have acknowledged `MatchLoaded`.
+        uint32_t currentMatchStartDeadlineTick = 0; ///< Tick deadline for `StartingMatch` bootstrap/loaded acknowledgements, or 0 when idle.
+        uint32_t currentMatchGoShowTick = 0; ///< Tick at which gameplay scenes should display `GO!` for the current match.
+        uint32_t currentMatchUnlockTick = 0; ///< Tick at which gameplay input unlocks for the current match.
+        uint32_t currentEndOfMatchReturnTick = 0; ///< Tick deadline for automatic end-of-match return to the lobby, or 0 when inactive.
         std::optional<uint8_t> roundWinnerPlayerId{}; ///< Winner of the current or most recent round, if one exists.
         bool roundEndedInDraw = false; ///< True when the current or most recent round ended with no surviving player.
 
@@ -261,6 +273,9 @@ namespace bomberman::server
                          uint32_t mapSeed = 0,
                          uint32_t inputLeadTicks = sim::kDefaultServerInputLeadTicks,
                          uint32_t snapshotIntervalTicks = sim::kDefaultServerSnapshotIntervalTicks);
+
+    /** @brief Chooses the seed that should be used for the next authoritative round map. */
+    void rollNextRoundMapSeed(ServerState& state);
 
     // ----- Player-id allocation -----
 

@@ -1367,3 +1367,42 @@ Start the first real multiplayer gameplay-object slice beyond movement by making
 - Bombs now exist as real authoritative server-side gameplay objects instead of only planned state.
 - Clients can see persistent active bombs across joins and reconnects because snapshots now carry the current bomb state.
 - Diagnostics are more interpretable under impairment because late direct input and late redundant history are no longer merged into one opaque counter.
+
+## 2026-03-25 – Stabilize Multiplayer Match Flow And Death Presentation
+
+### Goal
+Move the multiplayer loop from basic connectivity toward a cleaner playable round flow:
+- passive lobby with ready-up and countdown
+- robust match bootstrap and return-to-lobby flow
+- cleaner local death presentation
+- less noisy and less wasteful owner-prediction behavior during non-live states
+
+### Changes
+- Added passive-lobby flow with ready toggles, countdown start/cancel behavior, and match bootstrap handoff.
+- Added explicit server-side match flow helpers and split receive handling into dispatcher, control, and gameplay-input implementation files.
+- Added match ids, load acknowledgements, and clearer client/server logging around bootstrap, match start, result, and lobby return.
+- Reworked local death handling so dead players:
+  - become invisible without camera snapping
+  - keep the camera at the death location
+  - see a centered `DEAD` banner until the round resolves
+- Stopped running local prediction/input processing for non-live local states such as pre-unlock, post-result, and local death.
+- Reduced multiplayer debug spam by removing the worst stale-correction walls from non-playable states.
+- Simplified 4-player spawn safety by making the active spawn cells fixed `EmptyGrass` tiles in the base map layout.
+- Merged server handler declarations into a shared `ServerHandlers.h` while keeping the `.cpp` implementation split.
+
+### Validation
+- Rebuilt both targets repeatedly during the pass:
+  - `Bomberman`
+  - `Bomberman_Server`
+- Manually tested:
+  - 2-player, 3-player, and 4-player lobby flow
+  - ready toggle and countdown behavior
+  - server-full rejection path
+  - round end and return-to-lobby flow
+  - local death camera / banner behavior
+  - impaired local network runs with diagnostics enabled
+
+### Result
+- Multiplayer rounds now start and end more coherently, with cleaner server/client state transitions.
+- Local death presentation is readable and no longer causes camera jumps or prediction spam.
+- The server-side receive path is easier to navigate, and the overall multiplayer prototype is in a better state for the next feature phase.

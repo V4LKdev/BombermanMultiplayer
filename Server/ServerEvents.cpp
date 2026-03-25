@@ -54,6 +54,7 @@ namespace bomberman::server
         /** @brief Releases accepted state for a disconnecting peer and records the correct lifecycle event. */
         void handleDisconnectEvent(ServerState& state, ENetPeer& peer)
         {
+            const ServerPhase phaseBeforeRelease = state.phase;
             if (const auto releasedPlayerId = releasePeerSession(state, peer); releasedPlayerId.has_value())
             {
                 const uint8_t playerId = releasedPlayerId.value();
@@ -70,7 +71,10 @@ namespace bomberman::server
                 }
 
                 recordServerDiagLifecycle(state, NetPeerLifecycleType::PeerDisconnected, playerId, peer.incomingPeerID);
-                broadcastLobbyState(state);
+                if (phaseBeforeRelease == ServerPhase::Lobby)
+                {
+                    broadcastLobbyState(state);
+                }
                 return;
             }
 

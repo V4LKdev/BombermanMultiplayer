@@ -17,6 +17,7 @@
 #include "Entities/Text.h"
 #include "Game.h"
 #include "Net/NetClient.h"
+#include "Scenes/LobbyScene.h"
 #include "Sim/SimConfig.h"
 #include "Sim/SpawnSlots.h"
 #include "Util/Log.h"
@@ -30,8 +31,7 @@ namespace bomberman
 
     namespace
     {
-        static_assert(net::kMaxPlayers <= sim::kDefaultSpawnSlots.size(),
-                      "Spawn slot table must cover all supported multiplayer player ids");
+        static_assert(sim::kDefaultSpawnSlots.size() > 0, "Spawn slot table must not be empty");
         static_assert(net::kMaxPlayers <= util::kPlayerColorCount,
                       "Player color table must cover all supported multiplayer player ids");
         constexpr int kMovementDeltaThresholdQ = 2;
@@ -40,8 +40,13 @@ namespace bomberman
         constexpr int kNameTagMaxPointSize = 20;
         constexpr uint32_t kGameplayDegradedThresholdMs = 2000;
         constexpr int kGameplayStatusOffsetY = 12;
+        constexpr int kCenterBannerPointSize = 56;
+        constexpr int kCenterBannerDetailPointSize = 40;
+        constexpr int kCenterBannerLineGapPx = 10;
+        constexpr uint32_t kCenterBannerDurationTicks = static_cast<uint32_t>(sim::kTickRate);
         constexpr uint32_t kLivePredictionLogIntervalMs = 1000;
         constexpr uint32_t kSimulationTickMs = 1000u / static_cast<uint32_t>(sim::kTickRate);
+        constexpr uint32_t kPreStartReturnTimeoutMs = 7000;
         constexpr int kBombAnimationFrameCount = 4;
         constexpr int kExplosionAnimationStartFrame = 1;
         constexpr int kExplosionAnimationFrameCount = 11;
@@ -140,18 +145,55 @@ namespace bomberman
         : LevelScene(game, stage, prevScore, mapSeed)
     {
         initializeLevelWorld(mapSeed);
-        seedLocalSpawnFromAssignedPlayerId();
-        explosionSound_ = std::make_shared<Sound>(game->getAssetManager()->getSound(SoundEnum::Explosion));
+        initializeMultiplayerScenePresentation();
+    }
+
+    MultiplayerLevelScene::MultiplayerLevelScene(Game* game,
+                                                 const unsigned int stage,
+                                                 const unsigned int prevScore,
+                                                 const net::MsgLevelInfo& levelInfo)
+        : LevelScene(game, stage, prevScore, levelInfo.mapSeed)
+    {
+        initializeLevelWorld(levelInfo.mapSeed);
+        initializeMultiplayerScenePresentation();
+        matchId_ = levelInfo.matchId;
+        matchBootstrapStartedMs_ = SDL_GetTicks();
+        matchStarted_ = false;
+        gameplayUnlocked_ = false;
+        matchLoadedAckSent_ = false;
     }
 
     // =================================================================================================================
     // ===== Scene Hooks ===============================================================================================
     // =================================================================================================================
 
+    bool MultiplayerLevelScene::wantsNetworkInputPolling() const
+    {
+        if (!matchStarted_ || !gameplayUnlocked_ || !localPlayerAlive_ || localPlayerInputLocked_ || returningToMenu_)
+        {
+            return false;
+        }
+
+        const net::NetClient* netClient = game ? game->getNetClient() : nullptr;
+        if (netClient == nullptr)
+        {
+            return false;
+        }
+
+        net::MsgLobbyState lobbyState{};
+        return !netClient->tryGetLatestLobbyState(lobbyState);
+    }
+
     void MultiplayerLevelScene::updateLevel(const unsigned int delta)
     {
         net::NetClient* netClient = requireConnectedNetClient();
         if(netClient == nullptr)
+            return;
+
+        if(!updatePreStartFlow(*netClient))
+            return;
+
+        if(updateLobbyReturnFlow(*netClient))
             return;
 
         /*
@@ -161,10 +203,14 @@ namespace bomberman
          * 3) apply any pending reliable gameplay events so discrete world changes win over stale snapshots.
          * 4) tick scene objects after state application, then finish tag/camera/diagnostic updates.
          */
-        updateGameplayConnectionHealth(*netClient);
-        applyLatestCorrectionIfAvailable(*netClient);
-        applyLatestSnapshotIfAvailable();
-        applyPendingGameplayEvents(*netClient);
+        consumeAuthoritativeNetState(*netClient);
+        updateMatchStartFlow(*netClient);
+        updateMatchResultFlow(*netClient);
+        updateDeathBannerFlow();
+        if (matchStarted_ && !currentMatchResult_.has_value())
+        {
+            updateGameplayConnectionHealth(*netClient);
+        }
         finalizeFrameUpdate(delta);
     }
 
@@ -182,9 +228,151 @@ namespace bomberman
         return netClient;
     }
 
+    void MultiplayerLevelScene::initializeMultiplayerScenePresentation()
+    {
+        seedLocalSpawnFromAssignedPlayerId();
+        if (const auto* netClient = game->getNetClient();
+            netClient != nullptr && netClient->playerId() != net::NetClient::kInvalidPlayerId)
+        {
+            ensureLocalPresentation(netClient->playerId());
+        }
+
+        explosionSound_ = std::make_shared<Sound>(game->getAssetManager()->getSound(SoundEnum::Explosion));
+    }
+
+    void MultiplayerLevelScene::ensureMatchLoadedAckSent(net::NetClient& netClient)
+    {
+        if (matchStarted_ || matchLoadedAckSent_ || matchId_ == 0)
+        {
+            return;
+        }
+
+        if (netClient.sendMatchLoaded(matchId_))
+        {
+            matchLoadedAckSent_ = true;
+            LOG_NET_CONN_DEBUG("Acknowledged match bootstrap loaded matchId={}", matchId_);
+        }
+    }
+
+    bool MultiplayerLevelScene::updatePreStartFlow(net::NetClient& netClient)
+    {
+        if (matchStarted_)
+        {
+            return true;
+        }
+
+        ensureMatchLoadedAckSent(netClient);
+
+        if (netClient.isMatchCancelled(matchId_))
+        {
+            returnToLobby("MatchCancelled");
+            return false;
+        }
+
+        net::MsgMatchStart matchStart{};
+        if (netClient.tryGetLatestMatchStart(matchStart) && matchStart.matchId == matchId_)
+        {
+            currentMatchStart_ = matchStart;
+            matchStarted_ = true;
+            gameplayUnlocked_ = false;
+            goBannerHideTick_ = matchStart.goShowServerTick + kCenterBannerDurationTicks;
+            LOG_NET_CONN_INFO("Match start confirmed locally matchId={}", matchId_);
+        }
+
+        if (matchBootstrapStartedMs_ != 0 &&
+            SDL_GetTicks() - matchBootstrapStartedMs_ >= kPreStartReturnTimeoutMs)
+        {
+            returnToLobby("MatchStartTimedOut");
+            return false;
+        }
+
+        return true;
+    }
+
+    void MultiplayerLevelScene::updateMatchStartFlow(net::NetClient& netClient)
+    {
+        if (!matchStarted_ || !currentMatchStart_.has_value() || currentMatchResult_.has_value())
+        {
+            return;
+        }
+
+        const uint32_t authoritativeTick = currentAuthoritativeGameplayTick(netClient);
+        if (authoritativeTick == 0)
+        {
+            return;
+        }
+
+        if (!gameplayUnlocked_ && authoritativeTick >= currentMatchStart_->unlockServerTick)
+        {
+            gameplayUnlocked_ = true;
+        }
+
+        if (authoritativeTick >= currentMatchStart_->goShowServerTick &&
+            authoritativeTick < goBannerHideTick_)
+        {
+            showCenterBanner("GO!", SDL_Color{0xFF, 0xD1, 0x66, 0xFF});
+            return;
+        }
+
+        hideCenterBanner();
+    }
+
+    bool MultiplayerLevelScene::updateLobbyReturnFlow(net::NetClient& netClient)
+    {
+        net::MsgLobbyState lobbyState{};
+        if (!netClient.tryGetLatestLobbyState(lobbyState))
+        {
+            return false;
+        }
+
+        returnToLobby(matchStarted_ ? "ReturnedToLobby" : "BootstrapCancelledToLobby");
+        return true;
+    }
+
+    void MultiplayerLevelScene::updateMatchResultFlow(net::NetClient& netClient)
+    {
+        net::MsgMatchResult matchResult{};
+        if (netClient.tryGetLatestMatchResult(matchResult) && matchResult.matchId == matchId_)
+        {
+            currentMatchResult_ = matchResult;
+            gameplayUnlocked_ = false;
+            setGameplayConnectionDegraded(false);
+        }
+
+        if (!currentMatchResult_.has_value())
+        {
+            return;
+        }
+
+        if (currentMatchResult_->result == net::MsgMatchResult::EResult::Draw)
+        {
+            showCenterBanner("DRAW!", SDL_Color{0xFF, 0xD1, 0x66, 0xFF});
+            return;
+        }
+
+        showCenterBanner("WINS!",
+                         net::matchResultWinnerName(*currentMatchResult_),
+                         SDL_Color{0xFF, 0xD1, 0x66, 0xFF});
+    }
+
+    void MultiplayerLevelScene::updateDeathBannerFlow()
+    {
+        if(localPlayerAlive_ || currentMatchResult_.has_value())
+            return;
+
+        showCenterBanner("DEAD", SDL_Color{0xE8, 0x6A, 0x6A, 0xFF});
+    }
+
+    void MultiplayerLevelScene::consumeAuthoritativeNetState(net::NetClient& netClient)
+    {
+        applyLatestCorrectionIfAvailable(netClient);
+        applyLatestSnapshotIfAvailable();
+        applyPendingGameplayEvents(netClient);
+    }
+
     void MultiplayerLevelScene::applyLatestCorrectionIfAvailable(const net::NetClient& netClient)
     {
-        if(!game->isPredictionEnabled())
+        if(!game->isPredictionEnabled() || !shouldProcessOwnerPrediction())
             return;
 
         net::MsgCorrection correction{};
@@ -241,6 +429,14 @@ namespace bomberman
         lastAppliedCorrectionTick_ = 0;
         lastAppliedGameplayEventTick_ = 0;
         localPlayerId_.reset();
+        matchId_ = 0;
+        matchBootstrapStartedMs_ = 0;
+        matchStarted_ = true;
+        gameplayUnlocked_ = true;
+        matchLoadedAckSent_ = true;
+        goBannerHideTick_ = 0;
+        currentMatchStart_.reset();
+        currentMatchResult_.reset();
         localPlayerAlive_ = true;
         localPlayerInputLocked_ = false;
         livePredictionTelemetry_ = {};
@@ -260,6 +456,8 @@ namespace bomberman
             removeObject(gameplayStatusText_);
             gameplayStatusText_.reset();
         }
+
+        hideCenterBanner();
 
         removeAllExplosionPresentations();
         brickPresentations_.clear();
@@ -367,10 +565,13 @@ namespace bomberman
         const auto replayResult = localPrediction_.reconcileAndReplay(correction, tiles);
         if(replayResult.ignoredStaleCorrection)
         {
-            LOG_NET_DIAG_DEBUG("Ignored stale local correction tick={} lastProcessed={} lastAppliedTick={}",
-                               correction.serverTick,
-                               correction.lastProcessedInputSeq,
-                               lastAppliedCorrectionTick_);
+            if(!currentMatchResult_.has_value())
+            {
+                LOG_NET_DIAG_DEBUG("Ignored stale local correction tick={} lastProcessed={} lastAppliedTick={}",
+                                   correction.serverTick,
+                                   correction.lastProcessedInputSeq,
+                                   lastAppliedCorrectionTick_);
+            }
             livePredictionTelemetry_.lastCorrectionServerTick = correction.serverTick;
             lastAppliedCorrectionTick_ = correction.serverTick;
             return;
@@ -462,6 +663,7 @@ namespace bomberman
                     std::make_shared<Text>(font, game->getRenderer(), "WAITING FOR GAMEPLAY UPDATES");
                 gameplayStatusText_->fitToContent();
                 gameplayStatusText_->setColor(SDL_Color{0xFF, 0xD1, 0x66, 0xFF});
+                gameplayStatusText_->attachToCamera(false);
                 gameplayStatusText_->setPosition(
                     game->getWindowWidth() / 2 - gameplayStatusText_->getWidth() / 2,
                     kGameplayStatusOffsetY);
@@ -481,6 +683,9 @@ namespace bomberman
     void MultiplayerLevelScene::logLivePredictionTelemetry(const unsigned int delta)
     {
         if(!game->isPredictionEnabled())
+            return;
+
+        if(!shouldProcessOwnerPrediction())
             return;
 
         const auto& stats = localPrediction_.stats();
@@ -568,6 +773,15 @@ namespace bomberman
             livePredictionTelemetry_.maxPendingInputDepth);
     }
 
+    bool MultiplayerLevelScene::shouldProcessOwnerPrediction() const
+    {
+        return matchStarted_ &&
+               gameplayUnlocked_ &&
+               localPlayerAlive_ &&
+               !currentMatchResult_.has_value() &&
+               !returningToMenu_;
+    }
+
     void MultiplayerLevelScene::applyBootstrapLocalSnapshot(const net::MsgSnapshot::PlayerEntry& entry)
     {
         /*
@@ -625,6 +839,94 @@ namespace bomberman
     void MultiplayerLevelScene::updateSceneObjects(const unsigned int delta)
     {
         Scene::update(delta);
+    }
+
+    uint32_t MultiplayerLevelScene::currentAuthoritativeGameplayTick(const net::NetClient& netClient) const
+    {
+        return std::max(netClient.lastSnapshotTick(), netClient.lastCorrectionTick());
+    }
+
+    void MultiplayerLevelScene::showCenterBanner(const std::string_view message, const SDL_Color color)
+    {
+        showCenterBanner(message, {}, color);
+    }
+
+    void MultiplayerLevelScene::showCenterBanner(const std::string_view mainMessage,
+                                                 const std::string_view detailMessage,
+                                                 const SDL_Color color)
+    {
+        if (!centerBannerText_)
+        {
+            auto font = game->getAssetManager()->getFont(kCenterBannerPointSize);
+            centerBannerText_ = std::make_shared<Text>(font, game->getRenderer(), std::string(mainMessage));
+            centerBannerText_->attachToCamera(false);
+            addObject(centerBannerText_);
+        }
+        else
+        {
+            centerBannerText_->setText(std::string(mainMessage));
+        }
+
+        centerBannerText_->fitToContent();
+        centerBannerText_->setColor(color);
+
+        if (!detailMessage.empty())
+        {
+            if (!centerBannerDetailText_)
+            {
+                auto detailFont = game->getAssetManager()->getFont(kCenterBannerDetailPointSize);
+                centerBannerDetailText_ =
+                    std::make_shared<Text>(detailFont, game->getRenderer(), std::string(detailMessage));
+                centerBannerDetailText_->attachToCamera(false);
+                addObject(centerBannerDetailText_);
+            }
+            else
+            {
+                centerBannerDetailText_->setText(std::string(detailMessage));
+            }
+
+            centerBannerDetailText_->fitToContent();
+            centerBannerDetailText_->setColor(color);
+        }
+        else if (centerBannerDetailText_)
+        {
+            removeObject(centerBannerDetailText_);
+            centerBannerDetailText_.reset();
+        }
+
+        const int totalHeight = centerBannerDetailText_
+            ? centerBannerDetailText_->getHeight() + kCenterBannerLineGapPx + centerBannerText_->getHeight()
+            : centerBannerText_->getHeight();
+        const int topY = game->getWindowHeight() / 2 - totalHeight / 2;
+
+        if (centerBannerDetailText_)
+        {
+            centerBannerDetailText_->setPosition(
+                game->getWindowWidth() / 2 - centerBannerDetailText_->getWidth() / 2,
+                topY);
+            centerBannerText_->setPosition(
+                game->getWindowWidth() / 2 - centerBannerText_->getWidth() / 2,
+                topY + centerBannerDetailText_->getHeight() + kCenterBannerLineGapPx);
+            return;
+        }
+
+        centerBannerText_->setPosition(game->getWindowWidth() / 2 - centerBannerText_->getWidth() / 2,
+                                       game->getWindowHeight() / 2 - centerBannerText_->getHeight() / 2);
+    }
+
+    void MultiplayerLevelScene::hideCenterBanner()
+    {
+        if (centerBannerText_)
+        {
+            removeObject(centerBannerText_);
+            centerBannerText_.reset();
+        }
+
+        if (centerBannerDetailText_)
+        {
+            removeObject(centerBannerDetailText_);
+            centerBannerDetailText_.reset();
+        }
     }
 
     void MultiplayerLevelScene::ensureLocalPresentation(const uint8_t localId)
@@ -686,17 +988,16 @@ namespace bomberman
         if(!player)
             return;
 
+        player->setVisible(alive);
+        if(localPlayerTag_)
+        {
+            localPlayerTag_->setVisible(alive);
+        }
+
         if(alive)
             return;
 
-        localPlayerInputLocked_ = true;
         player->setMovementDirection(MovementDirection::None);
-        player->setPosition(-scaledTileSize * 4, -scaledTileSize * 4);
-
-        if(localPlayerTag_)
-        {
-            localPlayerTag_->setPosition(-scaledTileSize * 4, -scaledTileSize * 4);
-        }
     }
 
     void MultiplayerLevelScene::setLocalPlayerInputLock(const bool locked)
@@ -1229,6 +1530,27 @@ namespace bomberman
         }
 
         game->getSceneManager()->activateScene("menu");
+        game->getSceneManager()->removeScene("level");
+    }
+
+    void MultiplayerLevelScene::returnToLobby(const std::string_view reason)
+    {
+        if(returningToMenu_)
+            return;
+
+        const bool wasMatchStarted = matchStarted_;
+        matchStarted_ = false;
+        returningToMenu_ = true;
+        if (wasMatchStarted)
+        {
+            LOG_NET_CONN_INFO("Leaving multiplayer match back to lobby ({})", reason);
+        }
+        else
+        {
+            LOG_NET_CONN_WARN("Match bootstrap aborted before start ({}) - returning to lobby", reason);
+        }
+        game->getSceneManager()->addScene("lobby", std::make_shared<LobbyScene>(game));
+        game->getSceneManager()->activateScene("lobby");
         game->getSceneManager()->removeScene("level");
     }
 } // namespace bomberman
