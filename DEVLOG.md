@@ -1,5 +1,61 @@
 # Bomberman Multiplayer – Dev Log
 
+## 2026-03-26 (388680c) – Add Authoritative Multiplayer Powerups
+
+### Goal
+Finish the last planned multiplayer gameplay feature before reconnect/client-diag/debug-overlay work:
+- add all four temporary powerups
+- keep collection and effects fully server-authoritative
+- integrate the speed boost cleanly with owner prediction
+- leave the tuning surface and diagnostics in a presentable state
+
+### What landed
+- Added hidden round powerups seeded under random bricks and replicated revealed pickups through snapshots.
+- Added authoritative collection/removal with deterministic server-side ownership.
+- Implemented all four temporary effects:
+  - movement speed boost
+  - invincibility
+  - bomb range boost
+  - two bombs at once
+- Integrated speed boost into the shared movement sim and owner correction/prediction path so local movement stays stable when the effect turns on or off.
+- Added multiplayer presentation for:
+  - revealed pickup sprites
+  - per-player active-effect flashing
+  - boosted bomb presentation
+- Added `--no-powers` server support.
+
+### Cleanup
+- Centralized powerup tuning in `Sim/PowerupConfig.h`:
+  - round placement list now defines both spawn amount and effective weighting
+  - per-effect durations are explicit
+  - strength values for speed/range/max-bombs are explicit
+- Added focused powerup diagnostics/reporting:
+  - reveal total
+  - collection total
+  - per-type reveal counts
+  - per-type collection counts
+- Added concise server logs for powerup reveal and collection events.
+
+### Validation
+- Rebuilt both targets repeatedly in:
+  - `cmake-build-debug`
+  - `cmake-build-release`
+- Manually tested:
+  - reveal/persistence/reset behavior
+  - `--no-powers`
+  - authoritative pickup collection/removal
+  - invincibility, range, max-bombs, and speed behavior
+  - local prediction and remote presentation with speed boost active
+  - stacked powerup behavior
+
+### Result
+- The multiplayer gameplay slice now includes a full authoritative powerup loop.
+- The final hard part, speed boost with prediction, is integrated without reopening reconnect/bootstrap complexity.
+- Remaining feature work can now focus on:
+  - lobby-only reconnect / score reclaim
+  - client diagnostics
+  - realtime diagnostics/debug presentation
+
 ## 2026-03-26 (97cc186, e4cd18a) – Refine MP Round Flow, Splits, And Diagnostics Semantics
 
 ### Goal
