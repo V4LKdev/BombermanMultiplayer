@@ -1002,7 +1002,7 @@ Lay the first real diagnostics foundation for the networking layer before predic
 - Wired server-side session lifecycle hooks:
   - session begin
   - session end
-  - text report output on shutdown
+  - diagnostics report output on shutdown
 - Added packet accounting hooks for:
   - successful typed receives
   - successful queued sends
@@ -1506,3 +1506,51 @@ Move the multiplayer loop from basic connectivity toward a cleaner playable roun
 - Multiplayer rounds now start and end more coherently, with cleaner server/client state transitions.
 - Local death presentation is readable and no longer causes camera jumps or prediction spam.
 - The server-side receive path is easier to navigate, and the overall multiplayer prototype is in a better state for the next feature phase.
+
+## 2026-03-26 (b0757df) – Add Multiplayer Diagnostics Layer And Viewer
+
+### Goal
+Land the final diagnostics layer for multiplayer tuning and validation:
+- client-side diagnostics reports
+- structured server/client JSON output
+- a local report viewer
+- clearer live HUD data
+- enough instrumentation to explain prediction health and authoritative input timing
+
+### Changes
+- Added shared diagnostics event/report primitives in `NetDiagShared.h`.
+- Reworked server diagnostics to:
+  - keep the core packet / transport / continuity summaries
+  - remove the old dense per-message aggregate table
+  - capture server session config in JSON
+  - write timestamped JSON reports on shutdown
+- Added `ClientDiagnostics` and wired it into `NetClient` session lifecycle, packet accounting, transport sampling, silence tracking, prediction summaries, and stream-health counters.
+- Added multiplayer live HUD stats plumbing so the scene can show transport and prediction state while a session is running.
+- Switched diagnostics output to JSON-only and timestamped file naming:
+  - `diag_server_<time>.json`
+  - `diag_client_pN_<time>.json`
+- Added the static offline diagnostics viewer and launcher in `Tools/`.
+- Added viewer cleanup for:
+  - overview vs comparison mode
+  - metric tooltips
+  - polarity-aware deltas/bars
+  - flow/recent-event rendering
+  - dark theme
+- Added report schema versioning and a short diagnostics doc.
+- Vendored `nlohmann/json` into `third_party/nlohmann` and made CMake prefer the vendored tree with a system-header fallback.
+- Added a clearer shared brick-density constant and recorded the relevant map/powerup config in diagnostics output.
+
+### Validation
+- Rebuilt both targets in Debug and Release repeatedly during the pass.
+- Ran local server/client sessions with `--net-diag` and inspected the generated JSON reports directly and through the viewer.
+- Compared repeated local multiplayer sessions across:
+  - no impairment
+  - different input-lead settings
+  - multiple local client windows
+- Used the new reports to investigate a local multi-client timing asymmetry where one client could accumulate heavy authoritative input gaps despite similar RTT/loss.
+- Verified after the pacing fix that a 3-client local run at `inputLead=1` produced zero authoritative gaps for all players in the reviewed server report.
+
+### Result
+- Multiplayer diagnostics now exist on both client and server with saved JSON session artifacts and a local viewer.
+- Prediction, transport, stream-health, and authoritative continuity signals are recorded in one place instead of being reconstructed from logs.
+- The local multi-client present-timing issue that was skewing one client's input cadence was made visible by the new diagnostics and then corrected in the runtime.
