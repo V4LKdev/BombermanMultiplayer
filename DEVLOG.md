@@ -1,5 +1,49 @@
 # Bomberman Multiplayer – Dev Log
 
+## 2026-03-26 (97cc186, e4cd18a) – Refine MP Round Flow, Splits, And Diagnostics Semantics
+
+### Goal
+Finish the current multiplayer cleanup/refactor pass without adding scope:
+- make the code match the actual no-mid-match-reconnect contract
+- split the biggest flow hotspots by responsibility
+- tighten the server/client logging and server diagnostics so they are easier to read and act on
+
+### What landed
+- Split `MultiplayerLevelScene` into scene-shell, authority, and presentation implementation files.
+- Split `ServerFlow` into orchestration, lobby/start flow, and match/result flow files.
+- Simplified the current reconnect/bootstrap contract:
+  - no mid-match reconnect
+  - no full-world mid-match rebuild
+  - disconnect during match remains fresh-admission only
+- Hardened the reliable gameplay-event path on the client so queue overflow now invalidates the stream and abandons the round instead of silently dropping world mutations.
+- Cleaned several small UX/runtime issues:
+  - stale connect failure text now clears while editing in failed/disconnected states
+  - singleplayer Backspace instant-win is debug-only
+  - the release-only multiplayer warning was removed
+- Tightened accepted-player/session semantics on the server so disconnect cleanly ends the current assignment.
+- Cleaned logging channel intent and default verbosity so normal runs are readable without debug spam.
+- Renamed and reshaped server diagnostics so the core continuity signals are clearer:
+  - `direct_deadline_consumes`
+  - `simulation_gaps`
+  - `buffered_deadline_recoveries`
+- Fixed recent-event diagnostics coalescing so repeated gap storms stop flooding the recent-event ring.
+
+### Validation
+- Rebuilt both targets repeatedly in:
+  - `cmake-build-debug`
+  - `cmake-build-release`
+- Manually tested:
+  - connect failures and reject paths
+  - lobby join/leave/ready/countdown behavior
+  - match bootstrap, gameplay, win, draw, and return-to-lobby flow
+  - disconnect/reject behavior during active rounds
+  - server diagnostics runs with and without impairment
+
+### Result
+- The multiplayer codebase is easier to navigate and better aligned with the actual MVP rules.
+- The highest-value scene/server hotspots are split without adding unnecessary abstraction.
+- Logs and diagnostics now tell a cleaner, more actionable story during multiplayer testing.
+
 ## 2026-03-24 (pending) – Add Passive Multiplayer Lobby Foundation
 
 ### Goal
@@ -12,7 +56,7 @@ Split connection acceptance from in-round gameplay setup and establish a clean l
 - Made `Welcome` complete the client connection and removed `LevelInfo` from the handshake path.
 - Added authoritative `LobbyState` protocol support and server rebroadcasts on join and disconnect.
 - Stopped creating `MatchPlayerState` during `Hello`; accepted peers now become lobby seats only.
-- Extended durable `PlayerSlot` state with lobby-owned `ready` and `wins` fields for the next match-flow steps.
+- Extended `PlayerSlot` state with lobby-owned `ready` and `wins` fields for the current accepted assignment.
 - Cleaned the initial lobby presentation so seat rows render as a stable table and full-length names fit cleanly.
 
 ### Validation
@@ -45,7 +89,7 @@ Complete a playable, server-authoritative bomb/explosion/death loop before movin
 
 ### Result
 - The multiplayer gameplay loop now supports authoritative bombs, destruction, death, and round-end behavior in a stable form.
-- The next clean milestone is lobby/match flow, spawn handling, and reconnect policy built on top of this foundation.
+- The next clean milestone is lobby/match flow and spawn handling built on top of this foundation.
 
 ## 2026-03-23 (pending) – Finish Multiplayer QA Cleanup Pass
 
@@ -1359,13 +1403,13 @@ Start the first real multiplayer gameplay-object slice beyond movement by making
 - Manually tested:
   - single-client bomb placement
   - multi-client bomb visibility
-  - reconnect visibility of already active bombs
+  - visibility of already active bombs after a fresh join
   - owner cleanup removing that player’s bomb on disconnect
   - delayed appearance under high latency, confirming snapshot-owned replication behavior
 
 ### Result
 - Bombs now exist as real authoritative server-side gameplay objects instead of only planned state.
-- Clients can see persistent active bombs across joins and reconnects because snapshots now carry the current bomb state.
+- Clients can see persistent active bombs after a fresh join because snapshots now carry the current bomb state.
 - Diagnostics are more interpretable under impairment because late direct input and late redundant history are no longer merged into one opaque counter.
 
 ## 2026-03-25 – Stabilize Multiplayer Match Flow And Death Presentation
