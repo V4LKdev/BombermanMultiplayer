@@ -18,7 +18,7 @@
  *
  * The recorder stays lightweight:
  * - recent noteworthy events live in a fixed-size ring buffer
- * - transport and input-continuity state keep only the latest sample per peer
+ * - transport and input-continuity state keep only the latest sample per gameplay player id
  * - aggregate counters summarize one diagnostics session
  * - reporting writes a simple text snapshot suitable for manual review
  */
@@ -69,8 +69,7 @@ namespace bomberman::net
     enum class NetSimulationEventType : uint8_t
     {
         Gap,
-        BufferedRecovery,
-        BombPlaced,
+        BufferedDeadlineRecovery,
         RoundEnded
     };
 
@@ -96,9 +95,9 @@ namespace bomberman::net
         std::string note; ///< Optional short human-readable note for reports.
     };
 
-    // ----- Latest per-peer state -----
+    // ----- Latest per-player-id state -----
 
-    /** @brief Latest sampled transport health values for a single peer. */
+    /** @brief Latest sampled transport health values for a single gameplay player id. */
     struct NetPeerTransportSample
     {
         uint8_t peerId = 0xFF;
@@ -110,13 +109,14 @@ namespace bomberman::net
         uint32_t queuedUnreliable = 0;
     };
 
-    /** @brief Aggregate input-continuity facts for one gameplay peer. */
+    /** @brief Aggregate input-continuity facts for one authoritative gameplay player id. */
     struct NetPeerContinuitySummary
     {
         uint8_t peerId = 0xFF;
         uint64_t timestampMs = 0;
+        uint64_t directDeadlineConsumes = 0;
         uint64_t simulationGaps = 0;
-        uint64_t bufferedInputRecoveries = 0;
+        uint64_t bufferedDeadlineRecoveries = 0;
         uint32_t lastReceivedInputSeq = 0;
         uint32_t lastProcessedInputSeq = 0;
     };
@@ -148,20 +148,21 @@ namespace bomberman::net
         uint64_t malformedPacketBytesRecv = 0; ///< Bytes carried by malformed incoming packets.
 
         uint64_t inputPacketsReceived = 0;   ///< Total input packets received and parsed successfully.
-        uint64_t inputPacketsFullyStale = 0; ///< Input packets whose newest entry was already consumed on arrival.
+        uint64_t inputPacketsFullyStale = 0; ///< Input packets whose newest sequence was already consumed on arrival.
         uint64_t inputEntriesTooLate = 0;    ///< Input entries that arrived after their sequence had already been processed.
         uint64_t inputEntriesTooLateDirect = 0; ///< Late entries that were the newest/direct command of their received batch.
         uint64_t inputEntriesTooLateBuffered = 0; ///< Late entries that arrived only as buffered redundant batch history.
         uint64_t inputEntriesTooFarAhead = 0; ///< Input entries rejected for being too far ahead of the accepted receive window.
 
+        uint64_t directDeadlineConsumes = 0; ///< Times the exact next input sequence was present at consume time with a direct/newest batch entry.
         uint64_t simulationGaps = 0; ///< Times a consume deadline was reached without the exact input, so previous buttons were reused.
-        uint64_t bufferedInputRecoveries = 0; ///< Times the exact input packet missed its deadline, but redundant batch history filled the seq before a gap occurred.
+        uint64_t bufferedDeadlineRecoveries = 0; ///< Times redundant batch history supplied the exact sequence by deadline without the direct/newest entry also being present.
         uint64_t bombsPlaced = 0; ///< Authoritative bomb placements accepted by the server simulation.
         uint64_t bricksDestroyed = 0; ///< Total bricks destroyed by authoritative explosions.
         uint64_t roundsEnded = 0; ///< Total rounds that reached a server-side end state.
         uint64_t roundsDrawn = 0; ///< Total rounds that ended with no surviving player.
         uint64_t helloRejectsGameInProgress = 0; ///< Hello packets rejected because the current round could not be bootstrapped cleanly.
-        std::array<uint64_t, kMaxPlayers> roundWinsByPeer{}; ///< Round wins keyed by authoritative player id.
+        std::array<uint64_t, kMaxPlayers> roundWinsByPlayerId{}; ///< Round wins keyed by authoritative player id.
     };
 
     /**
@@ -237,11 +238,14 @@ namespace bomberman::net
         /** @brief Records a consume deadline miss that required reusing the previous buttons for a gameplay peer. */
         void recordSimulationGap(uint8_t peerId, uint32_t inputSeq, uint8_t heldButtons, uint32_t serverTick);
 
-        /** @brief Records a buffered-input recovery where redundant history supplied the exact seq before consume time. */
-        void recordBufferedInputRecovery(uint8_t peerId, uint32_t inputSeq, uint32_t serverTick);
+        /** @brief Records a direct consume where the exact seq was present by deadline with a direct/newest batch entry. */
+        void recordDirectDeadlineConsume(uint8_t peerId, uint32_t inputSeq);
+
+        /** @brief Records a buffered deadline recovery where redundant history supplied the exact seq before consume time. */
+        void recordBufferedDeadlineRecovery(uint8_t peerId, uint32_t inputSeq, uint32_t serverTick);
 
         /** @brief Records one authoritative bomb placement accepted by the server simulation. */
-        void recordBombPlaced(uint8_t peerId, uint8_t col, uint8_t row, uint8_t radius, uint32_t serverTick);
+        void recordBombPlaced();
         /** @brief Records bricks destroyed by one authoritative explosion resolution. */
         void recordBricksDestroyed(uint32_t count);
         /** @brief Records one authoritative round-end outcome. */
@@ -249,7 +253,7 @@ namespace bomberman::net
         /** @brief Records a reject reason that should surface in diagnostics summaries. */
         void recordRejectReason(MsgReject::EReason reason);
 
-        // ---- Latest per-peer state sampling ----
+        // ---- Latest per-player-id state sampling ----
 
         /** @brief Stores the latest sampled transport health values for a peer. */
         void samplePeerTransport(uint8_t peerId, uint32_t rttMs, uint32_t rttVarianceMs, uint32_t packetLossPermille, uint32_t queuedReliable, uint32_t queuedUnreliable);

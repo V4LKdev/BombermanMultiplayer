@@ -269,10 +269,10 @@ int main(int argc, char** argv)
     }
 
     LOG_SERVER_INFO("==== BOMBERMAN DEDICATED SERVER ===================================================================");
-    LOG_NET_DIAG_INFO("Server diagnostics {}", cli.diagnostics.netDiagEnabled ? "enabled" : "disabled");
+    LOG_SERVER_INFO("Server diagnostics {}", cli.diagnostics.netDiagEnabled ? "enabled" : "disabled");
     LOG_SERVER_INFO("Listening on port {} with max {} peers ({} gameplay slots)", cli.port, bomberman::server::kServerPeerSessionCapacity, kMaxPlayers);
-    LOG_SERVER_DEBUG("Server input lead={} tick(s)", cli.inputLeadTicks);
-    LOG_SERVER_DEBUG("Server snapshot interval={} tick(s)", cli.snapshotIntervalTicks);
+    LOG_SERVER_INFO("Server input lead={} tick(s)", cli.inputLeadTicks);
+    LOG_SERVER_INFO("Server snapshot interval={} tick(s)", cli.snapshotIntervalTicks);
     LOG_SERVER_DEBUG("ENet peer liveness ping={}ms timeoutLimit={} timeoutRange=[{}..{}]ms",
                      bomberman::net::kPeerPingIntervalMs,
                      bomberman::net::kPeerTimeoutLimit,

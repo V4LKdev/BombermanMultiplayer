@@ -71,38 +71,11 @@ namespace bomberman::net
         {
             switch (type)
             {
-                case NetSimulationEventType::Gap:              return "Gap";
-                case NetSimulationEventType::BufferedRecovery: return "BufferedRecovery";
-                case NetSimulationEventType::BombPlaced:       return "BombPlaced";
-                case NetSimulationEventType::RoundEnded:       return "RoundEnded";
-                default:                                       return "Unknown";
+                case NetSimulationEventType::Gap:                      return "Gap";
+                case NetSimulationEventType::BufferedDeadlineRecovery: return "BufferedDeadlineRecovery";
+                case NetSimulationEventType::RoundEnded:               return "RoundEnded";
+                default:                                               return "Unknown";
             }
-        }
-
-        /** @brief Packs one bomb-placement cell/radius triple into a recent-event detail field. */
-        constexpr uint32_t packBombPlacementDetail(const uint8_t col, const uint8_t row, const uint8_t radius)
-        {
-            return static_cast<uint32_t>(col) |
-                   (static_cast<uint32_t>(row) << 8u) |
-                   (static_cast<uint32_t>(radius) << 16u);
-        }
-
-        /** @brief Unpacks the bomb-placement cell column from a packed detail field. */
-        constexpr uint8_t unpackBombPlacementCol(const uint32_t detail)
-        {
-            return static_cast<uint8_t>(detail & 0xFFu);
-        }
-
-        /** @brief Unpacks the bomb-placement cell row from a packed detail field. */
-        constexpr uint8_t unpackBombPlacementRow(const uint32_t detail)
-        {
-            return static_cast<uint8_t>((detail >> 8u) & 0xFFu);
-        }
-
-        /** @brief Unpacks the bomb-placement radius from a packed detail field. */
-        constexpr uint8_t unpackBombPlacementRadius(const uint32_t detail)
-        {
-            return static_cast<uint8_t>((detail >> 16u) & 0xFFu);
         }
 
         /** @brief Formats one input bitmask using the same compact hex style as network logs. */
@@ -379,49 +352,49 @@ namespace bomberman::net
     // ===== Simulation continuity events ==============================================================================
     // =================================================================================================================
 
-    void NetDiagnostics::recordBufferedInputRecovery(const uint8_t peerId,
-                                                     const uint32_t inputSeq,
-                                                     const uint32_t serverTick)
+    void NetDiagnostics::recordDirectDeadlineConsume(const uint8_t peerId, const uint32_t inputSeq)
     {
         if (!enabled_ || !sessionActive_)
             return;
 
-        summary_.bufferedInputRecoveries++;
+        summary_.directDeadlineConsumes++;
         auto& peerSummary = peerContinuitySummaries_[peerId];
         peerSummary.peerId = peerId;
         peerSummary.timestampMs = nowMs();
-        peerSummary.bufferedInputRecoveries++;
+        peerSummary.directDeadlineConsumes++;
+        peerSummary.lastProcessedInputSeq = inputSeq;
+    }
+
+    void NetDiagnostics::recordBufferedDeadlineRecovery(const uint8_t peerId,
+                                                        const uint32_t inputSeq,
+                                                        const uint32_t serverTick)
+    {
+        if (!enabled_ || !sessionActive_)
+            return;
+
+        summary_.bufferedDeadlineRecoveries++;
+        auto& peerSummary = peerContinuitySummaries_[peerId];
+        peerSummary.peerId = peerId;
+        peerSummary.timestampMs = nowMs();
+        peerSummary.bufferedDeadlineRecoveries++;
         peerSummary.lastProcessedInputSeq = inputSeq;
 
         NetEvent event{};
         event.type = NetEventType::Simulation;
         event.timestampMs = nowMs();
-        event.simulationType = NetSimulationEventType::BufferedRecovery;
+        event.simulationType = NetSimulationEventType::BufferedDeadlineRecovery;
         event.peerId = peerId;
         event.seq = inputSeq;
         event.detailB = serverTick;
         recordRecentEvent(std::move(event));
     }
 
-    void NetDiagnostics::recordBombPlaced(const uint8_t peerId,
-                                          const uint8_t col,
-                                          const uint8_t row,
-                                          const uint8_t radius,
-                                          const uint32_t serverTick)
+    void NetDiagnostics::recordBombPlaced()
     {
         if (!enabled_ || !sessionActive_)
             return;
 
         summary_.bombsPlaced++;
-
-        NetEvent event{};
-        event.type = NetEventType::Simulation;
-        event.timestampMs = nowMs();
-        event.simulationType = NetSimulationEventType::BombPlaced;
-        event.peerId = peerId;
-        event.detailA = packBombPlacementDetail(col, row, radius);
-        event.detailB = serverTick;
-        recordRecentEvent(std::move(event));
     }
 
     void NetDiagnostics::recordBricksDestroyed(const uint32_t count)
@@ -446,7 +419,7 @@ namespace bomberman::net
         }
         else if (winnerPlayerId.has_value() && winnerPlayerId.value() < kMaxPlayers)
         {
-            summary_.roundWinsByPeer[winnerPlayerId.value()]++;
+            summary_.roundWinsByPlayerId[winnerPlayerId.value()]++;
         }
 
         NetEvent event{};
@@ -570,7 +543,7 @@ namespace bomberman::net
 
         writeSectionHeader("Input stream summary");
         writeKeyValue("input_packets_received", summary_.inputPacketsReceived);
-        writeKeyValue("input_packets_fully_stale", summary_.inputPacketsFullyStale);
+        writeKeyValue("input_packets_newest_seq_already_consumed", summary_.inputPacketsFullyStale);
         writeKeyValue("input_entries_too_late", summary_.inputEntriesTooLate);
         writeKeyValue("input_entries_too_late_direct", summary_.inputEntriesTooLateDirect);
         writeKeyValue("input_entries_too_late_buffered", summary_.inputEntriesTooLateBuffered);
@@ -578,24 +551,25 @@ namespace bomberman::net
         out << '\n';
 
         writeSectionHeader("Simulation continuity");
+        writeKeyValue("direct_deadline_consumes", summary_.directDeadlineConsumes);
         writeKeyValue("simulation_gaps", summary_.simulationGaps);
-        writeKeyValue("buffered_input_recoveries", summary_.bufferedInputRecoveries);
+        writeKeyValue("buffered_deadline_recoveries", summary_.bufferedDeadlineRecoveries);
         writeKeyValue("bombs_placed", summary_.bombsPlaced);
         writeKeyValue("bricks_destroyed", summary_.bricksDestroyed);
         writeKeyValue("rounds_ended", summary_.roundsEnded);
         writeKeyValue("rounds_drawn", summary_.roundsDrawn);
-        writeKeyValue("hello_rejects_game_in_progress", summary_.helloRejectsGameInProgress);
-        out << "round_wins_by_peer=";
-        for (std::size_t i = 0; i < summary_.roundWinsByPeer.size(); ++i)
+        writeKeyValue("hello_rejects_round_not_admitting_players", summary_.helloRejectsGameInProgress);
+        out << "round_wins_by_player_id=";
+        for (std::size_t i = 0; i < summary_.roundWinsByPlayerId.size(); ++i)
         {
             if (i > 0)
                 out << ',';
-            out << summary_.roundWinsByPeer[i];
+            out << summary_.roundWinsByPlayerId[i];
         }
         out << '\n';
         out << '\n';
 
-        writeSectionHeader("Per-peer input continuity");
+        writeSectionHeader("Per-player-id input continuity (authoritative seat keyed)");
         if (peerContinuitySummaries_.empty())
         {
             out << "  - none\n";
@@ -619,10 +593,11 @@ namespace bomberman::net
                         ? (peerSummary.lastReceivedInputSeq - peerSummary.lastProcessedInputSeq)
                         : 0u;
 
-                out << "  - peer=" << static_cast<int>(peerId)
+                out << "  - player_id=" << static_cast<int>(peerId)
                     << " ts_ms=" << peerSummary.timestampMs
+                    << " direct_deadline_consumes=" << peerSummary.directDeadlineConsumes
                     << " gaps=" << peerSummary.simulationGaps
-                    << " buffered_recoveries=" << peerSummary.bufferedInputRecoveries
+                    << " buffered_deadline_recoveries=" << peerSummary.bufferedDeadlineRecoveries
                     << " last_recv_seq=" << peerSummary.lastReceivedInputSeq
                     << " last_processed_seq=" << peerSummary.lastProcessedInputSeq
                     << " pending_inputs=" << pendingInputs
@@ -631,7 +606,7 @@ namespace bomberman::net
         }
         out << '\n';
 
-        writeSectionHeader("Latest peer samples");
+        writeSectionHeader("Latest player-id transport samples (authoritative seat keyed)");
         if (latestPeerSamples_.empty())
         {
             out << "  - none\n";
@@ -650,7 +625,7 @@ namespace bomberman::net
             for (const uint8_t peerId : peerIds)
             {
                 const auto& sample = latestPeerSamples_.at(peerId);
-                out << "  - peer=" << static_cast<int>(peerId)
+                out << "  - player_id=" << static_cast<int>(peerId)
                     << " ts_ms=" << sample.timestampMs
                     << " rtt_ms=" << sample.rttMs
                     << " rtt_var_ms=" << sample.rttVarianceMs
@@ -713,19 +688,19 @@ namespace bomberman::net
                     case NetEventType::PacketRecv:
                         out << " msg=0x" << std::hex << static_cast<int>(event.msgType) << std::dec
                             << " ch=" << static_cast<int>(event.channelId)
-                            << " peer=" << static_cast<int>(event.peerId)
+                            << " player_id=" << static_cast<int>(event.peerId)
                             << " result=" << toString(event.packetResult);
                         break;
 
                     case NetEventType::PeerLifecycle:
                         if (event.peerId != 0xFF)
-                            out << " peer=" << static_cast<int>(event.peerId);
+                            out << " player_id=" << static_cast<int>(event.peerId);
                         out << " lifecycle=" << toString(event.lifecycleType)
                             << " transport_peer=" << event.detailA;
                         break;
 
                     case NetEventType::Simulation:
-                        out << " peer=" << static_cast<int>(event.peerId)
+                        out << " player_id=" << static_cast<int>(event.peerId)
                             << " sim=" << toString(event.simulationType)
                             << " server_tick=" << event.detailB;
                         if (event.simulationType == NetSimulationEventType::Gap)
@@ -733,25 +708,16 @@ namespace bomberman::net
                             out << " seq=" << event.seq
                                 << " held_mask=" << formatInputMask(event.detailA);
                         }
-                        else if (event.simulationType == NetSimulationEventType::BufferedRecovery)
+                        else if (event.simulationType == NetSimulationEventType::BufferedDeadlineRecovery)
                         {
                             out << " seq=" << event.seq;
-                        }
-                        else if (event.simulationType == NetSimulationEventType::BombPlaced)
-                        {
-                            out << " cell=("
-                                << static_cast<int>(unpackBombPlacementCol(event.detailA))
-                                << ','
-                                << static_cast<int>(unpackBombPlacementRow(event.detailA))
-                                << ')'
-                                << " radius=" << static_cast<int>(unpackBombPlacementRadius(event.detailA));
                         }
                         else if (event.simulationType == NetSimulationEventType::RoundEnded)
                         {
                             if (event.detailA != 0)
                                 out << " result=draw";
                             else
-                                out << " winner_peer=" << static_cast<int>(event.peerId);
+                                out << " winner_player_id=" << static_cast<int>(event.peerId);
                         }
                         else if (event.seq != 0)
                         {
@@ -812,14 +778,33 @@ namespace bomberman::net
             << '|' << static_cast<int>(event.peerId)
             << '|' << static_cast<int>(event.channelId)
             << '|' << static_cast<int>(event.msgType)
-            << '|' << event.seq
             << '|' << static_cast<int>(event.packetDirection)
             << '|' << static_cast<int>(event.packetResult)
             << '|' << static_cast<int>(event.lifecycleType)
             << '|' << static_cast<int>(event.simulationType)
-            << '|' << event.detailA
-            << '|' << event.detailB
-            << '|' << event.note;
+            << '|';
+
+        if (event.type == NetEventType::Simulation)
+        {
+            if (event.simulationType == NetSimulationEventType::RoundEnded)
+            {
+                out << event.detailA
+                    << '|' << event.detailB
+                    << '|' << event.note;
+            }
+            else
+            {
+                // Coalesce repeated gap/recovery storms by semantic class rather than exact seq/tick.
+                out << event.note;
+            }
+        }
+        else
+        {
+            out << event.seq
+                << '|' << event.detailA
+                << '|' << event.detailB
+                << '|' << event.note;
+        }
         return out.str();
     }
 

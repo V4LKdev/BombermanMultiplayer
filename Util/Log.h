@@ -54,15 +54,15 @@ namespace bomberman::log
     void init(spdlog::level::level_enum baseLevel = static_cast<spdlog::level::level_enum>(BOMBERMAN_DEFAULT_LOG_LEVEL), const std::string& logFile = "");
 
 
-    spdlog::logger* client();       ///< NetClient, main.cpp
-    spdlog::logger* server();       ///< server_main.cpp, handlers
-    spdlog::logger* game();         ///< Game.cpp, SDL subsystems
-    spdlog::logger* netConn();      ///< Connect/disconnect/handshake lifecycle
-    spdlog::logger* netPacket();    ///< Transport queueing, packet dispatch, raw receive paths
-    spdlog::logger* netProto();     ///< Serialization/deserialization, protocol versioning
-    spdlog::logger* netInput();     ///< Input batching, buffering, gap/drop diagnostics
-    spdlog::logger* netSnapshot();  ///< Snapshot/correction send + receive paths
-    spdlog::logger* netDiag();      ///< Diagnostics for network issues like latency, jitter, packet loss, etc.
+    spdlog::logger* client();       ///< Client-process bootstrap and top-level configuration.
+    spdlog::logger* server();       ///< Dedicated-server process lifecycle and authoritative round-flow milestones.
+    spdlog::logger* game();         ///< SDL/game runtime lifecycle outside network semantics.
+    spdlog::logger* netConn();      ///< Session lifecycle and user-visible connect/lobby/match admission transitions.
+    spdlog::logger* netPacket();    ///< Raw transport queueing/dispatch detail and channel-level anomalies.
+    spdlog::logger* netProto();     ///< Malformed payloads, wrong-state protocol use, and version/shape mismatches.
+    spdlog::logger* netInput();     ///< Authoritative input acceptance, prediction/replay, and input-stream anomalies.
+    spdlog::logger* netSnapshot();  ///< Snapshot/correction and reliable gameplay-event transport/merge detail.
+    spdlog::logger* netDiag();      ///< Explicit diagnostics-layer summaries or recorder lifecycle, not normal flow logs.
 } // namespace bomberman::log
 
 
