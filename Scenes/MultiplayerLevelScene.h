@@ -10,18 +10,19 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <deque>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
 #include "Entities/Sound.h"
 #include "Net/ClientPrediction.h"
+#include "Net/NetClient.h"
 #include "Net/NetCommon.h"
 #include "Scenes/LevelScene.h"
 
 namespace bomberman
 {
-    namespace net { class NetClient; }
     class Sprite;
     class Text;
 
@@ -31,8 +32,9 @@ namespace bomberman
      * This scene applies authoritative transport state to the shared `LevelScene`
      * while keeping gameplay-scene ownership rules local:
      * - the local player can be presented from raw input before prediction is armed
-     * - bootstrap snapshots can seed local position before the first owner correction
-     * - once prediction is initialized, local presentation comes from `ClientPrediction`
+     * - initial snapshots can seed local position before the first owner correction
+     * - local presentation comes from `ClientPrediction` only while owner prediction is enabled,
+     *   initialized, and still gameplay-relevant for the scene
      * - remote players remain snapshot-authoritative and are interpolated
      *
      * The scene also owns gameplay-scoped leave/disconnect handling, gameplay-session HUD,
@@ -44,7 +46,7 @@ namespace bomberman
         /** @brief Constructs the multiplayer gameplay scene for the selected stage. */
         MultiplayerLevelScene(Game* game, unsigned int stage, unsigned int prevScore,
                               std::optional<uint32_t> mapSeed = std::nullopt);
-        /** @brief Constructs the multiplayer gameplay scene from an authoritative match bootstrap. */
+        /** @brief Constructs the multiplayer gameplay scene from an authoritative round-start `LevelInfo`. */
         MultiplayerLevelScene(Game* game, unsigned int stage, unsigned int prevScore,
                               const net::MsgLevelInfo& levelInfo);
 
@@ -77,7 +79,7 @@ namespace bomberman
       private:
         // ----- Local and Remote Snapshot State -----
 
-        /** @brief One authoritative snapshot sample retained for bootstrap or interpolation decisions. */
+        /** @brief One authoritative snapshot sample retained for early local seeding or interpolation decisions. */
         struct SnapshotSample
         {
             sim::TilePos posQ{};
@@ -146,14 +148,14 @@ namespace bomberman
         bool updateLobbyReturnFlow(net::NetClient& netClient);
         /** @brief Applies the newest match result banner for the active session, if any. */
         void updateMatchResultFlow(net::NetClient& netClient);
-        /** @brief Applies the newest correction, snapshot, and reliable gameplay events for the active session. */
+        /** @brief Applies owner correction first, then merges snapshots and reliable gameplay events in authoritative tick order. */
         void consumeAuthoritativeNetState(net::NetClient& netClient);
         /** @brief Applies the newest unapplied owner correction when prediction is active. */
         void applyLatestCorrectionIfAvailable(const net::NetClient& netClient);
-        /** @brief Applies the newest unapplied gameplay snapshot, if any. */
-        void applyLatestSnapshotIfAvailable();
-        /** @brief Applies any pending reliable gameplay events after snapshot state in original receive order. */
-        void applyPendingGameplayEvents(net::NetClient& netClient);
+        /** @brief Moves newly received reliable gameplay events into the scene queue in original receive order. */
+        void collectPendingGameplayEvents(net::NetClient& netClient);
+        /** @brief Applies the oldest queued reliable gameplay event. */
+        void applyNextPendingGameplayEvent();
         /** @brief Ticks scene objects, remote presentation, camera, and diagnostics after state application. */
         void finalizeFrameUpdate(unsigned int delta);
 
@@ -198,6 +200,9 @@ namespace bomberman
         /** @brief Returns true only while local-owner prediction and correction flow are still gameplay-relevant. */
         [[nodiscard]]
         bool shouldProcessOwnerPrediction() const;
+        /** @brief Returns true only while the local player should be presented from prediction-owned state. */
+        [[nodiscard]]
+        bool shouldOwnLocalStateFromPrediction() const;
         /** @brief Returns the newest authoritative gameplay tick observed for the active match, if any. */
         [[nodiscard]]
         uint32_t currentAuthoritativeGameplayTick(const net::NetClient& netClient) const;
@@ -207,13 +212,13 @@ namespace bomberman
         void showCenterBanner(std::string_view mainMessage, std::string_view detailMessage, SDL_Color color);
         /** @brief Hides the large centered gameplay banner text. */
         void hideCenterBanner();
-        /** @brief Applies the snapshot-owned local state path when prediction is disabled or unarmed. */
+        /** @brief Applies snapshot-owned local state whenever local presentation is not currently prediction-owned. */
         void applyAuthoritativeLocalSnapshot(const net::MsgSnapshot::PlayerEntry& entry);
         /** @brief Shows the local death banner while the round is still unresolved. */
         void updateDeathBannerFlow();
         /** @brief Toggles local-player presentation visibility from authoritative alive state. */
         void setLocalPlayerAlivePresentation(bool alive);
-        /** @brief Toggles local-player control lock from authoritative snapshot state. */
+        /** @brief Toggles local-player control lock and disarms prediction while the authoritative lock is active. */
         void setLocalPlayerInputLock(bool locked);
         /** @brief Repositions the local multiplayer tag above the current player sprite. */
         void updateLocalPlayerTagPosition();
@@ -258,6 +263,9 @@ namespace bomberman
                                          int16_t xQ,
                                          int16_t yQ,
                                          uint32_t serverTick);
+        /** @brief Returns the authoritative server tick carried by one reliable gameplay event. */
+        [[nodiscard]]
+        static uint32_t gameplayEventServerTick(const net::NetClient::GameplayEvent& gameplayEvent);
         /** @brief Updates remote-facing animation from snapshot delta rather than local input. */
         static void updateRemoteAnimationFromSnapshotDelta(RemotePlayerPresentation& presentation);
         /** @brief Advances interpolation and on-screen positions for all remote presentations. */
@@ -272,7 +280,7 @@ namespace bomberman
         static std::string formatPlayerTag(uint8_t playerId);
         /** @brief Leaves the multiplayer scene and optionally disconnects the active network client. */
         void returnToMenu(bool disconnectClient, std::string_view reason);
-        /** @brief Returns from a cancelled pre-start bootstrap back into the multiplayer lobby. */
+        /** @brief Returns from a cancelled pre-start round start back into the multiplayer lobby. */
         void returnToLobby(std::string_view reason);
         /** @brief Tracks spawned collision objects by tile cell so reliable destruction can remove them cleanly. */
         void onCollisionObjectSpawned(Tile tile, const std::shared_ptr<Object>& object) override;
@@ -307,6 +315,7 @@ namespace bomberman
         std::unordered_map<uint16_t, BombPresentation> bombPresentations_;
         std::unordered_map<uint16_t, std::shared_ptr<Object>> brickPresentations_;
         std::vector<ExplosionPresentation> explosionPresentations_;
+        std::deque<net::NetClient::GameplayEvent> pendingGameplayEvents_;
         bool gameplayConnectionDegraded_ = false;
         bool returningToMenu_ = false;
     };

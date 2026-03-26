@@ -5,7 +5,7 @@
 
 /**
  * @file ServerSnapshot.h
- * @brief Authoritative snapshot cadence and snapshot message construction helpers.
+ * @brief Authoritative snapshot cadence and connected-client snapshot construction helpers.
  */
 
 namespace bomberman::server
@@ -23,9 +23,13 @@ namespace bomberman::server
     bool shouldBroadcastSnapshot(const ServerState& state);
 
     /**
-     * @brief Builds a `MsgSnapshot` from the current authoritative in-match server state.
+     * @brief Builds a `MsgSnapshot` from the current authoritative round state.
      *
-     * Packs active `matchPlayers` plus active bombs into the snapshot payload.
+     * Packs active `matchPlayers` plus active bombs into the payload.
+     *
+     * @note This snapshot is intentionally incomplete for mid-match bootstrap:
+     * it does not encode tile destruction, round-result state, or enough data
+     * to reconstruct the full authoritative world on its own.
      */
     [[nodiscard]]
     net::MsgSnapshot buildSnapshot(const ServerState& state);

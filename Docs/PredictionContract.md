@@ -4,7 +4,8 @@
 - Local player prediction only.
 - Server remains authoritative.
 - Remote players remain snapshot-authoritative.
-- Bombs, deaths, combat resolution, and remote prediction are out of scope.
+- Bombs, deaths, combat resolution, and remote prediction are out of scope for local prediction behavior.
+- No mid-match reconnect or world rebuild is supported.
 
 ## Tick and Input Model
 
@@ -23,12 +24,13 @@
 
 - When prediction is enabled, the client moves the local player immediately.
 - The server remains the source of truth for the local player.
-- When prediction is enabled, the local player is no longer positioned from `MsgSnapshot`.
+- Before the first owner correction arrives, and whenever prediction is suspended back to an unarmed state, the local player may still be positioned from `MsgSnapshot`.
+- Once prediction is armed, authoritative local position comes from `MsgCorrection` plus replayed local inputs rather than direct local positioning from `MsgSnapshot`.
 - Remote players continue to be positioned from `MsgSnapshot`.
 
 ## Message Roles
 
-- `MsgSnapshot`: broadcast world snapshot for remote players and later replicated world state.
+- `MsgSnapshot`: broadcast round-state sample for remote players and other already-connected clients.
 - `MsgCorrection`: owner-only authoritative local correction/ack message.
 - `MsgCorrection` carries:
   - authoritative server tick
@@ -49,3 +51,4 @@
 ## Deferred
 
 - Do not lower snapshot rate until remote smoothing/interpolation exists.
+- Do not add mid-match reconnect/resync assumptions to the prediction path.

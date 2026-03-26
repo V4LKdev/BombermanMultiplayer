@@ -64,7 +64,7 @@ namespace bomberman::server
     // ----- Server phase -----
 
     /**
-     * @brief High-level dedicated-server phase for future lobby and match flow.
+     * @brief High-level dedicated-server phase for the current lobby and match flow.
      */
     enum class ServerPhase : uint8_t
     {
@@ -75,25 +75,21 @@ namespace bomberman::server
         EndOfMatch     ///< Match has finished and end-of-round presentation/results are active.
     };
 
-    // ----- Durable player slots -----
+    // ----- Accepted player metadata -----
 
     /**
-     * @brief Durable per-player seat metadata stored separately from live peer and match state.
+     * @brief Current-session metadata for one accepted player assignment.
      *
-     * Slots are keyed by authoritative `playerId` and survive disconnect until
-     * they are overwritten by a later occupant of the same seat. Live
-     * transport/session ownership stays in @ref PeerSession; this struct keeps
-     * only durable identity and recent reconnect/diagnostic metadata.
+     * Slots are keyed by authoritative `playerId` while that assignment is
+     * active. Live transport/session ownership stays in @ref PeerSession, and
+     * disconnect ends the assignment immediately.
      */
     struct PlayerSlot
     {
-        uint8_t playerId = 0;                               ///< Stable authoritative player seat in [0, net::kMaxPlayers).
-        std::string playerName;                             ///< Latest accepted player name associated with this player seat.
-        bool ready = false;                                 ///< Passive lobby ready toggle owned by the server seat state.
-        uint8_t wins = 0;                                   ///< Server-owned round wins for the current seat occupant.
-        ENetAddress lastKnownAddress{};                     ///< Last accepted or disconnected remote address, kept as reconnect/diagnostic hint only.
-        uint32_t acceptedServerTick = 0;                    ///< Server tick when the current or most recent live session was accepted.
-        std::optional<uint32_t> lastDisconnectServerTick{}; ///< Set once the current or most recent live session disconnects.
+        uint8_t playerId = 0;   ///< Stable authoritative player seat in [0, net::kMaxPlayers) for the current assignment.
+        std::string playerName; ///< Latest accepted player name for this active assignment.
+        bool ready = false;     ///< Passive lobby ready toggle owned by the current assignment.
+        uint8_t wins = 0;       ///< Server-owned round wins for the current assignment only.
     };
 
     // ----- Live peer sessions -----
@@ -134,7 +130,7 @@ namespace bomberman::server
      *
      * The slot lives inside @ref ServerState::matchPlayers and exists only for
      * currently active in-match state. Live peer ownership stays in
-     * @ref PeerSession, and durable player identity lives in @ref PlayerSlot.
+     * @ref PeerSession, and current accepted-player metadata lives in @ref PlayerSlot.
      */
     struct MatchPlayerState
     {
@@ -184,6 +180,8 @@ namespace bomberman::server
      *
      * Bombs snapshot their owner-derived gameplay properties at placement
      * time, so player changes do not retroactively affect already-placed bombs.
+     * Once placed, they remain world state until they resolve or the round
+     * explicitly clears them.
      */
     struct BombState
     {
@@ -199,7 +197,7 @@ namespace bomberman::server
     /**
      * @brief Long-lived authoritative server state shared across receive and simulation paths.
      *
-     * Owns durable player seats, live peer sessions, active in-match state,
+     * Owns accepted player metadata, live peer sessions, active in-match state,
      * player-id allocation, the authoritative tile map, and the diagnostics
      * recorder for the active dedicated-server session.
      */
@@ -214,34 +212,34 @@ namespace bomberman::server
 
         /** @brief Stable-address live peer sessions indexed by ENet incoming peer id for `peer->data` back-pointers. */
         std::array<std::optional<PeerSession>, kServerPeerSessionCapacity> peerSessions{};
-        /** @brief Durable player seats keyed by authoritative player id. See @ref PlayerSlot. */
+        /** @brief Active accepted-player metadata keyed by authoritative player id. See @ref PlayerSlot. */
         std::array<std::optional<PlayerSlot>, net::kMaxPlayers> playerSlots{};
         /** @brief Stable-address active in-match state keyed by authoritative player id. */
         std::array<std::optional<MatchPlayerState>, net::kMaxPlayers> matchPlayers{};
         /** @brief Active authoritative bombs for the current round. */
         std::array<std::optional<BombState>, kServerBombCapacity> bombs{};
 
-        std::array<uint8_t, net::kMaxPlayers> playerIdPool{}; ///< Sorted free-list of available player ids.
+        std::array<uint8_t, net::kMaxPlayers> playerIdPool{}; ///< Sorted free-list of available player ids, released immediately on disconnect.
         uint8_t playerIdPoolSize = 0; ///< Number of valid entries currently stored in `playerIdPool`.
 
         std::optional<uint32_t> fixedMapSeedOverride{}; ///< Fixed map seed reused for every round when the server was started with `--seed`.
         uint32_t mapSeed = 0; ///< Seed prepared for the current or next authoritative round tile map.
         sim::TileMap tiles{}; ///< Authoritative collision map shared by all server-side movement steps.
         uint32_t currentMatchId = 0; ///< Current authoritative match identifier, or 0 while the server is idle in the lobby.
-        uint32_t nextMatchId = 1; ///< Monotonic match-id generator used when the next round bootstrap begins.
+        uint32_t nextMatchId = 1; ///< Monotonic match-id generator used when the next round begins.
         uint32_t currentLobbyCountdownPlayerMask = 0; ///< Bitmask of players currently participating in the lobby countdown.
-        uint32_t currentLobbyCountdownDeadlineTick = 0; ///< Tick at which the lobby countdown should commit into match bootstrap.
+        uint32_t currentLobbyCountdownDeadlineTick = 0; ///< Tick at which the lobby countdown should commit into the next round start.
         uint8_t currentLobbyCountdownLastBroadcastSecond = 0; ///< Last whole countdown second already broadcast through LobbyState.
-        uint32_t currentMatchPlayerMask = 0; ///< Bitmask of player ids participating in the current match/bootstrap set.
+        uint32_t currentMatchPlayerMask = 0; ///< Bitmask of player ids participating in the current round start or active round.
         uint32_t currentMatchLoadedMask = 0; ///< Bitmask of participants that have acknowledged `MatchLoaded`.
-        uint32_t currentMatchStartDeadlineTick = 0; ///< Tick deadline for `StartingMatch` bootstrap/loaded acknowledgements, or 0 when idle.
+        uint32_t currentMatchStartDeadlineTick = 0; ///< Tick deadline for `StartingMatch` load acknowledgements, or 0 when idle.
         uint32_t currentMatchGoShowTick = 0; ///< Tick at which gameplay scenes should display `GO!` for the current match.
         uint32_t currentMatchUnlockTick = 0; ///< Tick at which gameplay input unlocks for the current match.
         uint32_t currentEndOfMatchReturnTick = 0; ///< Tick deadline for automatic end-of-match return to the lobby, or 0 when inactive.
         std::optional<uint8_t> roundWinnerPlayerId{}; ///< Winner of the current or most recent round, if one exists.
         bool roundEndedInDraw = false; ///< True when the current or most recent round ended with no surviving player.
 
-        // TODO: Feed phase transitions and derived idle state into NetDiagnostics once lobby flow exists.
+        // TODO: Feed phase transitions and derived idle state into NetDiagnostics.
         net::NetDiagnostics diag; ///< Diagnostics recorder for this session.
     };
 
@@ -312,24 +310,24 @@ namespace bomberman::server
     const PeerSession* findPeerSessionByPlayerId(const ServerState& state, uint8_t playerId);
 
     /**
-     * @brief Commits an accepted peer session into a durable player slot.
+     * @brief Commits an accepted peer session into active player metadata.
      *
-     * Updates the @ref PlayerSlot for `playerId` and binds the authoritative
-     * seat to the provided @ref PeerSession. Match state creation stays
-     * separate so future lobby flow can accept peers before a match starts.
+     * Creates the active @ref PlayerSlot for `playerId` and binds the
+     * authoritative assignment to the provided @ref PeerSession. Match state
+     * creation stays separate so accepted peers can remain in the lobby before
+     * a match starts.
      */
     void acceptPeerSession(ServerState& state, PeerSession& session, uint8_t playerId, std::string_view playerName);
 
     /**
      * @brief Releases the live peer session bound to `peer`, if any.
      *
-     * Clears `peer.data`, updates the durable @ref PlayerSlot, destroys any
-     * active @ref MatchPlayerState for the same player seat, and returns the
-     * freed player id to the pool immediately.
+     * Clears `peer.data`, destroys the active @ref PlayerSlot and any active
+     * @ref MatchPlayerState for the same player seat, and returns the freed
+     * player id to the pool immediately.
      *
-     * @note This preserves the current no-reconnect behavior. Future
-     * reconnect work should extend this helper instead of reintroducing
-     * disconnect cleanup logic in call sites.
+     * @note Disconnect ends the current player assignment. Any later join is a
+     * fresh admission from the current free-id pool.
      *
      * @return Freed player id on success, or `std::nullopt` if the peer had no accepted player seat attached.
      */

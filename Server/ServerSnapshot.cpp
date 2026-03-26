@@ -1,6 +1,6 @@
 /**
  * @file ServerSnapshot.cpp
- * @brief Authoritative snapshot cadence and snapshot message construction.
+ * @brief Authoritative snapshot cadence and connected-client snapshot construction.
  */
 
 #include "ServerSnapshot.h"
@@ -53,7 +53,7 @@ namespace bomberman::server
                 flags |= static_cast<uint8_t>(net::MsgSnapshot::PlayerEntry::EPlayerFlags::InputLocked);
             }
 
-            // Temporary invulnerability is not replicated yet.
+            // The protocol reserves Invulnerable, but the server does not track it yet.
             entry.flags = static_cast<net::MsgSnapshot::PlayerEntry::EPlayerFlags>(flags);
         }
 

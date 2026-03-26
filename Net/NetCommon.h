@@ -46,9 +46,9 @@ namespace bomberman::net
     constexpr uint8_t       kMaxPlayers = 4;             ///< Maximum supported player count in a game instance.
     constexpr uint8_t       kMaxSnapshotBombs = kMaxPlayers * 4; ///< Maximum bombs carried by one snapshot payload.
     constexpr std::size_t   kMaxExplosionBlastCells =
-        1u + 4u * (static_cast<std::size_t>((::bomberman::tileArrayWidth > ::bomberman::tileArrayHeight) ?
-            ::bomberman::tileArrayWidth :
-            ::bomberman::tileArrayHeight) - 1u); ///< Maximum cells a cross-shaped blast can touch.
+        1u + 4u * (static_cast<std::size_t>((tileArrayWidth > tileArrayHeight) ?
+            tileArrayWidth :
+            tileArrayHeight) - 1u); ///< Maximum cells a cross-shaped blast can touch.
     constexpr std::size_t   kMaxExplosionDestroyedBricks = kMaxExplosionBlastCells - 1u; ///< Upper bound for bricks one blast can destroy.
 
     /** @brief First valid input sequence number. Seq 0 means "no input received yet". */
@@ -230,23 +230,23 @@ namespace bomberman::net
     /** @brief Compile-time checks for expected wire sizes. */
     static_assert(sizeof(char) == 1, "Unexpected char size");
 
-    static_assert(kPacketHeaderSize  == 3,   "PacketHeader size mismatch");
-    static_assert(kMsgHelloSize      == 18,  "MsgHello size mismatch");
-    static_assert(kMsgWelcomeSize    == 5,   "MsgWelcome size mismatch");
-    static_assert(kMsgRejectSize     == 3,   "MsgReject size mismatch");
-    static_assert(kMsgLevelInfoSize  == 8,   "MsgLevelInfo size mismatch");
-    static_assert(kMsgLobbyReadySize == 1,   "MsgLobbyReady size mismatch");
-    static_assert(kMsgMatchLoadedSize == 4,  "MsgMatchLoaded size mismatch");
-    static_assert(kMsgMatchStartSize == 12,  "MsgMatchStart size mismatch");
-    static_assert(kMsgMatchCancelledSize == 4, "MsgMatchCancelled size mismatch");
-    static_assert(kMsgMatchResultSize == 22, "MsgMatchResult size mismatch");
-    static_assert(kMsgLobbyStateSeatSize == 18, "MsgLobbyState seat size mismatch");
-    static_assert(kMsgLobbyStateSize == 76, "MsgLobbyState size mismatch");
-    static_assert(kMsgInputSize      == 21,  "MsgInput size mismatch");
-    static_assert(kMsgSnapshotSize   == 98,  "MsgSnapshot size mismatch");
-    static_assert(kMsgCorrectionSize == 16,  "MsgCorrection size mismatch");
-    static_assert(kMsgBombPlacedSize == 16,  "MsgBombPlaced size mismatch");
-    static_assert(kMsgExplosionResolvedSize == 497, "MsgExplosionResolved size mismatch");
+    static_assert(kPacketHeaderSize         == 3,  "PacketHeader size mismatch");
+    static_assert(kMsgHelloSize             == 18, "MsgHello size mismatch");
+    static_assert(kMsgWelcomeSize           == 5,  "MsgWelcome size mismatch");
+    static_assert(kMsgRejectSize            == 3,  "MsgReject size mismatch");
+    static_assert(kMsgLevelInfoSize         == 8,  "MsgLevelInfo size mismatch");
+    static_assert(kMsgLobbyReadySize        == 1,  "MsgLobbyReady size mismatch");
+    static_assert(kMsgMatchLoadedSize       == 4,  "MsgMatchLoaded size mismatch");
+    static_assert(kMsgMatchStartSize        == 12, "MsgMatchStart size mismatch");
+    static_assert(kMsgMatchCancelledSize    == 4,  "MsgMatchCancelled size mismatch");
+    static_assert(kMsgMatchResultSize       == 22, "MsgMatchResult size mismatch");
+    static_assert(kMsgLobbyStateSeatSize    == 18, "MsgLobbyState seat size mismatch");
+    static_assert(kMsgLobbyStateSize        == 76, "MsgLobbyState size mismatch");
+    static_assert(kMsgInputSize             == 21, "MsgInput size mismatch");
+    static_assert(kMsgSnapshotSize          == 98, "MsgSnapshot size mismatch");
+    static_assert(kMsgCorrectionSize        == 16, "MsgCorrection size mismatch");
+    static_assert(kMsgBombPlacedSize        == 16, "MsgBombPlaced size mismatch");
+    static_assert(kMsgExplosionResolvedSize == 497,"MsgExplosionResolved size mismatch");
 
     constexpr std::size_t kSnapshotPlayersOffset =
         sizeof(uint32_t) + // matchId
@@ -354,9 +354,8 @@ namespace bomberman::net
     /**
      * @brief Returns the required ENet channel for a protocol message type.
      *
-     * @note `LevelInfo`, `LobbyState`, `LobbyReady`, `MatchLoaded`, `MatchStart`,
-     * and `MatchCancelled` all use reliable control
-     * messages owned by higher-level session and match flow.
+     * @note Handshake, lobby, and match-flow control messages all use reliable
+     * control delivery owned by higher-level session and match flow.
      */
     constexpr EChannel expectedChannelFor(EMsgType type)
     {
@@ -480,16 +479,12 @@ namespace bomberman::net
         char name[kPlayerNameMax];
     };
 
-    /**
-     * @brief Welcome payload sent by server in response to Hello.
-     *
-     * @todo Extend this message with a reconnect token and the snapshot rate.
-     */
+    /** @brief Welcome payload sent by server in response to Hello. */
     struct MsgWelcome
     {
         uint16_t protocolVersion; ///< Server protocol version.
         uint8_t playerId;         ///< Server-assigned player identifier [0, kMaxPlayers).
-        uint16_t serverTickRate;  ///< Authoritative server simulation tick rate.
+        uint16_t serverTickRate;  ///< Authoritative server simulation tick rate. Must be greater than zero.
     };
 
     /** @brief Reject payload sent by server in response to Hello on failure. */
@@ -500,7 +495,7 @@ namespace bomberman::net
             VersionMismatch = 0x01,
             ServerFull = 0x02,
             Banned = 0x03,
-            GameInProgress = 0x04,
+            GameInProgress = 0x04, ///< Server is not admitting new players outside lobby/pre-start flow.
             Other = 0xFF
         };
 
@@ -510,15 +505,14 @@ namespace bomberman::net
     };
 
     /**
-     * @brief Match bootstrap payload sent reliably by the server when a match begins.
+     * @brief Round-start payload sent reliably by the server when a match begins.
      *
      * Carries the current authoritative match identifier and the map seed
-     * needed to instantiate the shared gameplay scene or later
-     * resync/reconnect into the same round.
+     * needed to instantiate the shared gameplay scene for this round.
      */
     struct MsgLevelInfo
     {
-        uint32_t matchId = 0; ///< Monotonic authoritative match identifier for this bootstrap.
+        uint32_t matchId = 0; ///< Monotonic authoritative match identifier for this round start.
         uint32_t mapSeed = 0; ///< 32-bit seed for the shared tile-map generator.
     };
 
@@ -528,7 +522,7 @@ namespace bomberman::net
         uint8_t ready = 0; ///< `1` marks ready, `0` clears ready.
     };
 
-    /** @brief Client acknowledgement that the gameplay scene for one match bootstrap is loaded. */
+    /** @brief Client acknowledgement that the gameplay scene for one round start is loaded. */
     struct MsgMatchLoaded
     {
         uint32_t matchId = 0; ///< Authoritative match identifier being acknowledged.
@@ -542,7 +536,7 @@ namespace bomberman::net
         uint32_t unlockServerTick = 0; ///< Authoritative server tick at which gameplay input unlocks.
     };
 
-    /** @brief Explicit pre-start cancel edge sent when the current bootstrap is aborted back to lobby. */
+    /** @brief Explicit pre-start cancel edge sent when the current round start is aborted back to lobby. */
     struct MsgMatchCancelled
     {
         uint32_t matchId = 0; ///< Authoritative match identifier that was cancelled before start.
@@ -597,7 +591,7 @@ namespace bomberman::net
 
         EPhase phase = EPhase::Idle;           ///< Lobby presentation phase.
         uint8_t countdownSecondsRemaining = 0; ///< Remaining whole countdown seconds during `Countdown`.
-        uint16_t reserved = 0;                 ///< Reserved for future lobby-flow wire extensions.
+        uint16_t reserved = 0;                 ///< Reserved field. Must be zero in the current protocol version.
         SeatEntry seats[kMaxPlayers]{}; ///< Stable player-id keyed lobby seats.
     };
 
@@ -629,10 +623,15 @@ namespace bomberman::net
     /**
      * @brief Snapshot payload broadcast by the server to all clients.
      *
-     * Contains active authoritative in-match player state plus active bombs.
-     * Players are packed in ascending player-id slot order. Bombs are packed in ascending cell order.
+     * Contains active authoritative round player state plus active bombs for
+     * already-connected clients. Players are packed in ascending player-id
+     * slot order. Bombs are packed in ascending cell order.
      *
-     * @todo Add Tile data, bombs, lobby state, death/respawn, and more diagnostics.
+     * Truth boundary today:
+     * - authoritative for player positions / replicated player flags / active bomb membership
+     * - not a payload for mid-match joins or recovery
+     * - does not encode destroyed tiles, round-result presentation state, or
+     *   enough world state to rebuild an in-progress round after disconnect
      *
      * @note The owning local player may still appear in the snapshot even when
      * client prediction is using owner corrections for local position.
@@ -699,7 +698,9 @@ namespace bomberman::net
      * @brief Reliable discrete bomb-placement event sent by the server.
      *
      * This message is presentation-focused. Snapshots remain the long-lived
-     * authority for bomb existence and membership.
+     * authority for durable bomb existence and membership, so consumers that
+     * merge both streams still need to respect authoritative server tick order
+     * across channels.
      */
     struct MsgBombPlaced
     {
@@ -717,7 +718,8 @@ namespace bomberman::net
      *
      * Carries the resolved blast footprint and the set of bricks destroyed by
      * the detonation so connected clients can update world presentation
-     * immediately without waiting for a future snapshot extension.
+     * immediately. This complements snapshots because snapshots do not carry
+     * destroyed-tile history for later admission or recovery.
      */
     struct MsgExplosionResolved
     {
@@ -990,7 +992,7 @@ namespace bomberman::net
             return false;
         }
         outWelcome.serverTickRate = readU16LE(in + 3);
-        return true;
+        return outWelcome.serverTickRate != 0;
     }
 
     /** @brief Serializes `MsgReject` to fixed-size wire payload. */
@@ -1229,7 +1231,18 @@ namespace bomberman::net
         outLobbyState.phase = static_cast<MsgLobbyState::EPhase>(in[0]);
         outLobbyState.countdownSecondsRemaining = in[1];
         outLobbyState.reserved = readU16LE(in + 2);
-        if (outLobbyState.phase != MsgLobbyState::EPhase::Countdown)
+        if (outLobbyState.reserved != 0)
+        {
+            return false;
+        }
+        if (outLobbyState.phase == MsgLobbyState::EPhase::Countdown)
+        {
+            if (outLobbyState.countdownSecondsRemaining == 0)
+            {
+                return false;
+            }
+        }
+        else
         {
             outLobbyState.countdownSecondsRemaining = 0;
         }
@@ -1241,6 +1254,11 @@ namespace bomberman::net
 
             const uint8_t rawFlags = in[offset];
             if (!isValidLobbySeatFlags(rawFlags))
+            {
+                return false;
+            }
+            if ((rawFlags & static_cast<uint8_t>(MsgLobbyState::SeatEntry::ESeatFlags::Ready)) != 0 &&
+                (rawFlags & static_cast<uint8_t>(MsgLobbyState::SeatEntry::ESeatFlags::Occupied)) == 0)
             {
                 return false;
             }

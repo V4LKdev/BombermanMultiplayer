@@ -45,6 +45,8 @@ set(SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/Scenes/LevelSceneFactory.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Scenes/SingleplayerLevelScene.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Scenes/MultiplayerLevelScene.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/Scenes/MultiplayerLevelScene.Authority.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/Scenes/MultiplayerLevelScene.Presentation.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Scenes/GameOverScene.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Scenes/StageScene.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Managers/SceneManager.cpp
@@ -69,6 +71,8 @@ set(SERVER_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/server_main.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Server/ServerSession.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Server/ServerFlow.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/Server/ServerLobbyFlow.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/Server/ServerMatchFlow.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Server/ServerSimulation.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Server/ServerBombs.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Server/ServerControlHandlers.cpp

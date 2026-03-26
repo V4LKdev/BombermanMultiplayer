@@ -1,5 +1,5 @@
 /**
-* @file NetClient.h
+ * @file NetClient.h
  * @brief Client-side multiplayer connection lifecycle and packet endpoint.
  */
 
@@ -23,7 +23,7 @@ namespace bomberman::net
         Disconnected,    ///< Not connected and holding no transport resources.
         Connecting,      ///< ENet connect in progress, waiting for a CONNECT event.
         Handshaking,     ///< Transport connected and Hello sent, awaiting Welcome or Reject.
-        Connected,       ///< Session accepted and ready for lobby or later match-bootstrap messages.
+        Connected,       ///< Session accepted and ready for lobby flow or the next round-start message.
         Disconnecting,   ///< Graceful disconnect requested, awaiting ENet completion.
         FailedResolve,   ///< Host address could not be resolved.
         FailedConnect,   ///< Connect attempt timed out or transport failed before handshake.
@@ -172,7 +172,7 @@ namespace bomberman::net
          * @brief Acknowledges that the gameplay scene for `matchId` has been constructed locally.
          *
          * This is a low-frequency reliable control message used only during the
-         * authoritative match-start bootstrap.
+         * authoritative round-start handoff.
          *
          * @return `true` if the request was queued successfully.
          */
@@ -215,10 +215,19 @@ namespace bomberman::net
         bool tryGetLatestLobbyState(MsgLobbyState& out) const;
 
         /**
-         * @brief Consumes the newest unhandled LevelInfo bootstrap for the current session.
+         * @brief Returns milliseconds since the last authoritative lobby-state update.
          *
-         * Returns `false` until a newer bootstrap arrives. Once returned
-         * successfully, the same cached bootstrap is not returned again until a
+         * If no lobby-state update has arrived yet for the current session, the
+         * timer runs from handshake completion instead.
+         */
+        [[nodiscard]]
+        uint32_t lobbySilenceMs() const;
+
+        /**
+         * @brief Consumes the newest unhandled round-start `LevelInfo` for the current session.
+         *
+         * Returns `false` until a newer `LevelInfo` arrives. Once returned
+         * successfully, the same cached message is not returned again until a
          * later `LevelInfo` replaces it.
          */
         [[nodiscard]]
@@ -290,10 +299,21 @@ namespace bomberman::net
         /**
          * @brief Pops the oldest pending reliable gameplay event for the current session.
          *
-         * Returns `false` when no pending event is queued.
+         * Returns `false` when no pending event is queued or the reliable
+         * gameplay-event stream has been invalidated for the current match.
          */
         [[nodiscard]]
         bool tryDequeueGameplayEvent(GameplayEvent& out);
+
+        /**
+         * @brief Returns true once the reliable gameplay-event stream can no longer be trusted.
+         *
+         * The current client policy is fail-fast: if reliable gameplay events
+         * overflow locally, the active match should be abandoned instead of
+         * continuing with potentially divergent world state.
+         */
+        [[nodiscard]]
+        bool hasBrokenGameplayEventStream() const;
 
         /**
          * @brief Returns milliseconds since the last snapshot or correction.
@@ -339,7 +359,7 @@ namespace bomberman::net
          * Keeps `<enet/enet.h>` out of this header. All direct ENet interaction
          * lives in `NetClient.cpp`.
          *
-         * The Struct holds both ENet transport resources and transient session state
+         * The struct holds both ENet transport resources and transient session state
          * that is cleared on disconnect or failure.
          * This includes the protocol packet caches, which are logically part of the session.
          */
@@ -370,18 +390,19 @@ namespace bomberman::net
         void destroyTransport() const;
 
         /** @brief Clears the local per-match input sequence/history used for gameplay batching. */
-        void resetLocalInputStream();
+        void resetLocalInputStream() const;
 
         /**
-         * @brief Resets local client state that must restart from a fresh baseline on each new match bootstrap.
+         * @brief Resets local client state that must restart from a fresh baseline on each new round start.
          *
          * This currently includes local input sequencing plus gameplay receive timers.
-         * Future reconnect/bootstrap variants can replace this with a server-provided baseline.
          */
         void resetLocalMatchBootstrapState();
 
-        /** @brief Clears match-scoped caches so a newer bootstrap cannot inherit stale gameplay state. */
-        void clearActiveMatchRuntimeCaches();
+        /** @brief Clears match-scoped caches so a newer round start cannot inherit stale gameplay state. */
+        void clearActiveMatchRuntimeCaches() const;
+        /** @brief Clears the current round-start/bootstrap session and local gameplay input state. */
+        void clearCurrentMatchSession() const;
 
         /**
          * @brief Clears per-attempt and per-session data without changing connection state.

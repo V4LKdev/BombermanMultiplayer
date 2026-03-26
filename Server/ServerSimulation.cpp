@@ -77,7 +77,13 @@ namespace bomberman::server
                 matchPlayer.consecutiveInputGaps = 0;
 
                 if (entry.seenBuffered && !entry.seenDirect)
-                    state.diag.recordBufferedInputRecovery(matchPlayer.playerId, nextSeq, state.serverTick);
+                {
+                    state.diag.recordBufferedDeadlineRecovery(matchPlayer.playerId, nextSeq, state.serverTick);
+                }
+                else if (entry.seenDirect)
+                {
+                    state.diag.recordDirectDeadlineConsume(matchPlayer.playerId, nextSeq);
+                }
 
                 entry.valid = false;
                 entry.seenDirect = false;

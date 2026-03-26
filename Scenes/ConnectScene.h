@@ -21,7 +21,7 @@ namespace bomberman
     /**
      * @brief Pre-game multiplayer connect scene.
      *
-     * Owns the user-facing form for player name and server address entry,
+     * Owns the user-facing form for player name and server host/address entry,
      * displays async connection progress/failure status from `NetClient`,
      * and transitions into the multiplayer lobby flow once the session is ready.
      */
@@ -80,7 +80,7 @@ namespace bomberman
         /** @brief Returns the host to use, falling back to kDefaultHost if the field is empty. */
         [[nodiscard]]
         std::string_view effectiveHost() const;
-        /** @brief Restores the idle status text after host editing once no connect attempt is active. */
+        /** @brief Restores the idle status text only when the underlying client is actually disconnected. */
         void restoreIdleStatusAfterHostEdit();
 
         // ----- Form Helpers -----
@@ -89,7 +89,7 @@ namespace bomberman
         void refreshFieldPresentation();
         /** @brief Moves keyboard focus through the form controls with wraparound. */
         void cycleFocus(int direction);
-        /** @brief Filters and appends user text for either the player-name or IPv4 host field. */
+        /** @brief Filters and appends user text for either the player-name or host/address field. */
         void appendSanitizedFieldText(std::string& target, std::string_view chunk, bool isHostField);
 
         /** @brief Returns the pixel width of the given text using the form font. */
@@ -98,9 +98,9 @@ namespace bomberman
         [[nodiscard]]
         bool fitsFieldWidth(std::string_view text, bool isHostField) const;
 
-        /** @brief Returns true if @p ip is a syntactically valid dotted-decimal IPv4 address. */
+        /** @brief Returns true if @p host is a syntactically valid IPv4 address or hostname. */
         [[nodiscard]]
-        static bool isValidIPv4(std::string_view ip);
+        static bool isValidHost(std::string_view host);
 
         /** @brief Recenters editable field values inside their fixed-width form slots. */
         void recenterFieldValues();

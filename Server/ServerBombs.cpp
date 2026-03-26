@@ -1,10 +1,11 @@
 /**
  * @file ServerBombs.cpp
- * @brief Authoritative server-side bomb placement, explosion, and round-end logic.
+ * @brief Authoritative server-side bomb placement, explosion, and lifecycle logic.
  */
 
 #include "ServerBombs.h"
 
+#include <algorithm>
 #include <array>
 #include <optional>
 #include <utility>
@@ -166,17 +167,17 @@ namespace bomberman::server
         }
 
         /**
-         * @brief Computes the cross-shaped blast cells for one detonation and applies brick destruction.
+         * @brief Computes the cross-shaped blast cells for one detonation against a read-only tile view.
          *
          * Bricks are included in the returned blast set and then stop propagation in that
          * direction. Stone blocks are not included and also stop propagation.
          */
-        void computeBlastCellsAndDestroyBricks(ServerState& state,
-                                               const BombState& bomb,
-                                               std::array<BombCell, kMaxBlastCellsPerBomb>& outBlastCells,
-                                               std::size_t& outBlastCellCount,
-                                               std::array<BombCell, kMaxDestroyedBricksPerBomb>& outDestroyedBricks,
-                                               std::size_t& outDestroyedBrickCount)
+        void computeBlastCellsAndCollectDestroyedBricks(const sim::TileMap& tiles,
+                                                        const BombState& bomb,
+                                                        std::array<BombCell, kMaxBlastCellsPerBomb>& outBlastCells,
+                                                        std::size_t& outBlastCellCount,
+                                                        std::array<BombCell, kMaxDestroyedBricksPerBomb>& outDestroyedBricks,
+                                                        std::size_t& outDestroyedBrickCount)
         {
             outBlastCellCount = 0;
             outDestroyedBrickCount = 0;
@@ -207,7 +208,7 @@ namespace bomberman::server
                         static_cast<uint8_t>(col),
                         static_cast<uint8_t>(row)
                     };
-                    const Tile tile = state.tiles[cell.row][cell.col];
+                    const Tile tile = tiles[cell.row][cell.col];
                     if (tile == Tile::Stone)
                         break;
 
@@ -215,12 +216,41 @@ namespace bomberman::server
 
                     if (tile == Tile::Brick)
                     {
-                        state.tiles[cell.row][cell.col] = Tile::Grass;
                         if (outDestroyedBrickCount < outDestroyedBricks.size())
                             outDestroyedBricks[outDestroyedBrickCount++] = cell;
                         break;
                     }
                 }
+            }
+        }
+
+        /** @brief Keeps only brick cells that are still intact in the live authoritative tile map. */
+        void retainCurrentlyIntactBricks(const sim::TileMap& liveTiles,
+                                         std::array<BombCell, kMaxDestroyedBricksPerBomb>& destroyedBricks,
+                                         std::size_t& destroyedBrickCount)
+        {
+            std::size_t writeIndex = 0;
+            for (std::size_t i = 0; i < destroyedBrickCount; ++i)
+            {
+                const BombCell cell = destroyedBricks[i];
+                if (liveTiles[cell.row][cell.col] != Tile::Brick)
+                    continue;
+
+                destroyedBricks[writeIndex++] = cell;
+            }
+
+            destroyedBrickCount = writeIndex;
+        }
+
+        /** @brief Applies one authoritative list of destroyed bricks to the live tile map. */
+        void applyDestroyedBricks(ServerState& state,
+                                  const std::array<BombCell, kMaxDestroyedBricksPerBomb>& destroyedBricks,
+                                  const std::size_t destroyedBrickCount)
+        {
+            for (std::size_t i = 0; i < destroyedBrickCount; ++i)
+            {
+                const BombCell cell = destroyedBricks[i];
+                state.tiles[cell.row][cell.col] = Tile::Grass;
             }
         }
 
@@ -275,8 +305,10 @@ namespace bomberman::server
             return killedCount;
         }
 
-        /** @brief Resolves one bomb detonation at the current authoritative tick. */
-        void resolveBombExplosion(ServerState& state, const std::size_t bombIndex)
+        /** @brief Resolves one bomb detonation at the current authoritative tick against the shared pre-explosion tiles. */
+        void resolveBombExplosion(ServerState& state,
+                                  const std::size_t bombIndex,
+                                  const sim::TileMap& preExplosionTiles)
         {
             if (bombIndex >= state.bombs.size() || !state.bombs[bombIndex].has_value())
                 return;
@@ -287,12 +319,14 @@ namespace bomberman::server
             std::size_t blastCellCount = 0;
             std::array<BombCell, kMaxDestroyedBricksPerBomb> destroyedBricks{};
             std::size_t destroyedBrickCount = 0;
-            computeBlastCellsAndDestroyBricks(state,
-                                              bomb,
-                                              blastCells,
-                                              blastCellCount,
-                                              destroyedBricks,
-                                              destroyedBrickCount);
+            computeBlastCellsAndCollectDestroyedBricks(preExplosionTiles,
+                                                       bomb,
+                                                       blastCells,
+                                                       blastCellCount,
+                                                       destroyedBricks,
+                                                       destroyedBrickCount);
+            retainCurrentlyIntactBricks(state.tiles, destroyedBricks, destroyedBrickCount);
+            applyDestroyedBricks(state, destroyedBricks, destroyedBrickCount);
 
             uint8_t killedPlayerMask = 0;
             const uint8_t killedPlayerCount =
@@ -342,6 +376,34 @@ namespace bomberman::server
                             static_cast<int>(killedPlayerCount));
         }
     } // namespace
+
+    void clearBombsAndReleaseOwnership(ServerState& state)
+    {
+        std::size_t clearedBombCount = 0;
+        for (auto& bombEntry : state.bombs)
+        {
+            if (!bombEntry.has_value())
+                continue;
+
+            bombEntry.reset();
+            ++clearedBombCount;
+        }
+
+        for (auto& matchEntry : state.matchPlayers)
+        {
+            if (!matchEntry.has_value())
+                continue;
+
+            matchEntry->activeBombCount = 0;
+        }
+
+        if (clearedBombCount > 0)
+        {
+            LOG_SERVER_INFO("Cleared active bombs tick={} count={}",
+                            state.serverTick,
+                            clearedBombCount);
+        }
+    }
 
     void tryPlaceBomb(ServerState& state, MatchPlayerState& matchPlayer)
     {
@@ -426,11 +488,7 @@ namespace bomberman::server
         bomb.radius = matchPlayer.bombRange;
 
         ++matchPlayer.activeBombCount;
-        state.diag.recordBombPlaced(matchPlayer.playerId,
-                                    bomb.cell.col,
-                                    bomb.cell.row,
-                                    bomb.radius,
-                                    state.serverTick);
+        state.diag.recordBombPlaced();
 
         LOG_NET_INPUT_INFO("Bomb placed playerId={} tick={} cell=({}, {}) radius={} activeBombs={}/{} explodeTick={}",
                            matchPlayer.playerId,
@@ -462,6 +520,17 @@ namespace bomberman::server
 
     void resolveExplodingBombs(ServerState& state)
     {
+        struct DueBombRef
+        {
+            std::size_t index = 0;
+            uint8_t originRow = 0;
+            uint8_t originCol = 0;
+            uint8_t ownerId = 0;
+        };
+
+        std::array<DueBombRef, kServerBombCapacity> dueBombs{};
+        std::size_t dueBombCount = 0;
+
         for (std::size_t i = 0; i < state.bombs.size(); ++i)
         {
             if (!state.bombs[i].has_value())
@@ -470,7 +539,44 @@ namespace bomberman::server
             if (state.bombs[i]->explodeTick > state.serverTick)
                 continue;
 
-            resolveBombExplosion(state, i);
+            const BombState& bomb = state.bombs[i].value();
+            dueBombs[dueBombCount++] = DueBombRef{
+                i,
+                bomb.cell.row,
+                bomb.cell.col,
+                bomb.ownerId
+            };
+        }
+
+        if (dueBombCount == 0)
+            return;
+
+        std::sort(dueBombs.begin(),
+                  dueBombs.begin() + static_cast<std::ptrdiff_t>(dueBombCount),
+                  [](const DueBombRef& lhs, const DueBombRef& rhs)
+                  {
+                      if (lhs.originRow != rhs.originRow)
+                          return lhs.originRow < rhs.originRow;
+                      if (lhs.originCol != rhs.originCol)
+                          return lhs.originCol < rhs.originCol;
+                      if (lhs.ownerId != rhs.ownerId)
+                          return lhs.ownerId < rhs.ownerId;
+
+                      return lhs.index < rhs.index;
+                  });
+
+        sim::TileMap preExplosionTiles{};
+        for (std::size_t row = 0; row < tileArrayHeight; ++row)
+        {
+            for (std::size_t col = 0; col < tileArrayWidth; ++col)
+            {
+                preExplosionTiles[row][col] = state.tiles[row][col];
+            }
+        }
+
+        for (std::size_t i = 0; i < dueBombCount; ++i)
+        {
+            resolveBombExplosion(state, dueBombs[i].index, preExplosionTiles);
         }
     }
 

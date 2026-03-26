@@ -124,7 +124,7 @@ namespace bomberman::net
 
         /** @brief Clears all prediction state and history. */
         void reset() noexcept;
-        /** @brief Suspends prediction and drops retained local history while preserving diagnostics totals. */
+        /** @brief Suspends prediction, drops retained local history, and waits for a later correction baseline to re-arm. */
         void suspend() noexcept;
 
         /** @brief Returns true once the first authoritative baseline has been accepted. */

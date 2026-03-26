@@ -138,6 +138,7 @@ namespace bomberman
                 spawnBomb(player.get());
             }
         }
+    #ifndef NDEBUG
         else if(scancode == SDL_SCANCODE_BACKSPACE)
         {
             gameOver();
@@ -145,6 +146,7 @@ namespace bomberman
             score += kScoreRewardForStage * 100;
             gameOverTimer = kWinTimerStart;
         }
+    #endif
     }
 
     void SingleplayerLevelScene::generateEnemies()
@@ -557,4 +559,3 @@ namespace bomberman
     }
 
 } // namespace bomberman
-

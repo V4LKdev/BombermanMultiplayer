@@ -85,9 +85,9 @@ namespace bomberman::server
             if (const bool sent = queueReliableControl(ctx.peer, makeRejectPacket(reject)); sent)
             {
                 flush(ctx.state.host);
-                LOG_NET_CONN_INFO("Sent Reject (reason={}) to peer {}",
-                                  static_cast<int>(reason),
-                                  ctx.peer->incomingPeerID);
+                LOG_NET_CONN_DEBUG("Sent Reject (reason={}) to peer {}",
+                                   static_cast<int>(reason),
+                                   ctx.peer->incomingPeerID);
                 recordControlPacketSent(ctx, EMsgType::Reject, ctx.recordedPlayerId.value_or(0xFF), kMsgRejectSize);
             }
             else
@@ -112,7 +112,9 @@ namespace bomberman::server
         [[nodiscard]]
         bool roundRequiresAdditionalBootstrap(const ServerState& state)
         {
-            return state.phase != ServerPhase::Lobby;
+            return state.phase == ServerPhase::StartingMatch ||
+                   state.phase == ServerPhase::InMatch ||
+                   state.phase == ServerPhase::EndOfMatch;
         }
 
         [[nodiscard]]
@@ -170,7 +172,7 @@ namespace bomberman::server
                 return false;
             }
 
-            LOG_NET_CONN_INFO("Queued Welcome to playerId={}", playerId);
+            LOG_NET_CONN_DEBUG("Queued Welcome to playerId={}", playerId);
             recordControlPacketSent(ctx, EMsgType::Welcome, playerId, kMsgWelcomeSize);
             return true;
         }
@@ -238,7 +240,8 @@ namespace bomberman::server
             }
         }
 
-        void finalizeAcceptedHello(PacketDispatchContext& ctx, const uint8_t playerId, const std::string_view playerName)
+        [[nodiscard]]
+        bool finalizeAcceptedHello(PacketDispatchContext& ctx, const uint8_t playerId, const std::string_view playerName)
         {
             auto* session = getPeerSession(ctx.peer);
             if (session == nullptr)
@@ -247,7 +250,7 @@ namespace bomberman::server
                 releasePlayerId(ctx.state, playerId);
                 ctx.receiveResult = NetPacketResult::Rejected;
                 enet_peer_reset(ctx.peer);
-                return;
+                return false;
             }
 
             acceptPeerSession(ctx.state, *session, playerId, playerName);
@@ -257,22 +260,23 @@ namespace bomberman::server
                                 playerId,
                                 static_cast<uint32_t>(ctx.peer->incomingPeerID));
             ctx.receiveResult = NetPacketResult::Ok;
+            return true;
         }
 
         [[nodiscard]]
-        PlayerSlot* requireAcceptedLobbySlot(PacketDispatchContext& ctx)
+        PlayerSlot* requireAcceptedPlayerSlot(PacketDispatchContext& ctx)
         {
             auto* session = getPeerSession(ctx.peer);
             if (session == nullptr)
             {
-                LOG_NET_CONN_ERROR("Lobby control peer {} has no live peer session - ignoring", ctx.peer->incomingPeerID);
+                LOG_NET_CONN_ERROR("Control peer {} has no live peer session - ignoring", ctx.peer->incomingPeerID);
                 ctx.receiveResult = NetPacketResult::Rejected;
                 return nullptr;
             }
 
             if (!session->playerId.has_value())
             {
-                LOG_NET_CONN_WARN("Lobby control from non-handshaked peer {} - ignoring", ctx.peer->incomingPeerID);
+                LOG_NET_CONN_WARN("Control packet from non-handshaked peer {} - ignoring", ctx.peer->incomingPeerID);
                 ctx.receiveResult = NetPacketResult::Rejected;
                 return nullptr;
             }
@@ -281,7 +285,7 @@ namespace bomberman::server
             auto& slotEntry = ctx.state.playerSlots[playerId];
             if (!slotEntry.has_value())
             {
-                LOG_NET_CONN_ERROR("Lobby control playerId={} has no durable lobby seat - ignoring", playerId);
+                LOG_NET_CONN_ERROR("Control packet playerId={} has no active player metadata - ignoring", playerId);
                 ctx.receiveResult = NetPacketResult::Rejected;
                 return nullptr;
             }
@@ -321,13 +325,13 @@ namespace bomberman::server
         }
 
         const std::string_view playerName(msgHello.name, boundedStrLen(msgHello.name, kPlayerNameMax));
-        LOG_NET_CONN_INFO("Hello from \"{}\" (peer {})", playerName, ctx.peer->incomingPeerID);
+        LOG_NET_CONN_DEBUG("Hello from \"{}\" (peer {})", playerName, ctx.peer->incomingPeerID);
 
         if (roundRequiresAdditionalBootstrap(ctx.state))
         {
-            LOG_NET_CONN_WARN("Rejecting Hello from peer {} because the current round has diverged beyond the connect bootstrap (phase={})",
-                              ctx.peer->incomingPeerID,
-                              static_cast<int>(ctx.state.phase));
+            LOG_NET_CONN_DEBUG("Rejecting Hello from peer {} because the current round is not admitting new players (phase={})",
+                               ctx.peer->incomingPeerID,
+                               static_cast<int>(ctx.state.phase));
             ctx.receiveResult = NetPacketResult::Rejected;
             sendReject(ctx, MsgReject::EReason::GameInProgress);
             return;
@@ -345,9 +349,13 @@ namespace bomberman::server
             return;
         }
 
-        finalizeAcceptedHello(ctx, playerId, playerName);
-        broadcastLobbyState(ctx.state);
-        LOG_NET_CONN_INFO("Accepted playerId={} into the passive lobby", playerId);
+        if (!finalizeAcceptedHello(ctx, playerId, playerName))
+        {
+            return;
+        }
+
+        handleAcceptedPlayerJoined(ctx.state);
+        LOG_NET_CONN_INFO("Accepted playerId={} into the lobby", playerId);
     }
 
     void onLobbyReady(PacketDispatchContext& ctx,
@@ -363,7 +371,7 @@ namespace bomberman::server
             return;
         }
 
-        auto* slot = requireAcceptedLobbySlot(ctx);
+        auto* slot = requireAcceptedPlayerSlot(ctx);
         if (slot == nullptr)
         {
             return;
@@ -406,7 +414,7 @@ namespace bomberman::server
             return;
         }
 
-        auto* slot = requireAcceptedLobbySlot(ctx);
+        auto* slot = requireAcceptedPlayerSlot(ctx);
         if (slot == nullptr)
         {
             return;

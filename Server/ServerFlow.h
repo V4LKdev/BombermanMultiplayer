@@ -19,6 +19,9 @@ namespace bomberman::server
     /** @brief Reacts to one authoritative lobby ready-state change and updates the lobby countdown/start flow. */
     void handleLobbyReadyStateChanged(ServerState& state);
 
+    /** @brief Applies the lobby participant-change policy after one accepted player joins during lobby flow. */
+    void handleAcceptedPlayerJoined(ServerState& state);
+
     /** @brief Starts the next match bootstrap from an already-authorized lobby countdown commit. */
     bool beginMatchBootstrap(ServerState& state);
 

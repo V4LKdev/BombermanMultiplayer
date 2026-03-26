@@ -40,7 +40,7 @@ namespace bomberman::server
                 return;
             }
 
-            LOG_SERVER_INFO("Peer connected (id={})", peer.incomingPeerID);
+            LOG_SERVER_DEBUG("Peer connected (id={})", peer.incomingPeerID);
             recordServerDiagLifecycle(state, NetPeerLifecycleType::TransportConnected, std::nullopt, peer.incomingPeerID);
         }
 
@@ -54,7 +54,6 @@ namespace bomberman::server
         /** @brief Releases accepted state for a disconnecting peer and records the correct lifecycle event. */
         void handleDisconnectEvent(ServerState& state, ENetPeer& peer)
         {
-            const ServerPhase phaseBeforeRelease = state.phase;
             if (const auto releasedPlayerId = releasePeerSession(state, peer); releasedPlayerId.has_value())
             {
                 const uint8_t playerId = releasedPlayerId.value();
@@ -71,14 +70,10 @@ namespace bomberman::server
                 }
 
                 recordServerDiagLifecycle(state, NetPeerLifecycleType::PeerDisconnected, playerId, peer.incomingPeerID);
-                if (phaseBeforeRelease == ServerPhase::Lobby)
-                {
-                    broadcastLobbyState(state);
-                }
                 return;
             }
 
-            LOG_SERVER_INFO("Peer disconnected (not handshaked, enetId={})", peer.incomingPeerID);
+            LOG_SERVER_DEBUG("Peer disconnected before handshake completed (enetId={})", peer.incomingPeerID);
             recordServerDiagLifecycle(state,
                                       NetPeerLifecycleType::TransportDisconnectedBeforeHandshake,
                                       std::nullopt,

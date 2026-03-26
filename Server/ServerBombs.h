@@ -1,6 +1,6 @@
 /**
  * @file ServerBombs.h
- * @brief Authoritative server-side bomb placement, explosion, and round-end helpers.
+ * @brief Authoritative server-side bomb placement, explosion, and lifecycle helpers.
  */
 
 #ifndef BOMBERMAN_SERVER_SERVERBOMBS_H
@@ -19,6 +19,11 @@ namespace bomberman::server
      * @brief Resolves all bombs whose fuse expires on the current authoritative tick.
      */
     void resolveExplodingBombs(ServerState& state);
+
+    /**
+     * @brief Clears all active bombs and releases per-player active-bomb ownership counters.
+     */
+    void clearBombsAndReleaseOwnership(ServerState& state);
 
 } // namespace bomberman::server
 

@@ -42,6 +42,18 @@ namespace bomberman::net
                 std::chrono::duration_cast<std::chrono::milliseconds>(SteadyClock::now() - since).count());
         }
 
+        // Returns elapsed milliseconds from the latest receive time, or from the fallback if none exists yet.
+        uint32_t elapsedSinceOrZero(const TimePoint& latest, const TimePoint& fallback)
+        {
+            const TimePoint since = latest != TimePoint{} ? latest : fallback;
+            if (since == TimePoint{})
+            {
+                return 0;
+            }
+
+            return static_cast<uint32_t>(elapsedMs(since));
+        }
+
         // Returns true if the message type is a control message expected during handshake.
         constexpr bool isHandshakeControlMessage(EMsgType type)
         {
@@ -90,6 +102,7 @@ namespace bomberman::net
         TimePoint handshakeStartTime;
         TimePoint disconnectStartTime;
         TimePoint connectedStartTime;
+        TimePoint lastLobbyStateReceiveTime;
         TimePoint lastGameplayReceiveTime;
         TimePoint lastSnapshotReceiveTime;
         TimePoint lastCorrectionReceiveTime;
@@ -100,14 +113,12 @@ namespace bomberman::net
             MsgSnapshot snapshot{};
             bool valid = false;
         };
-        CachedSnapshot cachedSnapshot{};
 
         struct CachedCorrection
         {
             MsgCorrection correction{};
             bool valid = false;
         };
-        CachedCorrection cachedCorrection{};
 
         struct CachedLobbyState
         {
@@ -121,6 +132,7 @@ namespace bomberman::net
             MsgLevelInfo levelInfo{};
             bool hasLevelInfo = false;
             bool levelInfoPending = false;
+            bool brokenGameplayEventStream = false;
             std::optional<MsgMatchStart> matchStart{};
             std::optional<uint32_t> cancelledMatchId{};
             std::optional<MsgMatchResult> matchResult{};
@@ -135,6 +147,7 @@ namespace bomberman::net
                 matchStart.reset();
                 cancelledMatchId.reset();
                 matchResult.reset();
+                brokenGameplayEventStream = false;
                 pendingGameplayEvents.clear();
             }
 
@@ -146,12 +159,29 @@ namespace bomberman::net
                 levelInfoPending = true;
             }
 
-            void clearAll()
+            [[nodiscard]]
+            bool isActiveMatch(const uint32_t matchId) const
+            {
+                return hasLevelInfo && levelInfo.matchId == matchId;
+            }
+
+            [[nodiscard]]
+            uint32_t currentMatchId() const
+            {
+                return hasLevelInfo ? levelInfo.matchId : 0u;
+            }
+
+            void clearBootstrap()
             {
                 clearRuntime();
                 levelInfo = {};
                 hasLevelInfo = false;
                 levelInfoPending = false;
+            }
+
+            void clearAll()
+            {
+                clearBootstrap();
             }
         };
         MatchFlowState matchFlow{};
@@ -326,7 +356,7 @@ namespace bomberman::net
         ENetAddress address{};
         if (enet_address_set_host(&address, host.c_str()) != 0)
         {
-            LOG_NET_CONN_ERROR("Invalid host address: {}", host);
+            LOG_NET_CONN_WARN("Invalid host address: {}", host);
             state_ = EConnectState::FailedResolve;
             destroyTransport();
             return;
@@ -401,7 +431,7 @@ namespace bomberman::net
         return completedGracefully;
     }
 
-    void NetClient::clearActiveMatchRuntimeCaches()
+    void NetClient::clearActiveMatchRuntimeCaches() const
     {
         if (impl_ == nullptr)
         {
@@ -411,7 +441,7 @@ namespace bomberman::net
         impl_->matchFlow.clearRuntime();
     }
 
-    void NetClient::resetLocalInputStream()
+    void NetClient::resetLocalInputStream() const
     {
         if (impl_ == nullptr)
         {
@@ -433,6 +463,18 @@ namespace bomberman::net
         impl_->lastGameplayReceiveTime = SteadyClock::now();
         impl_->lastSnapshotReceiveTime = TimePoint{};
         impl_->lastCorrectionReceiveTime = TimePoint{};
+    }
+
+    void NetClient::clearCurrentMatchSession() const
+    {
+        if (impl_ == nullptr || !impl_->matchFlow.hasLevelInfo)
+        {
+            return;
+        }
+
+        clearActiveMatchRuntimeCaches();
+        resetLocalInputStream();
+        impl_->matchFlow.clearBootstrap();
     }
 
     // =================================================================================================================
@@ -931,6 +973,16 @@ namespace bomberman::net
         return true;
     }
 
+    uint32_t NetClient::lobbySilenceMs() const
+    {
+        if (impl_ == nullptr || !isConnected())
+        {
+            return 0;
+        }
+
+        return elapsedSinceOrZero(impl_->lastLobbyStateReceiveTime, impl_->connectedStartTime);
+    }
+
     bool NetClient::consumePendingLevelInfo(MsgLevelInfo& out)
     {
         if (impl_ == nullptr || !isConnected() || !impl_->matchFlow.hasLevelInfo || !impl_->matchFlow.levelInfoPending)
@@ -945,7 +997,10 @@ namespace bomberman::net
 
     bool NetClient::tryDequeueGameplayEvent(GameplayEvent& out)
     {
-        if (impl_ == nullptr || !isConnected() || impl_->matchFlow.pendingGameplayEvents.empty())
+        if (impl_ == nullptr ||
+            !isConnected() ||
+            impl_->matchFlow.brokenGameplayEventStream ||
+            impl_->matchFlow.pendingGameplayEvents.empty())
         {
             return false;
         }
@@ -955,6 +1010,14 @@ namespace bomberman::net
         return true;
     }
 
+    bool NetClient::hasBrokenGameplayEventStream() const
+    {
+        return impl_ != nullptr &&
+               isConnected() &&
+               impl_->matchFlow.hasLevelInfo &&
+               impl_->matchFlow.brokenGameplayEventStream;
+    }
+
     uint32_t NetClient::gameplaySilenceMs() const
     {
         if (impl_ == nullptr || !isConnected())
@@ -962,17 +1025,7 @@ namespace bomberman::net
             return 0;
         }
 
-        const TimePoint since =
-            impl_->lastGameplayReceiveTime != TimePoint{} ?
-            impl_->lastGameplayReceiveTime :
-            impl_->connectedStartTime;
-
-        if (since == TimePoint{})
-        {
-            return 0;
-        }
-
-        return static_cast<uint32_t>(elapsedMs(since));
+        return elapsedSinceOrZero(impl_->lastGameplayReceiveTime, impl_->connectedStartTime);
     }
 
     bool NetClient::tryGetLatestMatchStart(MsgMatchStart& out) const
@@ -1052,7 +1105,7 @@ namespace bomberman::net
         serverTickRate_ = welcome.serverTickRate;
         state_ = EConnectState::Connected;
         impl_->connectedStartTime = SteadyClock::now();
-        LOG_NET_CONN_INFO("Welcome: playerId={}, tickRate={} - session connected, waiting for lobby or match bootstrap",
+        LOG_NET_CONN_INFO("Welcome: playerId={}, tickRate={} - session connected, waiting for lobby or next round start",
                           welcome.playerId,
                           welcome.serverTickRate);
     }
@@ -1162,16 +1215,12 @@ namespace bomberman::net
 
         if (impl_->matchFlow.hasLevelInfo)
         {
-            impl_->matchFlow.clearRuntime();
-            impl_->nextInputSeq = 0;
-            std::memset(impl_->inputHistory, 0, sizeof(impl_->inputHistory));
-            impl_->matchFlow.levelInfo = {};
-            impl_->matchFlow.hasLevelInfo = false;
-            impl_->matchFlow.levelInfoPending = false;
+            clearCurrentMatchSession();
         }
 
         impl_->cachedLobbyState = {lobbyState, true};
-        LOG_NET_CONN_DEBUG("Received LobbyState update");
+        impl_->lastLobbyStateReceiveTime = SteadyClock::now();
+        LOG_NET_CONN_TRACE("Received LobbyState update");
     }
 
     void NetClient::handleMatchStart(const uint8_t* payload, std::size_t payloadSize)
@@ -1198,11 +1247,11 @@ namespace bomberman::net
             return;
         }
 
-        if (!impl_->matchFlow.hasLevelInfo || matchStart.matchId != impl_->matchFlow.levelInfo.matchId)
+        if (!impl_->matchFlow.isActiveMatch(matchStart.matchId))
         {
             LOG_NET_CONN_DEBUG("Ignoring MatchStart for inactive matchId={} currentMatchId={}",
                                matchStart.matchId,
-                               impl_->matchFlow.hasLevelInfo ? impl_->matchFlow.levelInfo.matchId : 0u);
+                               impl_->matchFlow.currentMatchId());
             return;
         }
 
@@ -1238,13 +1287,9 @@ namespace bomberman::net
             return;
         }
 
-        if (impl_->matchFlow.hasLevelInfo && impl_->matchFlow.levelInfo.matchId == matchCancelled.matchId)
+        if (impl_->matchFlow.isActiveMatch(matchCancelled.matchId))
         {
-            clearActiveMatchRuntimeCaches();
-            resetLocalInputStream();
-            impl_->matchFlow.levelInfo = {};
-            impl_->matchFlow.hasLevelInfo = false;
-            impl_->matchFlow.levelInfoPending = false;
+            clearCurrentMatchSession();
         }
 
         impl_->matchFlow.cancelledMatchId = matchCancelled.matchId;
@@ -1266,11 +1311,11 @@ namespace bomberman::net
             return;
         }
 
-        if (!impl_->matchFlow.hasLevelInfo || matchResult.matchId != impl_->matchFlow.levelInfo.matchId)
+        if (!impl_->matchFlow.isActiveMatch(matchResult.matchId))
         {
             LOG_NET_CONN_DEBUG("Ignoring MatchResult for inactive matchId={} currentMatchId={}",
                                matchResult.matchId,
-                               impl_->matchFlow.hasLevelInfo ? impl_->matchFlow.levelInfo.matchId : 0u);
+                               impl_->matchFlow.currentMatchId());
             return;
         }
 
@@ -1303,11 +1348,11 @@ namespace bomberman::net
             LOG_NET_PROTO_WARN("Failed to parse Snapshot payload");
             return;
         }
-        if (!impl_->matchFlow.hasLevelInfo || snapshot.matchId != impl_->matchFlow.levelInfo.matchId)
+        if (!impl_->matchFlow.isActiveMatch(snapshot.matchId))
         {
             LOG_NET_SNAPSHOT_DEBUG("Ignoring Snapshot for inactive matchId={} currentMatchId={}",
                                    snapshot.matchId,
-                                   impl_->matchFlow.hasLevelInfo ? impl_->matchFlow.levelInfo.matchId : 0u);
+                                   impl_->matchFlow.currentMatchId());
             return;
         }
 
@@ -1343,11 +1388,11 @@ namespace bomberman::net
             LOG_NET_PROTO_WARN("Failed to parse Correction payload");
             return;
         }
-        if (!impl_->matchFlow.hasLevelInfo || correction.matchId != impl_->matchFlow.levelInfo.matchId)
+        if (!impl_->matchFlow.isActiveMatch(correction.matchId))
         {
             LOG_NET_SNAPSHOT_DEBUG("Ignoring Correction for inactive matchId={} currentMatchId={}",
                                    correction.matchId,
-                                   impl_->matchFlow.hasLevelInfo ? impl_->matchFlow.levelInfo.matchId : 0u);
+                                   impl_->matchFlow.currentMatchId());
             return;
         }
 
@@ -1385,11 +1430,11 @@ namespace bomberman::net
             LOG_NET_PROTO_WARN("Failed to parse BombPlaced payload");
             return;
         }
-        if (!impl_->matchFlow.hasLevelInfo || bombPlaced.matchId != impl_->matchFlow.levelInfo.matchId)
+        if (!impl_->matchFlow.isActiveMatch(bombPlaced.matchId))
         {
             LOG_NET_SNAPSHOT_DEBUG("Ignoring BombPlaced for inactive matchId={} currentMatchId={}",
                                    bombPlaced.matchId,
-                                   impl_->matchFlow.hasLevelInfo ? impl_->matchFlow.levelInfo.matchId : 0u);
+                                   impl_->matchFlow.currentMatchId());
             return;
         }
 
@@ -1418,11 +1463,11 @@ namespace bomberman::net
             LOG_NET_PROTO_WARN("Failed to parse ExplosionResolved payload");
             return;
         }
-        if (!impl_->matchFlow.hasLevelInfo || explosion.matchId != impl_->matchFlow.levelInfo.matchId)
+        if (!impl_->matchFlow.isActiveMatch(explosion.matchId))
         {
             LOG_NET_SNAPSHOT_DEBUG("Ignoring ExplosionResolved for inactive matchId={} currentMatchId={}",
                                    explosion.matchId,
-                                   impl_->matchFlow.hasLevelInfo ? impl_->matchFlow.levelInfo.matchId : 0u);
+                                   impl_->matchFlow.currentMatchId());
             return;
         }
 
@@ -1445,11 +1490,19 @@ namespace bomberman::net
             return;
         }
 
+        if (impl_->matchFlow.brokenGameplayEventStream)
+        {
+            return;
+        }
+
         if (impl_->matchFlow.pendingGameplayEvents.size() >= kMaxPendingGameplayEvents)
         {
-            LOG_NET_SNAPSHOT_WARN(
-                "Pending reliable gameplay event queue overflow - dropping oldest event to preserve receive order");
-            impl_->matchFlow.pendingGameplayEvents.pop_front();
+            LOG_NET_SNAPSHOT_ERROR(
+                "Reliable gameplay event queue overflow for matchId={} - invalidating gameplay event stream",
+                impl_->matchFlow.currentMatchId());
+            impl_->matchFlow.brokenGameplayEventStream = true;
+            impl_->matchFlow.pendingGameplayEvents.clear();
+            return;
         }
 
         impl_->matchFlow.pendingGameplayEvents.push_back(event);
@@ -1529,6 +1582,7 @@ namespace bomberman::net
             impl_->handshakeStartTime = TimePoint{};
             impl_->disconnectStartTime = TimePoint{};
             impl_->connectedStartTime = TimePoint{};
+            impl_->lastLobbyStateReceiveTime = TimePoint{};
             impl_->lastGameplayReceiveTime = TimePoint{};
             impl_->lastSnapshotReceiveTime = TimePoint{};
             impl_->lastCorrectionReceiveTime = TimePoint{};

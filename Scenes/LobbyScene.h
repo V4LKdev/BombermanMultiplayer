@@ -68,6 +68,8 @@ namespace bomberman
         std::optional<bool> pendingReadyState_{};
         uint32_t lastReadyRequestMs_ = 0;
         bool hasRenderedLobbyState_ = false;
+        bool lobbyStateStale_ = false;
+        bool lastRenderedLobbyStale_ = false;
         bool returningToMenu_ = false;
     };
 } // namespace bomberman

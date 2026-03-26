@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include <cstddef>
 #include <string>
 
 #include "Game.h"
@@ -17,19 +18,46 @@
 namespace
 {
     constexpr std::size_t kMaxPlayerNameLen = bomberman::net::kPlayerNameMax - 1;
-    constexpr std::size_t kMaxIpv4HostLen = 15; // Dotted-decimal IPv4 only, e.g. 255.255.255.255.
+    constexpr std::size_t kMaxHostLen = 253; // RFC hostname max length; field width clamps practical UI length first.
 
     [[nodiscard]]
-    bool canRestoreIdleStatus(const bomberman::net::EConnectState state)
+    constexpr bool isAsciiAlphaNum(const char c)
     {
-        using enum bomberman::net::EConnectState;
+        return (c >= 'a' && c <= 'z') ||
+               (c >= 'A' && c <= 'Z') ||
+               (c >= '0' && c <= '9');
+    }
 
-        return state == Disconnected ||
-               state == FailedResolve ||
-               state == FailedConnect ||
-               state == FailedHandshake ||
-               state == FailedProtocol ||
-               state == FailedInit;
+    [[nodiscard]]
+    bool isValidHostname(const std::string_view host)
+    {
+        if (host.empty() || host.size() > kMaxHostLen)
+            return false;
+
+        std::size_t labelLength = 0;
+        for (std::size_t i = 0; i < host.size(); ++i)
+        {
+            const char c = host[i];
+            if (c == '.')
+            {
+                if (labelLength == 0 || !isAsciiAlphaNum(host[i - 1]))
+                    return false;
+
+                labelLength = 0;
+                continue;
+            }
+
+            if (labelLength == 0 && !isAsciiAlphaNum(c))
+                return false;
+            if (!(isAsciiAlphaNum(c) || c == '-'))
+                return false;
+
+            ++labelLength;
+            if (labelLength > 63)
+                return false;
+        }
+
+        return labelLength > 0 && isAsciiAlphaNum(host.back());
     }
 }
 
@@ -66,7 +94,7 @@ namespace bomberman
         playerNameValueText_->setPosition(playerNameFieldX_, playerNameFieldY_);
         addObject(playerNameValueText_);
 
-        hostLabelText_ = std::make_shared<Text>(game->getAssetManager()->getFont(), game->getRenderer(), "SERVER IP");
+        hostLabelText_ = std::make_shared<Text>(game->getAssetManager()->getFont(), game->getRenderer(), "SERVER HOST");
         hostLabelText_->setSize(220, 26);
         hostLabelText_->setPosition(centerX - 110, 322);
         addObject(hostLabelText_);
@@ -304,9 +332,9 @@ namespace bomberman
             return;
 
         const std::string_view host = effectiveHost();
-        if (!isValidIPv4(host))
+        if (!isValidHost(host))
         {
-            setConnectStatus("Invalid IP address", {220, 80, 80, 255});
+            setConnectStatus("Invalid host/address", {220, 80, 80, 255});
             return;
         }
 
@@ -332,8 +360,13 @@ namespace bomberman
 
     void ConnectScene::restoreIdleStatusAfterHostEdit()
     {
-        if (canRestoreIdleStatus(lastConnectState_))
+        const net::NetClient* client = game->getNetClient();
+        if (client == nullptr ||
+            client->connectState() == net::EConnectState::Disconnected ||
+            net::isFailedState(client->connectState()))
+        {
             setConnectStatus("Not connected", {150, 150, 150, 255});
+        }
     }
 
     // =================================================================================================================
@@ -369,10 +402,6 @@ namespace bomberman
 
     void ConnectScene::cycleFocus(const int direction)
     {
-        // Reset touched flags on focus change; empty fields use this to restore placeholder rendering.
-        if (focusedField_ == FocusField::PlayerName) playerNameTouched_ = false;
-        else if (focusedField_ == FocusField::Host)  hostTouched_ = false;
-
         int index = static_cast<int>(focusedField_);
         index = (index + direction + 3) % 3;
         focusedField_ = static_cast<FocusField>(index);
@@ -407,16 +436,19 @@ namespace bomberman
 
         for (const char c : chunk)
         {
-            if (target.size() >= kMaxIpv4HostLen)
+            if (target.size() >= kMaxHostLen)
                 break;
 
             if (c < 32 || c == 127)
                 continue;
 
-            if (!((c >= '0' && c <= '9') || c == '.'))
+            if (!(isAsciiAlphaNum(c) || c == '.' || c == '-'))
                 continue;
 
-            target.push_back(c);
+            std::string candidate = target;
+            candidate.push_back(c);
+            if (fitsFieldWidth(candidate, true))
+                target = std::move(candidate);
         }
     }
 
@@ -439,34 +471,43 @@ namespace bomberman
         return measureTextWidth(text) <= fieldWidth;
     }
 
-    bool ConnectScene::isValidIPv4(std::string_view ip)
+    bool ConnectScene::isValidHost(const std::string_view host)
     {
-        int octetCount = 0;
-        while (!ip.empty())
+        if (host.empty())
+            return false;
+
+        if (host.find_first_not_of("0123456789.") == std::string_view::npos)
         {
-            const auto dotPos = ip.find('.');
-            const std::string_view token = (dotPos == std::string_view::npos) ? ip : ip.substr(0, dotPos);
+            std::string_view ip = host;
+            int octetCount = 0;
+            while (!ip.empty())
+            {
+                const auto dotPos = ip.find('.');
+                const std::string_view token = (dotPos == std::string_view::npos) ? ip : ip.substr(0, dotPos);
 
-            if (token.empty() || token.size() > 3)
-                return false;
+                if (token.empty() || token.size() > 3)
+                    return false;
 
-            int value = 0;
-            const auto [ptr, ec] = std::from_chars(token.data(), token.data() + token.size(), value);
-            if (ec != std::errc{} || ptr != token.data() + token.size())
-                return false;
-            if (value < 0 || value > 255)
-                return false;
+                int value = 0;
+                const auto [ptr, ec] = std::from_chars(token.data(), token.data() + token.size(), value);
+                if (ec != std::errc{} || ptr != token.data() + token.size())
+                    return false;
+                if (value < 0 || value > 255)
+                    return false;
 
-            ++octetCount;
-            if (octetCount > 4)
-                return false;
+                ++octetCount;
+                if (octetCount > 4)
+                    return false;
 
-            if (dotPos == std::string_view::npos)
-                break;
-            ip = ip.substr(dotPos + 1);
+                if (dotPos == std::string_view::npos)
+                    break;
+                ip = ip.substr(dotPos + 1);
+            }
+
+            return octetCount == 4;
         }
 
-        return octetCount == 4;
+        return isValidHostname(host);
     }
 
     void ConnectScene::recenterFieldValues()

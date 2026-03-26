@@ -34,13 +34,6 @@ namespace bomberman::server
             return index;
         }
 
-        /** @brief Records the most recent disconnect metadata for a durable player slot. */
-        void markReleasedPlayerSlot(PlayerSlot& slot, const ENetPeer& peer, const uint32_t serverTick)
-        {
-            slot.lastKnownAddress = peer.address;
-            slot.lastDisconnectServerTick = serverTick;
-        }
-
         /** @brief Clears the stable peer-session slot and removes the `peer.data` back-pointer. */
         void clearPeerSessionStorage(ServerState& state, ENetPeer& peer)
         {
@@ -49,39 +42,6 @@ namespace bomberman::server
 
             if (index.has_value())
                 state.peerSessions[index.value()].reset();
-        }
-
-        /** @brief Removes all active bombs owned by the given player seat. */
-        void clearOwnedBombState(ServerState& state, const uint8_t ownerId)
-        {
-            for (auto& bombEntry : state.bombs)
-            {
-                if (!bombEntry.has_value() || bombEntry->ownerId != ownerId)
-                    continue;
-
-                bombEntry.reset();
-            }
-        }
-
-        [[nodiscard]]
-        bool sameSeatOccupant(const PlayerSlot& slot, const std::string_view playerName, const ENetAddress& address)
-        {
-            return slot.playerName == playerName &&
-                   slot.lastKnownAddress.host == address.host &&
-                   slot.lastKnownAddress.port == address.port;
-        }
-
-        [[nodiscard]]
-        uint8_t preservedSeatWins(const std::optional<PlayerSlot>& slotEntry,
-                                  const std::string_view playerName,
-                                  const ENetAddress& address)
-        {
-            if (!slotEntry.has_value())
-            {
-                return 0;
-            }
-
-            return sameSeatOccupant(slotEntry.value(), playerName, address) ? slotEntry->wins : 0;
         }
 
     } // namespace
@@ -116,7 +76,7 @@ namespace bomberman::server
         for (auto& slot : state.bombs)
             slot.reset();
 
-        // Reset durable player slots for the new dedicated-server session.
+        // Reset accepted-player metadata for the new dedicated-server session.
         for (auto& slot : state.playerSlots)
             slot.reset();
 
@@ -282,16 +242,12 @@ namespace bomberman::server
                            const std::string_view playerName)
     {
         auto& slotEntry = state.playerSlots[playerId];
-        const uint8_t wins = preservedSeatWins(slotEntry, playerName, session.peer->address);
         slotEntry.emplace();
         auto& slot = slotEntry.value();
         slot.playerId = playerId;
         slot.playerName = std::string(playerName);
         slot.ready = false;
-        slot.wins = wins;
-        slot.lastKnownAddress = session.peer->address;
-        slot.acceptedServerTick = state.serverTick;
-        slot.lastDisconnectServerTick.reset();
+        slot.wins = 0;
 
         // Bind the accepted player seat to the live session.
         session.playerId = playerId;
@@ -311,10 +267,10 @@ namespace bomberman::server
         {
             const uint8_t playerId = releasedPlayerId.value();
 
-            if (auto& slotEntry = state.playerSlots[playerId]; slotEntry.has_value())
-                markReleasedPlayerSlot(slotEntry.value(), peer, state.serverTick);
-
             destroyMatchPlayerState(state, playerId);
+            state.playerSlots[playerId].reset();
+
+            // Under the current no-reconnect policy, disconnect immediately frees the id.
             releasePlayerId(state, playerId);
             clearPeerSessionStorage(state, peer);
             handleAcceptedPlayerReleased(state, playerId);
@@ -347,7 +303,6 @@ namespace bomberman::server
 
     void destroyMatchPlayerState(ServerState& state, const uint8_t playerId)
     {
-        clearOwnedBombState(state, playerId);
         state.matchPlayers[playerId].reset();
     }
 

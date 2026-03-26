@@ -1,6 +1,6 @@
 /**
  * @file LobbyScene.cpp
- * @brief Passive multiplayer lobby scene implementation.
+ * @brief Multiplayer lobby scene implementation.
  */
 
 #include "Scenes/LobbyScene.h"
@@ -36,6 +36,7 @@ namespace bomberman
         constexpr int kStateColumnOffset = 566;
         constexpr uint32_t kReadyToggleCooldownMs = 180;
         constexpr uint32_t kReadyToggleResponseTimeoutMs = 4000;
+        constexpr uint32_t kLobbyStateStaleThresholdMs = 4000;
 
         [[nodiscard]]
         bool lobbySeatEntriesEqual(const net::MsgLobbyState::SeatEntry& lhs, const net::MsgLobbyState::SeatEntry& rhs)
@@ -295,9 +296,32 @@ namespace bomberman
         }
 
         net::MsgLobbyState lobbyState{};
-        if (!netClient->tryGetLatestLobbyState(lobbyState))
+        const bool hasLobbyState = netClient->tryGetLatestLobbyState(lobbyState);
+        const bool lobbyDelayRelevant =
+            !hasLobbyState ||
+            (hasLobbyState && net::lobbyCountdownActive(lobbyState));
+        const uint32_t lobbySilenceMs = netClient->lobbySilenceMs();
+        const bool lobbyStateStale =
+            lobbyDelayRelevant &&
+            lobbySilenceMs >= kLobbyStateStaleThresholdMs;
+        if (lobbyStateStale != lobbyStateStale_)
         {
-            setStatus("Waiting for lobby...", SDL_Color{0xFF, 0xD1, 0x66, 0xFF});
+            if (lobbyStateStale)
+            {
+                LOG_NET_CONN_WARN("Lobby updates silent for {}ms - waiting for authoritative lobby refresh",
+                                  lobbySilenceMs);
+            }
+            else if (lobbyDelayRelevant)
+            {
+                LOG_NET_CONN_INFO("Lobby updates resumed");
+            }
+        }
+        lobbyStateStale_ = lobbyStateStale;
+
+        if (!hasLobbyState)
+        {
+            setStatus(lobbyStateStale_ ? "Lobby updates delayed" : "Waiting for lobby...",
+                      SDL_Color{0xFF, 0xD1, 0x66, 0xFF});
             return;
         }
 
@@ -400,13 +424,16 @@ namespace bomberman
 
     void LobbyScene::refreshLobbyPresentationIfChanged(const net::MsgLobbyState& lobbyState, const uint8_t localPlayerId)
     {
-        if (hasRenderedLobbyState_ && lobbyStatesEqual(lastRenderedLobbyState_, lobbyState))
+        if (hasRenderedLobbyState_ &&
+            lobbyStatesEqual(lastRenderedLobbyState_, lobbyState) &&
+            lastRenderedLobbyStale_ == lobbyStateStale_)
         {
             return;
         }
 
         rebuildLobbyPresentation(lobbyState, localPlayerId);
         lastRenderedLobbyState_ = lobbyState;
+        lastRenderedLobbyStale_ = lobbyStateStale_;
         hasRenderedLobbyState_ = true;
     }
 
@@ -471,7 +498,11 @@ namespace bomberman
         helpText_->fitToContent();
         helpText_->setPosition(game->getWindowWidth() / 2 - helpText_->getWidth() / 2, kHelpY);
 
-        if (countdownActive)
+        if (lobbyStateStale_)
+        {
+            setStatus("Lobby updates delayed", SDL_Color{0xFF, 0xD1, 0x66, 0xFF});
+        }
+        else if (countdownActive)
         {
             setStatus("", SDL_Color{0xFF, 0xD1, 0x66, 0xFF});
         }
