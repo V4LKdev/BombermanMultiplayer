@@ -26,6 +26,7 @@ namespace bomberman
         constexpr SimDuration kSimStep = SimDuration{1.0 / static_cast<double>(sim::kTickRate)};
         constexpr auto kMaxFrameClamp = std::chrono::milliseconds(sim::kMaxFrameClampMs);
         constexpr Uint32 kSceneStepMs = 1000u / static_cast<Uint32>(sim::kTickRate);
+        constexpr auto kManualRenderFrameCap = std::chrono::milliseconds(8);
 
         void handleShutdownSignal(int /*signal*/)
         {
@@ -88,13 +89,23 @@ namespace bomberman
             return;
         }
 
+        // Multiplayer client windows use manual presentation pacing instead of renderer vsync.
+        // This keeps local multi-client testing from phase-locking input send cadence to
+        // per-process present timing, which previously produced asymmetric authoritative gaps.
+        renderVsyncEnabled_ = (inNetClient == nullptr);
+        const Uint32 rendererFlags =
+            SDL_RENDERER_ACCELERATED |
+            static_cast<Uint32>(renderVsyncEnabled_ ? SDL_RENDERER_PRESENTVSYNC : 0);
+
         // Create renderer.
-        renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+        renderer = SDL_CreateRenderer(window, -1, rendererFlags);
         if(renderer == nullptr)
         {
             LOG_GAME_ERROR("SDL_CreateRenderer failed: {}", SDL_GetError());
             return;
         }
+
+        LOG_GAME_DEBUG("Renderer pacing: {}", renderVsyncEnabled_ ? "vsync" : "manual-cap");
 
         // Query renderer output size to account for high DPI.
         int w, h;
@@ -155,6 +166,8 @@ namespace bomberman
 
         while(isRunning)
         {
+            const auto frameLoopStart = GameClock::now();
+
             if(gShutdownSignalRequested != 0)
             {
                 LOG_NET_CONN_INFO("Shutdown signal received - disconnecting multiplayer client before exit");
@@ -237,6 +250,20 @@ namespace bomberman
             SDL_RenderClear(renderer);
             sceneManager->draw();
             SDL_RenderPresent(renderer);
+
+            if (!renderVsyncEnabled_)
+            {
+                const auto frameElapsed = GameClock::now() - frameLoopStart;
+                if (frameElapsed < kManualRenderFrameCap)
+                {
+                    const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        kManualRenderFrameCap - frameElapsed);
+                    if (remaining.count() > 0)
+                    {
+                        SDL_Delay(static_cast<Uint32>(remaining.count()));
+                    }
+                }
+            }
         }
     }
 

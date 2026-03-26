@@ -20,6 +20,7 @@ namespace
     struct CliOptions
     {
         bomberman::cli::LoggingCliOptions logging;
+        bomberman::cli::DiagnosticsCliOptions diagnostics;
         uint16_t port = bomberman::net::kDefaultServerPort;
         bool mute = false;
         bomberman::MultiplayerClientConfig multiplayerConfig;
@@ -29,7 +30,14 @@ namespace
     {
         std::cout
             << "Usage: " << bomberman::cli::kLoggingUsageArgs
-            << " [--port <port override>] [--mute]";
+            << ' ';
+
+        if constexpr (bomberman::cli::kNetDiagAvailable)
+        {
+            std::cout << bomberman::cli::kDiagnosticsUsageArgs << ' ';
+        }
+
+        std::cout << "[--port <port override>] [--mute]";
 
         if constexpr (bomberman::cli::kClientNetcodeDebugOptionsAvailable)
         {
@@ -64,6 +72,18 @@ namespace
             {
                 printUsage();
                 return ParseCliResult::Help;
+            }
+
+            if (bomberman::cli::tryParseDiagnosticsOption(argc, argv, i, outOptions.diagnostics, error))
+            {
+                if (!error.empty())
+                {
+                    std::cerr << error << '\n';
+                    printUsage();
+                    return ParseCliResult::Error;
+                }
+
+                continue;
             }
 
             if (arg == "--port")
@@ -160,6 +180,9 @@ int main(int argc, char** argv)
 
     // Initiate async connection to server.
     bomberman::net::NetClient client;
+    client.setDiagnosticsConfig(cli.diagnostics.netDiagEnabled,
+                                cli.multiplayerConfig.predictionEnabled,
+                                cli.multiplayerConfig.remoteSmoothingEnabled);
 
     // Create game instance.
     bomberman::Game game(

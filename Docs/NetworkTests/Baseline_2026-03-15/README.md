@@ -2,6 +2,7 @@
 
 Context
 - Recorded before client-side prediction and reconciliation work.
+- These archived captures predate the current JSON-only diagnostics workflow.
 - Project state at capture time:
   - server telemetry MVP in place
   - multiplayer scene split done

@@ -232,6 +232,12 @@ namespace bomberman
         void updateLocalPlayerTagPosition();
         /** @brief Refreshes active local/remote effect visuals and boosted bomb presentation. */
         void updatePowerupEffectPresentations(unsigned int delta);
+        /** @brief Ensures the fixed multiplayer HUD text objects exist. */
+        void ensureDebugHudPresentations();
+        /** @brief Refreshes the fixed multiplayer HUD from live NetClient state. */
+        void updateDebugHud(unsigned int delta);
+        /** @brief Removes fixed multiplayer HUD text objects owned by this scene. */
+        void removeDebugHudPresentations();
         /** @brief Removes one remote-player presentation immediately after an authoritative kill event. */
         void removeRemotePlayerPresentation(uint8_t playerId);
 
@@ -320,10 +326,14 @@ namespace bomberman
         std::shared_ptr<Text> gameplayStatusText_ = nullptr;
         std::shared_ptr<Text> centerBannerText_ = nullptr;
         std::shared_ptr<Text> centerBannerDetailText_ = nullptr;
+        std::shared_ptr<Text> debugHudNetText_ = nullptr;
+        std::shared_ptr<Text> debugHudPredictionText_ = nullptr;
+        std::shared_ptr<Text> debugHudSimulationText_ = nullptr;
         net::ClientPrediction localPrediction_{};
         LivePredictionTelemetry livePredictionTelemetry_{};
         MovementDirection localFacingDirection_ = MovementDirection::Right;
         uint32_t livePredictionLogAccumulatorMs_ = 0;
+        uint32_t debugHudRefreshAccumulatorMs_ = 0;
         uint32_t lastAppliedGameplayEventTick_ = 0;
         bool localPlayerAlive_ = true;
         bool localPlayerInputLocked_ = false;

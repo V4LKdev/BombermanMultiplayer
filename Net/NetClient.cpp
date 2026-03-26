@@ -5,6 +5,7 @@
 
 #include "NetClient.h"
 
+#include "ClientDiagnostics.h"
 #include "NetSend.h"
 #include "NetTransportConfig.h"
 #include "PacketDispatch.h"
@@ -14,6 +15,10 @@
 #include <chrono>
 #include <cstring>
 #include <deque>
+#include <ctime>
+#include <filesystem>
+#include <iomanip>
+#include <sstream>
 
 #include <enet/enet.h>
 
@@ -52,6 +57,43 @@ namespace bomberman::net
             }
 
             return static_cast<uint32_t>(elapsedMs(since));
+        }
+
+        std::string currentLocalTimeTagForFilename()
+        {
+            const auto now = std::chrono::system_clock::now();
+            const auto nowTimeT = std::chrono::system_clock::to_time_t(now);
+
+            std::tm localTm{};
+#if defined(_WIN32)
+            localtime_s(&localTm, &nowTimeT);
+#else
+            localtime_r(&nowTimeT, &localTm);
+#endif
+
+            std::ostringstream out;
+            out << std::put_time(&localTm, "%H%M%S");
+            return out.str();
+        }
+
+        std::string makeUniqueJsonReportPath(const std::string_view basePathWithoutExtension)
+        {
+            std::string candidate = std::string(basePathWithoutExtension) + ".json";
+            if (!std::filesystem::exists(candidate))
+            {
+                return candidate;
+            }
+
+            for (uint32_t suffix = 2; suffix < 1000; ++suffix)
+            {
+                candidate = std::string(basePathWithoutExtension) + "_" + std::to_string(suffix) + ".json";
+                if (!std::filesystem::exists(candidate))
+                {
+                    return candidate;
+                }
+            }
+
+            return std::string(basePathWithoutExtension) + "_overflow.json";
         }
 
         // Returns true if the message type is a control message expected during handshake.
@@ -106,6 +148,15 @@ namespace bomberman::net
         TimePoint lastGameplayReceiveTime;
         TimePoint lastSnapshotReceiveTime;
         TimePoint lastCorrectionReceiveTime;
+        TimePoint lastTransportSampleTime;
+        TimePoint lastInputSendTime;
+
+        ClientDiagnostics diagnostics{};
+        ClientLiveStats liveStats{};
+        bool diagnosticsEnabled = false;
+        bool diagnosticsSessionActive = false;
+        bool diagnosticsPredictionEnabled = true;
+        bool diagnosticsRemoteSmoothingEnabled = true;
 
         // ----- Cached session data -----
         struct CachedSnapshot
@@ -314,6 +365,71 @@ namespace bomberman::net
         shutdownENet();
     }
 
+    void NetClient::setDiagnosticsConfig(const bool enabled,
+                                         const bool predictionEnabled,
+                                         const bool remoteSmoothingEnabled)
+    {
+        if (impl_ == nullptr)
+            return;
+
+        impl_->diagnosticsEnabled = enabled;
+        impl_->diagnosticsPredictionEnabled = predictionEnabled;
+        impl_->diagnosticsRemoteSmoothingEnabled = remoteSmoothingEnabled;
+    }
+
+    ClientDiagnostics& NetClient::clientDiagnostics()
+    {
+        return impl_->diagnostics;
+    }
+
+    const ClientDiagnostics& NetClient::clientDiagnostics() const
+    {
+        return impl_->diagnostics;
+    }
+
+    void NetClient::updateLiveTransportStats(const uint32_t rttMs,
+                                             const uint32_t rttVarianceMs,
+                                             const uint32_t lossPermille,
+                                             const uint32_t lastSnapshotTick,
+                                             const uint32_t lastCorrectionTick,
+                                             const uint32_t snapshotAgeMs,
+                                             const uint32_t gameplaySilenceMs)
+    {
+        if (impl_ == nullptr)
+            return;
+
+        impl_->liveStats.rttMs = rttMs;
+        impl_->liveStats.rttVarianceMs = rttVarianceMs;
+        impl_->liveStats.lossPermille = lossPermille;
+        impl_->liveStats.lastSnapshotTick = lastSnapshotTick;
+        impl_->liveStats.lastCorrectionTick = lastCorrectionTick;
+        impl_->liveStats.snapshotAgeMs = snapshotAgeMs;
+        impl_->liveStats.gameplaySilenceMs = gameplaySilenceMs;
+    }
+
+    void NetClient::updateLivePredictionStats(const bool predictionActive,
+                                              const bool recoveryActive,
+                                              const uint32_t correctionCount,
+                                              const uint32_t mismatchCount,
+                                              const uint32_t lastCorrectionDeltaQ,
+                                              const uint32_t maxPendingInputDepth)
+    {
+        if (impl_ == nullptr)
+            return;
+
+        impl_->liveStats.predictionActive = predictionActive;
+        impl_->liveStats.recoveryActive = recoveryActive;
+        impl_->liveStats.correctionCount = correctionCount;
+        impl_->liveStats.mismatchCount = mismatchCount;
+        impl_->liveStats.lastCorrectionDeltaQ = lastCorrectionDeltaQ;
+        impl_->liveStats.maxPendingInputDepth = maxPendingInputDepth;
+    }
+
+    const NetClient::ClientLiveStats& NetClient::liveStats() const
+    {
+        return impl_->liveStats;
+    }
+
     // =================================================================================================================
     // ===== Connection lifecycle ======================================================================================
     // =================================================================================================================
@@ -336,10 +452,16 @@ namespace bomberman::net
         }
 
         clearSessionState();
+        impl_->diagnostics.beginSession("client",
+                                        impl_->diagnosticsEnabled,
+                                        impl_->diagnosticsPredictionEnabled,
+                                        impl_->diagnosticsRemoteSmoothingEnabled);
+        impl_->diagnosticsSessionActive = impl_->diagnosticsEnabled;
 
         if (!initializeENet())
         {
             state_ = EConnectState::FailedInit;
+            finalizeDiagnosticsSession(state_);
             return;
         }
 
@@ -350,6 +472,7 @@ namespace bomberman::net
             LOG_NET_CONN_ERROR("Failed to create ENet client host");
             state_ = EConnectState::FailedInit;
             destroyTransport();
+            finalizeDiagnosticsSession(state_);
             return;
         }
 
@@ -359,6 +482,7 @@ namespace bomberman::net
             LOG_NET_CONN_WARN("Invalid host address: {}", host);
             state_ = EConnectState::FailedResolve;
             destroyTransport();
+            finalizeDiagnosticsSession(state_);
             return;
         }
 
@@ -370,6 +494,7 @@ namespace bomberman::net
             LOG_NET_CONN_ERROR("Failed to create ENet peer");
             state_ = EConnectState::FailedConnect;
             destroyTransport();
+            finalizeDiagnosticsSession(state_);
             return;
         }
 
@@ -389,6 +514,7 @@ namespace bomberman::net
         }
 
         LOG_NET_CONN_DEBUG("Connect attempt cancelled (was {})", connectStateName(state_));
+        finalizeDiagnosticsSession(EConnectState::Disconnected);
         destroyTransport();
         resetState();
     }
@@ -414,6 +540,7 @@ namespace bomberman::net
 
         if (impl_->peer == nullptr || impl_->host == nullptr)
         {
+            finalizeDiagnosticsSession(EConnectState::Disconnected);
             destroyTransport();
             resetState();
             return;
@@ -426,6 +553,14 @@ namespace bomberman::net
     bool NetClient::disconnectBlocking()
     {
         const bool completedGracefully = drainGracefulDisconnect();
+        if (completedGracefully && impl_ != nullptr)
+        {
+            impl_->diagnostics.recordPeerLifecycle(NetPeerLifecycleType::PeerDisconnected,
+                                                   playerId_ != kInvalidPlayerId ? std::optional<uint8_t>(playerId_) : std::nullopt,
+                                                   impl_->peer != nullptr ? impl_->peer->incomingPeerID : 0,
+                                                   "graceful disconnect completed");
+        }
+        finalizeDiagnosticsSession(EConnectState::Disconnected);
         destroyTransport();
         resetState();
         return completedGracefully;
@@ -491,6 +626,14 @@ namespace bomberman::net
         if (state_ == EConnectState::Disconnecting)
         {
             return;
+        }
+
+        {
+            NetEvent event{};
+            event.type = NetEventType::Flow;
+            event.peerId = playerId_;
+            event.note = "graceful disconnect queued";
+            impl_->diagnostics.recordEvent(event);
         }
 
         enet_peer_disconnect(impl_->peer, 0);
@@ -589,6 +732,7 @@ namespace bomberman::net
         }
 
         LOG_NET_CONN_WARN("Graceful disconnect timed out after {}ms; tearing down transport locally", kDisconnectTimeoutMs);
+        finalizeDiagnosticsSession(EConnectState::Disconnected);
         destroyTransport();
         resetState();
         return true;
@@ -607,14 +751,26 @@ namespace bomberman::net
 
         LOG_NET_CONN_DEBUG("ENet connect event received, sending Hello");
 
-        if (const auto helloPacket =
-            makeHelloPacket(impl_->pendingPlayerName, kProtocolVersion);
-            !queueReliableControl(impl_->peer, helloPacket))
+        impl_->diagnostics.recordPeerLifecycle(NetPeerLifecycleType::TransportConnected,
+                                               std::nullopt,
+                                               impl_->peer != nullptr ? impl_->peer->incomingPeerID : 0,
+                                               "enet connect accepted");
+
+        const auto helloPacket = makeHelloPacket(impl_->pendingPlayerName, kProtocolVersion);
+        if (!queueReliableControl(impl_->peer, helloPacket))
         {
+            impl_->diagnostics.recordPacketSent(EMsgType::Hello,
+                                                static_cast<uint8_t>(EChannel::ControlReliable),
+                                                helloPacket.size(),
+                                                NetPacketResult::Dropped);
             LOG_NET_CONN_ERROR("Failed to send Hello packet");
             failConnection(EConnectState::FailedHandshake);
             return true;
         }
+        impl_->diagnostics.recordPacketSent(EMsgType::Hello,
+                                            static_cast<uint8_t>(EChannel::ControlReliable),
+                                            helloPacket.size(),
+                                            NetPacketResult::Ok);
 
         flush(impl_->host);
 
@@ -633,6 +789,7 @@ namespace bomberman::net
         if (!tryParsePacket(data, dataLength, header, payload, payloadSize))
         {
             LOG_NET_PACKET_WARN("Failed to deserialize PacketHeader (malformed or truncated, {} bytes)", dataLength);
+            impl_->diagnostics.recordMalformedPacket(channelID, dataLength, "header parse failed");
             if (state_ == EConnectState::Handshaking)
             {
                 LOG_NET_PROTO_ERROR("Malformed packet received during handshake - failing handshake");
@@ -648,6 +805,10 @@ namespace bomberman::net
                                 msgTypeName(header.type),
                                 channelName(channelID),
                                 channelName(static_cast<uint8_t>(expectedChannelFor(header.type))));
+            impl_->diagnostics.recordPacketRecv(header.type,
+                                                channelID,
+                                                dataLength,
+                                                NetPacketResult::Rejected);
 
             if (state_ == EConnectState::Handshaking && isHandshakeControlMessage(header.type))
             {
@@ -665,6 +826,10 @@ namespace bomberman::net
         {
             LOG_NET_PROTO_ERROR("Unexpected control message {} received during handshake - failing handshake",
                                 msgTypeName(header.type));
+            impl_->diagnostics.recordPacketRecv(header.type,
+                                                channelID,
+                                                dataLength,
+                                                NetPacketResult::Rejected);
             failConnection(EConnectState::FailedHandshake);
             return true;
         }
@@ -672,6 +837,10 @@ namespace bomberman::net
         if (!impl_->dispatcher.dispatch(*this, header, payload, payloadSize))
         {
             LOG_NET_PACKET_TRACE("No handler for message type 0x{:02x}", static_cast<int>(header.type));
+            impl_->diagnostics.recordPacketRecv(header.type,
+                                                channelID,
+                                                dataLength,
+                                                NetPacketResult::Rejected);
 
             if (state_ == EConnectState::Handshaking && channelID == static_cast<uint8_t>(EChannel::ControlReliable))
             {
@@ -682,6 +851,11 @@ namespace bomberman::net
             }
             return false;
         }
+
+        impl_->diagnostics.recordPacketRecv(header.type,
+                                            channelID,
+                                            dataLength,
+                                            NetPacketResult::Ok);
 
         if (isFailedState(state_))
         {
@@ -698,23 +872,41 @@ namespace bomberman::net
 
         if (state_ == Disconnecting)
         {
+            impl_->diagnostics.recordPeerLifecycle(NetPeerLifecycleType::PeerDisconnected,
+                                                   playerId_ != kInvalidPlayerId ? std::optional<uint8_t>(playerId_) : std::nullopt,
+                                                   impl_->peer != nullptr ? impl_->peer->incomingPeerID : 0,
+                                                   "graceful disconnect completed");
             LOG_NET_CONN_INFO("Graceful disconnect completed");
+            finalizeDiagnosticsSession(EConnectState::Disconnected);
             destroyTransport();
             resetState();
             return;
         }
         if (state_ == Connecting)
         {
+            impl_->diagnostics.recordPeerLifecycle(NetPeerLifecycleType::TransportDisconnectedBeforeHandshake,
+                                                   std::nullopt,
+                                                   impl_->peer != nullptr ? impl_->peer->incomingPeerID : 0,
+                                                   "remote close during connect");
             LOG_NET_CONN_WARN("Remote close/timeout during Connecting");
             failConnection(FailedConnect);
             return;
         }
         if (state_ == Handshaking)
         {
+            impl_->diagnostics.recordPeerLifecycle(NetPeerLifecycleType::TransportDisconnectedBeforeHandshake,
+                                                   std::nullopt,
+                                                   impl_->peer != nullptr ? impl_->peer->incomingPeerID : 0,
+                                                   "remote close during handshake");
             LOG_NET_CONN_WARN("Remote close/timeout during Handshaking");
             failConnection(FailedHandshake);
             return;
         }
+        impl_->diagnostics.recordPeerLifecycle(NetPeerLifecycleType::PeerDisconnected,
+                                               playerId_ != kInvalidPlayerId ? std::optional<uint8_t>(playerId_) : std::nullopt,
+                                               impl_->peer != nullptr ? impl_->peer->incomingPeerID : 0,
+                                               "remote close or timeout");
+        finalizeDiagnosticsSession(EConnectState::Disconnected);
         destroyTransport();
         resetState();
     }
@@ -786,8 +978,55 @@ namespace bomberman::net
             }
             else
             {
+                finalizeDiagnosticsSession(EConnectState::Disconnected);
                 destroyTransport();
                 resetState();
+            }
+        };
+
+        const auto sampleLiveTransportAndSilence = [&]
+        {
+            if (impl_ == nullptr || !isConnected() || impl_->peer == nullptr)
+                return;
+
+            const bool hasActiveMatch = impl_->matchFlow.hasLevelInfo;
+            const uint32_t snapshotTick =
+                (hasActiveMatch && impl_->matchFlow.snapshot.valid)
+                    ? impl_->matchFlow.snapshot.snapshot.serverTick
+                    : 0u;
+            const uint32_t correctionTick =
+                (hasActiveMatch && impl_->matchFlow.correction.valid)
+                    ? impl_->matchFlow.correction.correction.serverTick
+                    : 0u;
+            const uint32_t snapshotAgeMs =
+                (hasActiveMatch && impl_->lastSnapshotReceiveTime != TimePoint{})
+                    ? elapsedSinceOrZero(impl_->lastSnapshotReceiveTime, TimePoint{})
+                    : 0u;
+            const uint32_t gameplaySilenceMsValue = hasActiveMatch ? gameplaySilenceMs() : 0u;
+
+            updateLiveTransportStats(impl_->peer->roundTripTime,
+                                     impl_->peer->roundTripTimeVariance,
+                                     impl_->peer->packetLoss,
+                                     snapshotTick,
+                                     correctionTick,
+                                     snapshotAgeMs,
+                                     gameplaySilenceMsValue);
+
+            if (hasActiveMatch)
+            {
+                impl_->diagnostics.sampleGameplaySilence(gameplaySilenceMsValue);
+            }
+            else
+            {
+                impl_->diagnostics.sampleLobbySilence(lobbySilenceMs());
+            }
+
+            if (impl_->lastTransportSampleTime == TimePoint{} || elapsedMs(impl_->lastTransportSampleTime) >= 1000)
+            {
+                impl_->lastTransportSampleTime = SteadyClock::now();
+                impl_->diagnostics.sampleTransport(impl_->peer->roundTripTime,
+                                                   impl_->peer->roundTripTimeVariance,
+                                                   impl_->peer->packetLoss);
             }
         };
 
@@ -816,7 +1055,10 @@ namespace bomberman::net
         if (disconnectEventSeen)
         {
             handleDisconnectEvent();
+            return;
         }
+
+        sampleLiveTransportAndSilence();
     }
 
     // =================================================================================================================
@@ -829,6 +1071,14 @@ namespace bomberman::net
         {
             return std::nullopt;
         }
+
+        const TimePoint now = SteadyClock::now();
+        if (impl_->lastInputSendTime != TimePoint{})
+        {
+            impl_->diagnostics.sampleInputSendGap(
+                static_cast<uint32_t>(elapsedMs(impl_->lastInputSendTime)));
+        }
+        impl_->lastInputSendTime = now;
 
         // Advance the input sequence and store the input in history for potential resend in later batches.
         impl_->nextInputSeq++;
@@ -848,10 +1098,14 @@ namespace bomberman::net
             msg.inputs[i] = impl_->inputHistory[(baseSeq + i) % kMaxInputBatchSize];
         }
 
-        if (const auto inputPacket = makeInputPacket(msg);
-            !queueUnreliableInput(impl_->peer, inputPacket))
+        const auto inputPacket = makeInputPacket(msg);
+        if (!queueUnreliableInput(impl_->peer, inputPacket))
         {
             // Return the assigned sequence anyway so later redundant batches can still cover it.
+            impl_->diagnostics.recordPacketSent(EMsgType::Input,
+                                                static_cast<uint8_t>(EChannel::InputUnreliable),
+                                                inputPacket.size(),
+                                                NetPacketResult::Dropped);
             LOG_NET_INPUT_WARN("Failed to queue Input seq={} batch=[{}..{}] buttons=0x{:02x}",
                                seq,
                                baseSeq,
@@ -859,6 +1113,11 @@ namespace bomberman::net
                                buttons);
             return seq;
         }
+
+        impl_->diagnostics.recordPacketSent(EMsgType::Input,
+                                            static_cast<uint8_t>(EChannel::InputUnreliable),
+                                            inputPacket.size(),
+                                            NetPacketResult::Ok);
 
         // Log every Nth input batch for development.
         if ((seq % kInputLogEveryN) == 0)
@@ -883,9 +1142,18 @@ namespace bomberman::net
         const auto readyPacket = makeLobbyReadyPacket(ready);
         if (!queueReliableControl(impl_->peer, readyPacket))
         {
+            impl_->diagnostics.recordPacketSent(EMsgType::LobbyReady,
+                                                static_cast<uint8_t>(EChannel::ControlReliable),
+                                                readyPacket.size(),
+                                                NetPacketResult::Dropped);
             LOG_NET_CONN_WARN("Failed to queue LobbyReady desiredReady={}", ready);
             return false;
         }
+
+        impl_->diagnostics.recordPacketSent(EMsgType::LobbyReady,
+                                            static_cast<uint8_t>(EChannel::ControlReliable),
+                                            readyPacket.size(),
+                                            NetPacketResult::Ok);
 
         flushOutgoing();
         LOG_NET_CONN_DEBUG("Queued LobbyReady desiredReady={}", ready);
@@ -899,11 +1167,21 @@ namespace bomberman::net
             return false;
         }
 
-        if (!queueReliableControl(impl_->peer, makeMatchLoadedPacket(matchId)))
+        const auto loadedPacket = makeMatchLoadedPacket(matchId);
+        if (!queueReliableControl(impl_->peer, loadedPacket))
         {
+            impl_->diagnostics.recordPacketSent(EMsgType::MatchLoaded,
+                                                static_cast<uint8_t>(EChannel::ControlReliable),
+                                                loadedPacket.size(),
+                                                NetPacketResult::Dropped);
             LOG_NET_CONN_WARN("Failed to queue MatchLoaded matchId={}", matchId);
             return false;
         }
+
+        impl_->diagnostics.recordPacketSent(EMsgType::MatchLoaded,
+                                            static_cast<uint8_t>(EChannel::ControlReliable),
+                                            loadedPacket.size(),
+                                            NetPacketResult::Ok);
 
         flushOutgoing();
         LOG_NET_CONN_DEBUG("Queued MatchLoaded matchId={}", matchId);
@@ -1105,6 +1383,12 @@ namespace bomberman::net
         serverTickRate_ = welcome.serverTickRate;
         state_ = EConnectState::Connected;
         impl_->connectedStartTime = SteadyClock::now();
+        impl_->diagnostics.recordWelcome(welcome.playerId,
+                                         welcome.serverTickRate,
+                                         impl_->handshakeStartTime != TimePoint{}
+                                             ? static_cast<uint64_t>(elapsedMs(impl_->handshakeStartTime))
+                                             : 0u,
+                                         impl_->peer != nullptr ? impl_->peer->incomingPeerID : 0);
         LOG_NET_CONN_INFO("Welcome: playerId={}, tickRate={} - session connected, waiting for lobby or next round start",
                           welcome.playerId,
                           welcome.serverTickRate);
@@ -1128,33 +1412,43 @@ namespace bomberman::net
         }
 
         lastRejectReason_ = reject.reason;
+        std::string rejectNote = "server reject";
         switch (reject.reason)
         {
             using enum MsgReject::EReason;
             using enum EConnectState;
 
             case VersionMismatch:
+                rejectNote = "server reject version mismatch";
                 LOG_NET_CONN_ERROR("Server rejected: version mismatch (server expects v{})", reject.expectedProtocolVersion);
                 state_ = FailedProtocol;
                 break;
             case ServerFull:
+                rejectNote = "server reject full";
                 LOG_NET_CONN_WARN("Server rejected: server is full");
                 state_ = FailedHandshake;
                 break;
             case Banned:
+                rejectNote = "server reject banned";
                 LOG_NET_CONN_WARN("Server rejected: banned");
                 state_ = FailedHandshake;
                 break;
             case GameInProgress:
+                rejectNote = "server reject game in progress";
                 LOG_NET_CONN_WARN("Server rejected: game already in progress");
                 state_ = FailedHandshake;
                 break;
             case Other:
             default:
+                rejectNote = "server reject other";
                 LOG_NET_CONN_WARN("Server rejected: reason={}", static_cast<int>(reject.reason));
                 state_ = FailedHandshake;
                 break;
         }
+        impl_->diagnostics.recordPeerLifecycle(NetPeerLifecycleType::PeerRejected,
+                                               std::nullopt,
+                                               impl_->peer != nullptr ? impl_->peer->incomingPeerID : 0,
+                                               rejectNote);
     }
 
     void NetClient::handleLevelInfo(const uint8_t* payload, std::size_t payloadSize)
@@ -1193,6 +1487,15 @@ namespace bomberman::net
         impl_->matchFlow.beginBootstrap(levelInfo);
         impl_->cachedLobbyState = {};
         resetLocalMatchBootstrapState();
+        {
+            NetEvent event{};
+            event.type = NetEventType::Flow;
+            event.peerId = playerId_;
+            event.detailA = levelInfo.matchId;
+            event.detailB = levelInfo.mapSeed;
+            event.note = "level info received";
+            impl_->diagnostics.recordEvent(event);
+        }
         LOG_NET_CONN_INFO("Received LevelInfo matchId={} seed={}",
                           levelInfo.matchId,
                           levelInfo.mapSeed);
@@ -1256,6 +1559,15 @@ namespace bomberman::net
         }
 
         impl_->matchFlow.matchStart = matchStart;
+        {
+            NetEvent event{};
+            event.type = NetEventType::Flow;
+            event.peerId = playerId_;
+            event.detailA = matchStart.matchId;
+            event.detailB = matchStart.unlockServerTick;
+            event.note = "match start received";
+            impl_->diagnostics.recordEvent(event);
+        }
         LOG_NET_CONN_INFO("Received MatchStart matchId={} goTick={} unlockTick={}",
                           matchStart.matchId,
                           matchStart.goShowServerTick,
@@ -1292,6 +1604,14 @@ namespace bomberman::net
         }
 
         impl_->matchFlow.cancelledMatchId = matchCancelled.matchId;
+        {
+            NetEvent event{};
+            event.type = NetEventType::Flow;
+            event.peerId = playerId_;
+            event.detailA = matchCancelled.matchId;
+            event.note = "match cancelled received";
+            impl_->diagnostics.recordEvent(event);
+        }
         LOG_NET_CONN_INFO("Received MatchCancelled matchId={}", matchCancelled.matchId);
     }
 
@@ -1328,6 +1648,17 @@ namespace bomberman::net
         }
 
         impl_->matchFlow.matchResult = matchResult;
+        {
+            NetEvent event{};
+            event.type = NetEventType::Flow;
+            event.peerId =
+                matchResult.result == MsgMatchResult::EResult::Win ? matchResult.winnerPlayerId : kInvalidPlayerId;
+            event.detailA = matchResult.matchId;
+            event.note = matchResult.result == MsgMatchResult::EResult::Draw
+                             ? "match result received: draw"
+                             : "match result received: win";
+            impl_->diagnostics.recordEvent(event);
+        }
         LOG_NET_CONN_INFO("Received MatchResult matchId={} result={}",
                           matchResult.matchId,
                           matchResult.result == MsgMatchResult::EResult::Draw ? "draw" : "win");
@@ -1357,6 +1688,7 @@ namespace bomberman::net
 
         if (impl_->matchFlow.snapshot.valid && snapshot.serverTick <= impl_->matchFlow.snapshot.snapshot.serverTick)
         {
+            impl_->diagnostics.recordStaleSnapshotIgnored(snapshot.serverTick);
             return;
         }
 
@@ -1398,6 +1730,7 @@ namespace bomberman::net
         // Only cache the correction if it's newer than the currently cached one.
         if (impl_->matchFlow.correction.valid && correction.serverTick <= impl_->matchFlow.correction.correction.serverTick)
         {
+            impl_->diagnostics.recordStaleCorrectionIgnored(correction.serverTick, correction.lastProcessedInputSeq);
             return;
         }
 
@@ -1499,6 +1832,7 @@ namespace bomberman::net
             LOG_NET_SNAPSHOT_ERROR(
                 "Reliable gameplay event queue overflow for matchId={} - invalidating gameplay event stream",
                 impl_->matchFlow.currentMatchId());
+            impl_->diagnostics.recordBrokenGameplayEventStream(impl_->matchFlow.currentMatchId());
             impl_->matchFlow.brokenGameplayEventStream = true;
             impl_->matchFlow.pendingGameplayEvents.clear();
             return;
@@ -1506,6 +1840,7 @@ namespace bomberman::net
 
         impl_->matchFlow.pendingGameplayEvents.push_back(event);
         impl_->lastGameplayReceiveTime = SteadyClock::now();
+        impl_->diagnostics.samplePendingGameplayEventDepth(impl_->matchFlow.pendingGameplayEvents.size());
     }
 
     // =================================================================================================================
@@ -1537,6 +1872,39 @@ namespace bomberman::net
             enet_deinitialize();
             initialized_ = false;
         }
+    }
+
+    void NetClient::finalizeDiagnosticsSession(const EConnectState finalState, const bool /*preserveRejectReason*/)
+    {
+        if (impl_ == nullptr || !impl_->diagnosticsSessionActive)
+            return;
+
+        const uint64_t connectedDurationMs =
+            (impl_->connectedStartTime != TimePoint{})
+                ? static_cast<uint64_t>(elapsedMs(impl_->connectedStartTime))
+                : 0u;
+
+        impl_->diagnostics.recordFinalState(finalState, connectedDurationMs);
+        impl_->diagnostics.endSession();
+
+        std::filesystem::create_directories("logs");
+        const std::string playerLabel =
+            playerId_ != kInvalidPlayerId
+                ? ("p" + std::to_string(static_cast<uint32_t>(playerId_) + 1u))
+                : std::string("u");
+        const std::string reportPath = makeUniqueJsonReportPath(
+            "logs/diag_client_" + playerLabel + "_" + currentLocalTimeTagForFilename());
+
+        if (impl_->diagnostics.writeJsonReport(reportPath))
+        {
+            LOG_NET_DIAG_INFO("Client diagnostics JSON report written to {}", reportPath);
+        }
+        else
+        {
+            LOG_NET_DIAG_ERROR("Failed to write client diagnostics JSON report to {}", reportPath);
+        }
+
+        impl_->diagnosticsSessionActive = false;
     }
 
     void NetClient::destroyTransport() const
@@ -1585,6 +1953,9 @@ namespace bomberman::net
             impl_->lastGameplayReceiveTime = TimePoint{};
             impl_->lastSnapshotReceiveTime = TimePoint{};
             impl_->lastCorrectionReceiveTime = TimePoint{};
+            impl_->lastTransportSampleTime = TimePoint{};
+            impl_->lastInputSendTime = TimePoint{};
+            impl_->liveStats = {};
             impl_->matchFlow.clearAll();
             impl_->cachedLobbyState = {};
         }
@@ -1592,6 +1963,7 @@ namespace bomberman::net
 
     void NetClient::failConnection(const EConnectState failureState, const bool clearRejectReason)
     {
+        finalizeDiagnosticsSession(failureState, !clearRejectReason);
         destroyTransport();
         clearSessionState(clearRejectReason);
         state_ = failureState;

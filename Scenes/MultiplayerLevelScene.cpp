@@ -8,6 +8,7 @@
 #include <SDL.h>
 
 #include "Game.h"
+#include "Net/ClientDiagnostics.h"
 #include "Net/NetClient.h"
 #include "Scenes/LobbyScene.h"
 #include "Util/Log.h"
@@ -262,11 +263,21 @@ namespace bomberman
         updateLocalPlayerTagPosition();
         updateCamera();
         logLivePredictionTelemetry(delta);
+        updateDebugHud(delta);
     }
 
     void MultiplayerLevelScene::onExit()
     {
         exited_ = true;
+        if (auto* netClient = game ? game->getNetClient() : nullptr; netClient != nullptr)
+        {
+            const auto& stats = localPrediction_.stats();
+            netClient->clientDiagnostics().feedPredictionStats(
+                stats,
+                localPrediction_.isInitialized() || stats.correctionsApplied > 0,
+                stats.recoveryActivations > 0);
+            netClient->updateLivePredictionStats(false, false, 0, 0, 0, 0);
+        }
         logPredictionSummary();
         removeAllRemotePlayers();
         removeAllSnapshotBombs();
@@ -291,6 +302,7 @@ namespace bomberman
         livePredictionTelemetry_ = {};
         localFacingDirection_ = MovementDirection::Right;
         livePredictionLogAccumulatorMs_ = 0;
+        debugHudRefreshAccumulatorMs_ = 0;
         gameplayConnectionDegraded_ = false;
         returningToMenu_ = true;
         pendingGameplayEvents_.clear();
@@ -308,6 +320,7 @@ namespace bomberman
         }
 
         hideCenterBanner();
+        removeDebugHudPresentations();
 
         removeAllExplosionPresentations();
         brickPresentations_.clear();
@@ -332,11 +345,27 @@ namespace bomberman
 
         if (disconnectClient)
         {
+            if (auto* netClient = game->getNetClient(); netClient != nullptr)
+            {
+                net::NetEvent event{};
+                event.type = net::NetEventType::Flow;
+                event.peerId = netClient->playerId();
+                event.note = std::string("return to menu: ") + std::string(reason);
+                netClient->clientDiagnostics().recordEvent(event);
+            }
             LOG_NET_CONN_INFO("Leaving multiplayer level and disconnecting: {}", reason);
             game->disconnectNetClientIfActive(false);
         }
         else
         {
+            if (auto* netClient = game->getNetClient(); netClient != nullptr)
+            {
+                net::NetEvent event{};
+                event.type = net::NetEventType::Flow;
+                event.peerId = netClient->playerId();
+                event.note = std::string("multiplayer level lost connection: ") + std::string(reason);
+                netClient->clientDiagnostics().recordEvent(event);
+            }
             LOG_NET_CONN_WARN("Multiplayer level lost connection (state={}) - returning to menu", reason);
         }
 
@@ -354,10 +383,26 @@ namespace bomberman
         returningToMenu_ = true;
         if (wasMatchStarted)
         {
+            if (auto* netClient = game->getNetClient(); netClient != nullptr)
+            {
+                net::NetEvent event{};
+                event.type = net::NetEventType::Flow;
+                event.peerId = netClient->playerId();
+                event.note = std::string("return to lobby: ") + std::string(reason);
+                netClient->clientDiagnostics().recordEvent(event);
+            }
             LOG_NET_CONN_INFO("Leaving multiplayer match back to lobby ({})", reason);
         }
         else
         {
+            if (auto* netClient = game->getNetClient(); netClient != nullptr)
+            {
+                net::NetEvent event{};
+                event.type = net::NetEventType::Flow;
+                event.peerId = netClient->playerId();
+                event.note = std::string("bootstrap cancelled to lobby: ") + std::string(reason);
+                netClient->clientDiagnostics().recordEvent(event);
+            }
             LOG_NET_CONN_WARN("Match bootstrap aborted before start ({}) - returning to lobby", reason);
         }
 

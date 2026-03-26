@@ -15,6 +15,8 @@
 
 namespace bomberman::net
 {
+    class ClientDiagnostics;
+
     // ----- Connection state -----
 
     /** @brief Client connection lifecycle state. */
@@ -71,6 +73,25 @@ namespace bomberman::net
     class NetClient
     {
     public:
+        /** @brief Live multiplayer/network HUD state updated during gameplay. */
+        struct ClientLiveStats
+        {
+            uint32_t rttMs = 0;
+            uint32_t rttVarianceMs = 0;
+            uint32_t lossPermille = 0;
+            uint32_t lastSnapshotTick = 0;
+            uint32_t lastCorrectionTick = 0;
+            uint32_t snapshotAgeMs = 0;
+            uint32_t gameplaySilenceMs = 0;
+
+            bool predictionActive = false;
+            bool recoveryActive = false;
+            uint32_t correctionCount = 0;
+            uint32_t mismatchCount = 0;
+            uint32_t lastCorrectionDeltaQ = 0;
+            uint32_t maxPendingInputDepth = 0;
+        };
+
         /** @brief Constructs an idle client with no active transport. */
         NetClient();
 
@@ -193,6 +214,37 @@ namespace bomberman::net
         /** @brief Returns the last explicit server reject reason, if any. */
         [[nodiscard]]
         const std::optional<MsgReject::EReason>& lastRejectReason() const { return lastRejectReason_; }
+
+        /** @brief Configures client diagnostics behavior for future connect sessions. */
+        void setDiagnosticsConfig(bool enabled, bool predictionEnabled, bool remoteSmoothingEnabled);
+
+        /** @brief Returns the client diagnostics recorder. */
+        [[nodiscard]]
+        ClientDiagnostics& clientDiagnostics();
+        /** @brief Returns the client diagnostics recorder. */
+        [[nodiscard]]
+        const ClientDiagnostics& clientDiagnostics() const;
+
+        /** @brief Updates the live transport portion of the multiplayer HUD state. */
+        void updateLiveTransportStats(uint32_t rttMs,
+                                      uint32_t rttVarianceMs,
+                                      uint32_t lossPermille,
+                                      uint32_t lastSnapshotTick,
+                                      uint32_t lastCorrectionTick,
+                                      uint32_t snapshotAgeMs,
+                                      uint32_t gameplaySilenceMs);
+
+        /** @brief Updates the live prediction portion of the multiplayer HUD state. */
+        void updateLivePredictionStats(bool predictionActive,
+                                       bool recoveryActive,
+                                       uint32_t correctionCount,
+                                       uint32_t mismatchCount,
+                                       uint32_t lastCorrectionDeltaQ,
+                                       uint32_t maxPendingInputDepth);
+
+        /** @brief Returns the current live multiplayer HUD state. */
+        [[nodiscard]]
+        const ClientLiveStats& liveStats() const;
 
         /** @brief Returns the server-assigned player id, or @ref NetClient::kInvalidPlayerId before connect. */
         [[nodiscard]]
@@ -376,6 +428,8 @@ namespace bomberman::net
 
         bool initializeENet();
         void shutdownENet();
+
+        void finalizeDiagnosticsSession(EConnectState finalState, bool preserveRejectReason = true);
 
         // ----- Disconnect helpers -----
 

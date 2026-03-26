@@ -123,6 +123,16 @@ namespace bomberman::server
             LOG_SERVER_INFO("Map generated with random seed={}", state.mapSeed);
 
         state.diag.beginSession("server", diagEnabled);
+        state.diag.recordSessionConfig(net::ServerSessionConfig{
+            .protocolVersion = net::kProtocolVersion,
+            .tickRate = sim::kTickRate,
+            .inputLeadTicks = state.inputLeadTicks,
+            .snapshotIntervalTicks = state.snapshotIntervalTicks,
+            .brickSpawnRandomize = bomberman::kBrickSpawnRandomize,
+            .powerupsPerRound = sim::kPowerupsPerRound,
+            .maxPlayers = net::kMaxPlayers,
+            .powersEnabled = state.powersEnabled
+        });
     }
 
     void rollNextRoundMapSeed(ServerState& state)

@@ -8,10 +8,11 @@
 #include <algorithm>
 #include <chrono>
 #include <fstream>
-#include <iomanip>
 #include <sstream>
 #include <utility>
 #include <vector>
+
+#include <nlohmann/json.hpp>
 
 namespace bomberman::net
 {
@@ -33,6 +34,7 @@ namespace bomberman::net
                 case NetEventType::PacketSent:    return "PacketSent";
                 case NetEventType::PacketRecv:    return "PacketRecv";
                 case NetEventType::Simulation:    return "Simulation";
+                case NetEventType::Flow:          return "Flow";
                 default:                          return "Unknown";
             }
         }
@@ -78,31 +80,29 @@ namespace bomberman::net
             }
         }
 
-        /** @brief Formats one input bitmask using the same compact hex style as network logs. */
-        std::string formatInputMask(const uint32_t mask)
+        void incrementKeyMessageSent(ServerKeyMessageAggregates& keyMessages, const EMsgType type)
         {
-            std::ostringstream out;
-            out << "0x"
-                << std::uppercase << std::hex
-                << std::setw(2) << std::setfill('0')
-                << (mask & 0xFFu);
-            return out.str();
+            switch (type)
+            {
+                case EMsgType::Snapshot:
+                    keyMessages.snapshotSent++;
+                    break;
+                case EMsgType::Correction:
+                    keyMessages.correctionSent++;
+                    break;
+                case EMsgType::BombPlaced:
+                case EMsgType::ExplosionResolved:
+                    keyMessages.gameplayEventSent++;
+                    break;
+                default:
+                    break;
+            }
         }
 
-        /** @brief Formats one per-type powerup counter array as a compact diffable report value. */
-        std::string formatPowerupTypeCounts(const std::array<uint64_t, sim::kPowerupTypeCount>& counts)
+        void incrementKeyMessageRecv(ServerKeyMessageAggregates& keyMessages, const EMsgType type)
         {
-            std::ostringstream out;
-            for (std::size_t i = 0; i < counts.size(); ++i)
-            {
-                if (i > 0)
-                    out << ',';
-
-                const auto type = static_cast<sim::PowerupType>(i);
-                out << sim::powerupTypeName(type) << ':' << counts[i];
-            }
-
-            return out.str();
+            if (type == EMsgType::Input)
+                keyMessages.inputRecv++;
         }
     }
 
@@ -173,20 +173,15 @@ namespace bomberman::net
         if (!enabled_ || !sessionActive_)
             return;
 
-        const auto index = static_cast<std::size_t>(static_cast<uint8_t>(type));
-        auto& agg = packetAggregates_[index];
-
         summary_.packetsSent++;
         summary_.packetBytesSent += bytes;
 
         if (result == NetPacketResult::Ok)
         {
-            agg.outgoingOk++;
-            agg.outgoingBytes += bytes;
+            incrementKeyMessageSent(keyMessages_, type);
         }
         else
         {
-            agg.outgoingFail++;
             summary_.packetsSentFailed++;
         }
 
@@ -214,20 +209,15 @@ namespace bomberman::net
         if (!enabled_ || !sessionActive_)
             return;
 
-        const auto index = static_cast<std::size_t>(static_cast<uint8_t>(type));
-        auto& agg = packetAggregates_[index];
-
         summary_.packetsRecv++;
         summary_.packetBytesRecv += bytes;
 
         if (result == NetPacketResult::Ok)
         {
-            agg.incomingOk++;
-            agg.incomingBytes += bytes;
+            incrementKeyMessageRecv(keyMessages_, type);
         }
         else
         {
-            agg.incomingFail++;
             summary_.packetsRecvFailed++;
         }
 
@@ -258,7 +248,6 @@ namespace bomberman::net
         summary_.packetBytesRecv += bytes;
         summary_.packetsRecvFailed++;
         summary_.malformedPacketsRecv++;
-        summary_.malformedPacketBytesRecv += bytes;
 
         NetEvent event{};
         event.type = NetEventType::PacketRecv;
@@ -421,24 +410,6 @@ namespace bomberman::net
         summary_.bricksDestroyed += count;
     }
 
-    void NetDiagnostics::recordPowerupRevealed(const sim::PowerupType type)
-    {
-        if (!enabled_ || !sessionActive_)
-            return;
-
-        summary_.powerupsRevealed++;
-        summary_.powerupRevealsByType[sim::powerupTypeIndex(type)]++;
-    }
-
-    void NetDiagnostics::recordPowerupCollected(const sim::PowerupType type)
-    {
-        if (!enabled_ || !sessionActive_)
-            return;
-
-        summary_.powerupsCollected++;
-        summary_.powerupCollectionsByType[sim::powerupTypeIndex(type)]++;
-    }
-
     void NetDiagnostics::recordRoundEnded(const std::optional<uint8_t> winnerPlayerId,
                                           const bool endedInDraw,
                                           const uint32_t serverTick)
@@ -464,15 +435,6 @@ namespace bomberman::net
         event.detailA = endedInDraw ? 1u : 0u;
         event.detailB = serverTick;
         recordRecentEvent(std::move(event));
-    }
-
-    void NetDiagnostics::recordRejectReason(const MsgReject::EReason reason)
-    {
-        if (!enabled_ || !sessionActive_)
-            return;
-
-        if (reason == MsgReject::EReason::GameInProgress)
-            summary_.helloRejectsRoundNotAdmittingPlayers++;
     }
 
     void NetDiagnostics::samplePeerTransport(const uint8_t peerId,
@@ -511,6 +473,11 @@ namespace bomberman::net
         peerSummary.lastProcessedInputSeq = lastProcessedInputSeq;
     }
 
+    void NetDiagnostics::recordSessionConfig(const ServerSessionConfig config)
+    {
+        config_ = config;
+    }
+
     // =================================================================================================================
     // ===== Session maintenance and reporting =========================================================================
     // =================================================================================================================
@@ -523,7 +490,153 @@ namespace bomberman::net
         summary_.tickCount++;
     }
 
-    bool NetDiagnostics::writeSessionReport(const std::string_view filePath) const
+    nlohmann::json NetDiagnostics::toJson() const
+    {
+        const uint64_t reportEndMs = summary_.active ? nowMs() : summary_.endTimestampMs;
+        const uint64_t reportDurationMs =
+            (reportEndMs >= summary_.beginTimestampMs) ? (reportEndMs - summary_.beginTimestampMs) : 0;
+
+        nlohmann::json roundWins = nlohmann::json::array();
+        for (const uint64_t wins : summary_.roundWinsByPlayerId)
+            roundWins.push_back(wins);
+
+        nlohmann::json continuity = nlohmann::json::array();
+        std::vector<uint8_t> continuityIds;
+        continuityIds.reserve(peerContinuitySummaries_.size());
+        for (const auto& [peerId, summary] : peerContinuitySummaries_)
+        {
+            (void)summary;
+            continuityIds.push_back(peerId);
+        }
+        std::sort(continuityIds.begin(), continuityIds.end());
+        for (const uint8_t peerId : continuityIds)
+        {
+            const auto& peerSummary = peerContinuitySummaries_.at(peerId);
+            const uint32_t pendingInputs =
+                (peerSummary.lastReceivedInputSeq > peerSummary.lastProcessedInputSeq)
+                    ? (peerSummary.lastReceivedInputSeq - peerSummary.lastProcessedInputSeq)
+                    : 0u;
+
+            continuity.push_back({
+                {"player_id", peerId},
+                {"ts_ms", peerSummary.timestampMs},
+                {"direct_deadline_consumes", peerSummary.directDeadlineConsumes},
+                {"gaps", peerSummary.simulationGaps},
+                {"buffered_deadline_recoveries", peerSummary.bufferedDeadlineRecoveries},
+                {"last_recv_seq", peerSummary.lastReceivedInputSeq},
+                {"last_processed_seq", peerSummary.lastProcessedInputSeq},
+                {"pending_inputs", pendingInputs}
+            });
+        }
+
+        nlohmann::json transportSamples = nlohmann::json::array();
+        std::vector<uint8_t> transportIds;
+        transportIds.reserve(latestPeerSamples_.size());
+        for (const auto& [peerId, sample] : latestPeerSamples_)
+        {
+            (void)sample;
+            transportIds.push_back(peerId);
+        }
+        std::sort(transportIds.begin(), transportIds.end());
+        for (const uint8_t peerId : transportIds)
+        {
+            const auto& sample = latestPeerSamples_.at(peerId);
+            transportSamples.push_back({
+                {"player_id", peerId},
+                {"ts_ms", sample.timestampMs},
+                {"rtt_ms", sample.rttMs},
+                {"rtt_var_ms", sample.rttVarianceMs},
+                {"loss_permille", sample.packetLossPermille},
+                {"q_rel", sample.queuedReliable},
+                {"q_unrel", sample.queuedUnreliable}
+            });
+        }
+
+        nlohmann::json recentEvents = nlohmann::json::array();
+        for (std::size_t i = 0; i < recentCount_; ++i)
+        {
+            const auto idx = (recentStart_ + i) % kRecentEventCapacity;
+            const auto& event = recentEvents_[idx];
+            recentEvents.push_back({
+                {"ts_ms", event.timestampMs},
+                {"type", static_cast<uint8_t>(event.type)},
+                {"packet_direction", static_cast<uint8_t>(event.packetDirection)},
+                {"packet_result", static_cast<uint8_t>(event.packetResult)},
+                {"lifecycle_type", static_cast<uint8_t>(event.lifecycleType)},
+                {"simulation_type", static_cast<uint8_t>(event.simulationType)},
+                {"player_id", event.peerId == 0xFF ? nlohmann::json(nullptr) : nlohmann::json(event.peerId)},
+                {"channel_id", event.channelId == 0xFF ? nlohmann::json(nullptr) : nlohmann::json(event.channelId)},
+                {"msg_type", event.msgType == 0 ? nlohmann::json(nullptr) : nlohmann::json(event.msgType)},
+                {"seq", event.seq},
+                {"detail_a", event.detailA},
+                {"detail_b", event.detailB},
+                {"note", event.note}
+            });
+        }
+
+        return {
+            {"report", "net_diagnostics_report"},
+            {"report_version", kDiagnosticsReportVersion},
+            {"session_owner", ownerTag_},
+            {"config", {
+                {"protocol_version", config_.protocolVersion},
+                {"tick_rate", config_.tickRate},
+                {"input_lead_ticks", config_.inputLeadTicks},
+                {"snapshot_interval_ticks", config_.snapshotIntervalTicks},
+                {"brick_spawn_randomize", config_.brickSpawnRandomize},
+                {"powerups_per_round", config_.powerupsPerRound},
+                {"max_players", config_.maxPlayers},
+                {"powers_enabled", config_.powersEnabled}
+            }},
+            {"session", {
+                {"active", summary_.active},
+                {"begin_ms", summary_.beginTimestampMs},
+                {"end_ms", reportEndMs},
+                {"duration_ms", reportDurationMs},
+                {"ticks", summary_.tickCount},
+                {"recent_events_recorded", summary_.recentEventsRecorded},
+                {"recent_events_evicted", summary_.recentEventsEvicted}
+            }},
+            {"packets", {
+                {"sent_attempts", summary_.packetsSent},
+                {"recv_attempts", summary_.packetsRecv},
+                {"bytes_sent", summary_.packetBytesSent},
+                {"bytes_recv", summary_.packetBytesRecv},
+                {"sent_failed", summary_.packetsSentFailed},
+                {"recv_failed", summary_.packetsRecvFailed},
+                {"malformed_recv", summary_.malformedPacketsRecv}
+            }},
+            {"key_messages", {
+                {"snapshot_sent", keyMessages_.snapshotSent},
+                {"correction_sent", keyMessages_.correctionSent},
+                {"input_recv", keyMessages_.inputRecv},
+                {"gameplay_event_sent", keyMessages_.gameplayEventSent}
+            }},
+            {"input_stream", {
+                {"input_packets_received", summary_.inputPacketsReceived},
+                {"input_packets_arrived_fully_stale", summary_.inputPacketsFullyStale},
+                {"already_processed_input_entries_received", summary_.inputEntriesTooLate},
+                {"already_processed_input_entries_received_direct", summary_.inputEntriesTooLateDirect},
+                {"already_processed_input_entries_received_buffered", summary_.inputEntriesTooLateBuffered},
+                {"input_entries_rejected_too_far_ahead", summary_.inputEntriesTooFarAhead}
+            }},
+            {"simulation_continuity", {
+                {"direct_deadline_consumes", summary_.directDeadlineConsumes},
+                {"simulation_gaps", summary_.simulationGaps},
+                {"buffered_deadline_recoveries", summary_.bufferedDeadlineRecoveries},
+                {"bombs_placed", summary_.bombsPlaced},
+                {"bricks_destroyed", summary_.bricksDestroyed},
+                {"rounds_ended", summary_.roundsEnded},
+                {"rounds_drawn", summary_.roundsDrawn},
+                {"round_wins_by_player_id", std::move(roundWins)}
+            }},
+            {"per_player_input_continuity", std::move(continuity)},
+            {"transport_samples", std::move(transportSamples)},
+            {"recent_events", std::move(recentEvents)}
+        };
+    }
+
+    bool NetDiagnostics::writeJsonReport(const std::string_view filePath) const
     {
         if (filePath.empty())
             return false;
@@ -535,262 +648,7 @@ namespace bomberman::net
         if (!out)
             return false;
 
-        const uint64_t reportEndMs = summary_.active ? nowMs() : summary_.endTimestampMs;
-        const uint64_t reportDurationMs =
-            (reportEndMs >= summary_.beginTimestampMs) ? (reportEndMs - summary_.beginTimestampMs) : 0;
-
-        // Keep the report deliberately plain so it stays diffable and easy to scan during manual testing.
-        const auto writeSectionHeader = [&out](const std::string_view title)
-        {
-            out << "--- " << title << " ---\n";
-        };
-
-        const auto writeKeyValue = [&out](const std::string_view key, const auto& value)
-        {
-            out << key << '=' << value << '\n';
-        };
-
-        out << "===== net_diagnostics_report =====\n";
-        writeKeyValue("session_owner", ownerTag_);
-        out << '\n';
-
-        writeSectionHeader("Session summary");
-        writeKeyValue("active", summary_.active ? 1 : 0);
-        writeKeyValue("begin_ms", summary_.beginTimestampMs);
-        writeKeyValue("end_ms", reportEndMs);
-        writeKeyValue("duration_ms", reportDurationMs);
-        writeKeyValue("ticks", summary_.tickCount);
-        writeKeyValue("recent_events_recorded", summary_.recentEventsRecorded);
-        writeKeyValue("recent_events_evicted", summary_.recentEventsEvicted);
-        out << '\n';
-
-        writeSectionHeader("Packet summary");
-        writeKeyValue("packets_sent_attempts", summary_.packetsSent);
-        writeKeyValue("packets_recv_attempts", summary_.packetsRecv);
-        writeKeyValue("bytes_sent", summary_.packetBytesSent);
-        writeKeyValue("bytes_recv", summary_.packetBytesRecv);
-        writeKeyValue("packets_sent_failed", summary_.packetsSentFailed);
-        writeKeyValue("packets_recv_failed", summary_.packetsRecvFailed);
-        writeKeyValue("malformed_packets_recv", summary_.malformedPacketsRecv);
-        writeKeyValue("malformed_packet_bytes_recv", summary_.malformedPacketBytesRecv);
-        out << '\n';
-
-        writeSectionHeader("Input stream summary");
-        writeKeyValue("input_packets_received", summary_.inputPacketsReceived);
-        writeKeyValue("input_packets_newest_seq_already_consumed", summary_.inputPacketsFullyStale);
-        writeKeyValue("input_entries_too_late", summary_.inputEntriesTooLate);
-        writeKeyValue("input_entries_too_late_direct", summary_.inputEntriesTooLateDirect);
-        writeKeyValue("input_entries_too_late_buffered", summary_.inputEntriesTooLateBuffered);
-        writeKeyValue("input_entries_too_far_ahead", summary_.inputEntriesTooFarAhead);
-        out << '\n';
-
-        writeSectionHeader("Simulation continuity");
-        writeKeyValue("direct_deadline_consumes", summary_.directDeadlineConsumes);
-        writeKeyValue("simulation_gaps", summary_.simulationGaps);
-        writeKeyValue("buffered_deadline_recoveries", summary_.bufferedDeadlineRecoveries);
-        writeKeyValue("bombs_placed", summary_.bombsPlaced);
-        writeKeyValue("bricks_destroyed", summary_.bricksDestroyed);
-        writeKeyValue("powerups_revealed", summary_.powerupsRevealed);
-        writeKeyValue("powerups_collected", summary_.powerupsCollected);
-        writeKeyValue("powerup_reveals_by_type", formatPowerupTypeCounts(summary_.powerupRevealsByType));
-        writeKeyValue("powerup_collections_by_type", formatPowerupTypeCounts(summary_.powerupCollectionsByType));
-        writeKeyValue("rounds_ended", summary_.roundsEnded);
-        writeKeyValue("rounds_drawn", summary_.roundsDrawn);
-        writeKeyValue("hello_rejects_round_not_admitting_players", summary_.helloRejectsRoundNotAdmittingPlayers);
-        out << "round_wins_by_player_id=";
-        for (std::size_t i = 0; i < summary_.roundWinsByPlayerId.size(); ++i)
-        {
-            if (i > 0)
-                out << ',';
-            out << summary_.roundWinsByPlayerId[i];
-        }
-        out << '\n';
-        out << '\n';
-
-        writeSectionHeader("Per-player-id input continuity (authoritative seat keyed)");
-        if (peerContinuitySummaries_.empty())
-        {
-            out << "  - none\n";
-        }
-        else
-        {
-            std::vector<uint8_t> peerIds;
-            peerIds.reserve(peerContinuitySummaries_.size());
-            for (const auto& [peerId, summary] : peerContinuitySummaries_)
-            {
-                (void)summary;
-                peerIds.push_back(peerId);
-            }
-            std::sort(peerIds.begin(), peerIds.end());
-
-            for (const uint8_t peerId : peerIds)
-            {
-                const auto& peerSummary = peerContinuitySummaries_.at(peerId);
-                const uint32_t pendingInputs =
-                    (peerSummary.lastReceivedInputSeq > peerSummary.lastProcessedInputSeq)
-                        ? (peerSummary.lastReceivedInputSeq - peerSummary.lastProcessedInputSeq)
-                        : 0u;
-
-                out << "  - player_id=" << static_cast<int>(peerId)
-                    << " ts_ms=" << peerSummary.timestampMs
-                    << " direct_deadline_consumes=" << peerSummary.directDeadlineConsumes
-                    << " gaps=" << peerSummary.simulationGaps
-                    << " buffered_deadline_recoveries=" << peerSummary.bufferedDeadlineRecoveries
-                    << " last_recv_seq=" << peerSummary.lastReceivedInputSeq
-                    << " last_processed_seq=" << peerSummary.lastProcessedInputSeq
-                    << " pending_inputs=" << pendingInputs
-                    << '\n';
-            }
-        }
-        out << '\n';
-
-        writeSectionHeader("Latest player-id transport samples (authoritative seat keyed)");
-        if (latestPeerSamples_.empty())
-        {
-            out << "  - none\n";
-        }
-        else
-        {
-            std::vector<uint8_t> peerIds;
-            peerIds.reserve(latestPeerSamples_.size());
-            for (const auto& [peerId, sample] : latestPeerSamples_)
-            {
-                (void)sample;
-                peerIds.push_back(peerId);
-            }
-            std::sort(peerIds.begin(), peerIds.end());
-
-            for (const uint8_t peerId : peerIds)
-            {
-                const auto& sample = latestPeerSamples_.at(peerId);
-                out << "  - player_id=" << static_cast<int>(peerId)
-                    << " ts_ms=" << sample.timestampMs
-                    << " rtt_ms=" << sample.rttMs
-                    << " rtt_var_ms=" << sample.rttVarianceMs
-                    << " loss_permille=" << sample.packetLossPermille
-                    << " q_rel=" << sample.queuedReliable
-                    << " q_unrel=" << sample.queuedUnreliable
-                    << '\n';
-            }
-        }
-        out << '\n';
-
-        writeSectionHeader("Packet aggregates");
-        bool wroteAggregate = false;
-        for (std::size_t i = 0; i < packetAggregates_.size(); ++i)
-        {
-            const auto& agg = packetAggregates_[i];
-            const uint64_t total =
-                agg.outgoingOk + agg.outgoingFail +
-                agg.incomingOk + agg.incomingFail;
-
-            if (total == 0)
-                continue;
-
-            wroteAggregate = true;
-
-            out << "  - msg=0x" << std::hex << static_cast<int>(i) << std::dec
-                << " name=" << msgTypeName(static_cast<EMsgType>(i))
-                << " out_ok=" << agg.outgoingOk
-                << " out_fail=" << agg.outgoingFail
-                << " out_bytes=" << agg.outgoingBytes
-                << " in_ok=" << agg.incomingOk
-                << " in_fail=" << agg.incomingFail
-                << " in_bytes=" << agg.incomingBytes
-                << '\n';
-        }
-
-        if (!wroteAggregate)
-            out << "  - none\n";
-
-        out << '\n';
-
-        writeSectionHeader("Recent events");
-        if (recentCount_ == 0)
-        {
-            out << "  - none\n";
-        }
-        else
-        {
-            for (std::size_t i = 0; i < recentCount_; ++i)
-            {
-                const auto idx = (recentStart_ + i) % kRecentEventCapacity;
-                const auto& event = recentEvents_[idx];
-
-                out << "  - ts_ms=" << event.timestampMs
-                    << " type=" << toString(event.type);
-
-                switch (event.type)
-                {
-                    case NetEventType::PacketSent:
-                    case NetEventType::PacketRecv:
-                        out << " msg=0x" << std::hex << static_cast<int>(event.msgType) << std::dec
-                            << " ch=" << static_cast<int>(event.channelId)
-                            << " player_id=" << static_cast<int>(event.peerId)
-                            << " result=" << toString(event.packetResult);
-                        break;
-
-                    case NetEventType::PeerLifecycle:
-                        if (event.peerId != 0xFF)
-                            out << " player_id=" << static_cast<int>(event.peerId);
-                        out << " lifecycle=" << toString(event.lifecycleType)
-                            << " transport_peer=" << event.detailA;
-                        break;
-
-                    case NetEventType::Simulation:
-                        out << " player_id=" << static_cast<int>(event.peerId)
-                            << " sim=" << toString(event.simulationType)
-                            << " server_tick=" << event.detailB;
-                        if (event.simulationType == NetSimulationEventType::Gap)
-                        {
-                            out << " seq=" << event.seq
-                                << " held_mask=" << formatInputMask(event.detailA);
-                        }
-                        else if (event.simulationType == NetSimulationEventType::BufferedDeadlineRecovery)
-                        {
-                            out << " seq=" << event.seq;
-                        }
-                        else if (event.simulationType == NetSimulationEventType::RoundEnded)
-                        {
-                            if (event.detailA != 0)
-                                out << " result=draw";
-                            else
-                                out << " winner_player_id=" << static_cast<int>(event.peerId);
-                        }
-                        else if (event.seq != 0)
-                        {
-                            out << " seq=" << event.seq;
-                        }
-
-                        break;
-
-                    case NetEventType::SessionBegin:
-                    case NetEventType::SessionEnd:
-                        break;
-
-                    default:
-                        if (event.peerId != 0xFF)
-                            out << " peer=" << static_cast<int>(event.peerId);
-                        if (event.channelId != 0xFF)
-                            out << " ch=" << static_cast<int>(event.channelId);
-                        if (event.msgType != 0)
-                            out << " msg=0x" << std::hex << static_cast<int>(event.msgType) << std::dec;
-                        if (event.seq != 0)
-                            out << " seq=" << event.seq;
-                        if (event.detailA != 0)
-                            out << " detail_a=" << event.detailA;
-                        if (event.detailB != 0)
-                            out << " detail_b=" << event.detailB;
-                        break;
-                }
-
-                if (!event.note.empty())
-                    out << " note=\"" << event.note << '"';
-
-                out << '\n';
-            }
-        }
-
+        out << toJson().dump(2) << '\n';
         return out.good();
     }
 
@@ -838,10 +696,17 @@ namespace bomberman::net
         }
         else
         {
-            out << event.seq
-                << '|' << event.detailA
-                << '|' << event.detailB
-                << '|' << event.note;
+            if (event.type == NetEventType::Flow)
+            {
+                out << event.seq
+                    << '|' << event.detailA
+                    << '|' << event.detailB
+                    << '|' << event.note;
+            }
+            else
+            {
+                out << event.note;
+            }
         }
         return out.str();
     }
@@ -865,7 +730,9 @@ namespace bomberman::net
 
         ownerTag_.assign(ownerTag.begin(), ownerTag.end());
 
+        config_ = {};
         summary_ = {};
+        keyMessages_ = {};
         summary_.enabled = enabled_;
         summary_.active = true;
         summary_.beginTimestampMs = nowMs();
@@ -875,9 +742,6 @@ namespace bomberman::net
         latestPeerSamples_.clear();
         peerContinuitySummaries_.clear();
         recentEventRepeatState_.clear();
-
-        for (auto& item : packetAggregates_)
-            item = {};
     }
 
     void NetDiagnostics::recordRecentEvent(NetEvent event)

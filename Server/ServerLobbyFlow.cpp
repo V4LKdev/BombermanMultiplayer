@@ -140,6 +140,14 @@ namespace bomberman::server::flow_internal
         state.currentLobbyCountdownDeadlineTick = state.serverTick + kLobbyCountdownTicks;
         state.currentLobbyCountdownLastBroadcastSecond = computeCountdownSecondsRemaining(state);
         broadcastLobbyState(state);
+        {
+            net::NetEvent event{};
+            event.type = net::NetEventType::Flow;
+            event.detailA = std::popcount(participantMask);
+            event.detailB = state.currentLobbyCountdownLastBroadcastSecond;
+            event.note = "lobby countdown started";
+            state.diag.recordEvent(event);
+        }
         LOG_SERVER_INFO("Lobby countdown started players={} seconds={}",
                         std::popcount(participantMask),
                         static_cast<unsigned int>(state.currentLobbyCountdownLastBroadcastSecond));
@@ -232,6 +240,14 @@ namespace bomberman::server::flow_internal
         }
 
         net::flush(state.host);
+        {
+            net::NetEvent event{};
+            event.type = net::NetEventType::Flow;
+            event.detailA = state.currentMatchId;
+            event.detailB = state.currentMatchUnlockTick;
+            event.note = "match start committed";
+            state.diag.recordEvent(event);
+        }
         LOG_SERVER_INFO("Match start committed matchId={} players={} goTick={} unlockTick={}",
                         state.currentMatchId,
                         std::popcount(state.currentMatchPlayerMask),
@@ -388,6 +404,14 @@ namespace bomberman::server
 
         state.currentMatchPlayerMask = bootstrappedMask;
         net::flush(state.host);
+        {
+            net::NetEvent event{};
+            event.type = net::NetEventType::Flow;
+            event.detailA = state.currentMatchId;
+            event.detailB = state.mapSeed;
+            event.note = "match bootstrap started";
+            state.diag.recordEvent(event);
+        }
         LOG_SERVER_INFO("Starting match bootstrap matchId={} players={} seed={}",
                         state.currentMatchId,
                         std::popcount(state.currentMatchPlayerMask),

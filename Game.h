@@ -118,6 +118,7 @@ namespace bomberman
         uint16_t serverPort_ = net::kDefaultServerPort; ///< Server port from CLI or default.
         bool mute_ = false;                             ///< When true, all audio output is silenced at startup.
         bool hasKeyboardFocus_ = true;                  ///< True while the SDL window has keyboard focus.
+        bool renderVsyncEnabled_ = true;                ///< False for multiplayer clients, which use manual frame pacing to avoid local multi-client input skew.
         MultiplayerClientConfig multiplayerConfig_{};   ///< Startup config for client-side netcode behavior.
         bool suppressBombInputUntilRelease_ = false;    ///< Prevents lobby-ready space presses from leaking into gameplay.
 

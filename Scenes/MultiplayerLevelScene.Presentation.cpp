@@ -6,7 +6,9 @@
 #include "Scenes/MultiplayerLevelSceneInternal.h"
 
 #include <cmath>
+#include <iomanip>
 #include <memory>
+#include <sstream>
 #include <unordered_set>
 
 #include <SDL.h>
@@ -74,6 +76,15 @@ namespace bomberman
 
             return Texture::PowerupSpeed;
         }
+
+        [[nodiscard]]
+        std::string formatLossPercent(const uint32_t lossPermille)
+        {
+            std::ostringstream out;
+            out << std::fixed << std::setprecision(1)
+                << (static_cast<double>(lossPermille) / 10.0);
+            return out.str();
+        }
     } // namespace
 
     void MultiplayerLevelScene::updateGameplayConnectionHealth(const net::NetClient& netClient)
@@ -127,6 +138,114 @@ namespace bomberman
     void MultiplayerLevelScene::showCenterBanner(const std::string_view message, const SDL_Color color)
     {
         showCenterBanner(message, {}, color);
+    }
+
+    void MultiplayerLevelScene::ensureDebugHudPresentations()
+    {
+        if (debugHudNetText_)
+            return;
+
+        auto font = game->getAssetManager()->getFont(kDebugHudPointSize);
+        debugHudNetText_ = std::make_shared<Text>(font, game->getRenderer(), "");
+        debugHudNetText_->attachToCamera(false);
+        addObject(debugHudNetText_);
+
+#if defined(BOMBERMAN_ENABLE_CLIENT_NETCODE_DEBUG_OPTIONS) && BOMBERMAN_ENABLE_CLIENT_NETCODE_DEBUG_OPTIONS
+        debugHudPredictionText_ = std::make_shared<Text>(font, game->getRenderer(), "");
+        debugHudPredictionText_->attachToCamera(false);
+        addObject(debugHudPredictionText_);
+
+        debugHudSimulationText_ = std::make_shared<Text>(font, game->getRenderer(), "");
+        debugHudSimulationText_->attachToCamera(false);
+        addObject(debugHudSimulationText_);
+#endif
+
+        debugHudRefreshAccumulatorMs_ = kDebugHudRefreshIntervalMs;
+    }
+
+    void MultiplayerLevelScene::updateDebugHud(const unsigned int delta)
+    {
+        const auto* netClient = game ? game->getNetClient() : nullptr;
+        if (netClient == nullptr)
+            return;
+
+        ensureDebugHudPresentations();
+        debugHudRefreshAccumulatorMs_ += delta;
+        if (debugHudRefreshAccumulatorMs_ < kDebugHudRefreshIntervalMs)
+            return;
+
+        debugHudRefreshAccumulatorMs_ = 0;
+
+        const auto& live = netClient->liveStats();
+        const uint8_t playerId = netClient->playerId();
+        const std::string playerLabel =
+            playerId == net::NetClient::kInvalidPlayerId
+                ? std::string("?")
+                : std::to_string(playerId);
+
+        std::ostringstream netLine;
+#if defined(BOMBERMAN_ENABLE_CLIENT_NETCODE_DEBUG_OPTIONS) && BOMBERMAN_ENABLE_CLIENT_NETCODE_DEBUG_OPTIONS
+        netLine << "[NET] RTT " << live.rttMs << "ms +/-" << live.rttVarianceMs
+                << " loss " << formatLossPercent(live.lossPermille) << "% player=" << playerLabel
+                << " proto=" << net::kProtocolVersion;
+#else
+        netLine << "Ping " << live.rttMs << "ms   Loss " << formatLossPercent(live.lossPermille) << "%";
+#endif
+        debugHudNetText_->setText(netLine.str());
+        debugHudNetText_->fitToContent();
+        debugHudNetText_->setPosition(kDebugHudOffsetX, kDebugHudOffsetY);
+
+#if defined(BOMBERMAN_ENABLE_CLIENT_NETCODE_DEBUG_OPTIONS) && BOMBERMAN_ENABLE_CLIENT_NETCODE_DEBUG_OPTIONS
+        std::ostringstream predLine;
+        predLine << "[PRED] "
+                 << (live.predictionActive ? "active" : "inactive")
+                 << " corr=" << live.correctionCount
+                 << " mismatch=" << live.mismatchCount
+                 << " recover=" << (live.recoveryActive ? 1 : 0)
+                 << " last_d=" << live.lastCorrectionDeltaQ << "q"
+                 << " max_pending=" << live.maxPendingInputDepth;
+        debugHudPredictionText_->setText(predLine.str());
+        debugHudPredictionText_->fitToContent();
+        debugHudPredictionText_->setPosition(
+            kDebugHudOffsetX,
+            kDebugHudOffsetY + debugHudNetText_->getHeight() + kDebugHudLineGapPx);
+
+        std::ostringstream simLine;
+        simLine << "[SIM] snap_tick=" << live.lastSnapshotTick
+                << " corr_tick=" << live.lastCorrectionTick
+                << " snap_age=" << live.snapshotAgeMs << "ms"
+                << " silence=" << live.gameplaySilenceMs << "ms";
+        debugHudSimulationText_->setText(simLine.str());
+        debugHudSimulationText_->fitToContent();
+        debugHudSimulationText_->setPosition(
+            kDebugHudOffsetX,
+            kDebugHudOffsetY +
+                debugHudNetText_->getHeight() +
+                kDebugHudLineGapPx +
+                debugHudPredictionText_->getHeight() +
+                kDebugHudLineGapPx);
+#endif
+    }
+
+    void MultiplayerLevelScene::removeDebugHudPresentations()
+    {
+        if (debugHudNetText_)
+        {
+            removeObject(debugHudNetText_);
+            debugHudNetText_.reset();
+        }
+
+        if (debugHudPredictionText_)
+        {
+            removeObject(debugHudPredictionText_);
+            debugHudPredictionText_.reset();
+        }
+
+        if (debugHudSimulationText_)
+        {
+            removeObject(debugHudSimulationText_);
+            debugHudSimulationText_.reset();
+        }
     }
 
     void MultiplayerLevelScene::showCenterBanner(const std::string_view mainMessage,

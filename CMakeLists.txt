@@ -31,6 +31,12 @@ pkg_check_modules(SDL2_MIXER REQUIRED IMPORTED_TARGET SDL2_mixer)
 pkg_check_modules(ENET       REQUIRED IMPORTED_TARGET libenet)
 pkg_check_modules(SPDLOG     REQUIRED IMPORTED_TARGET spdlog)
 
+if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/nlohmann/json.hpp")
+  set(NLOHMANN_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
+else()
+  find_path(NLOHMANN_INCLUDE_DIR nlohmann/json.hpp REQUIRED)
+endif()
+
 # ---- Sources ----
 
 set(SOURCES
@@ -63,6 +69,7 @@ set(SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/Util/Pathfinding.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Util/Log.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Net/NetDiagnostics.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/Net/ClientDiagnostics.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Net/ClientPrediction.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Net/NetClient.cpp
 )
@@ -121,11 +128,13 @@ add_executable(Bomberman_Server
 target_include_directories(${PROJECT_NAME}
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${NLOHMANN_INCLUDE_DIR}
 )
 
 target_include_directories(Bomberman_Server
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${NLOHMANN_INCLUDE_DIR}
 )
 
 # SDL2 libs via pkg-config imported targets

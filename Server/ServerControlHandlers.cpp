@@ -72,10 +72,6 @@ namespace bomberman::server
             MsgReject reject{};
             reject.reason = reason;
             reject.expectedProtocolVersion = reason == MsgReject::EReason::VersionMismatch ? kProtocolVersion : 0;
-            if (ctx.diag)
-            {
-                ctx.diag->recordRejectReason(reason);
-            }
 
             recordPeerLifecycle(ctx.diag,
                                 NetPeerLifecycleType::PeerRejected,

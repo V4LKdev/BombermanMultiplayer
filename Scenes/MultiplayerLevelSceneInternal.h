@@ -32,6 +32,11 @@ namespace bomberman::multiplayer_level_scene_internal
     inline constexpr int kNameTagMaxPointSize = 20;
     inline constexpr uint32_t kGameplayDegradedThresholdMs = 2000;
     inline constexpr int kGameplayStatusOffsetY = 12;
+    inline constexpr int kDebugHudOffsetX = 12;
+    inline constexpr int kDebugHudOffsetY = 12;
+    inline constexpr int kDebugHudPointSize = 12;
+    inline constexpr int kDebugHudLineGapPx = 4;
+    inline constexpr uint32_t kDebugHudRefreshIntervalMs = 250;
     inline constexpr int kCenterBannerPointSize = 56;
     inline constexpr int kCenterBannerDetailPointSize = 40;
     inline constexpr int kCenterBannerLineGapPx = 10;

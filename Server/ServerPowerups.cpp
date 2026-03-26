@@ -177,7 +177,6 @@ namespace bomberman::server
 
                 powerupEntry->revealed = true;
                 powerupEntry->revealedTick = state.serverTick;
-                state.diag.recordPowerupRevealed(powerupEntry->type);
                 LOG_SERVER_INFO("Powerup revealed type={} tick={} cell=({}, {})",
                                 sim::powerupTypeName(powerupEntry->type),
                                 state.serverTick,
@@ -262,7 +261,6 @@ namespace bomberman::server
             }
 
             refreshMatchPlayerPowerupLoadout(state, collector);
-            state.diag.recordPowerupCollected(powerupEntry->type);
 
             if (effectUntilTick != 0)
             {

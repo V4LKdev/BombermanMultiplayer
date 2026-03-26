@@ -12,6 +12,7 @@
 #include <SDL.h>
 
 #include "Game.h"
+#include "Net/ClientDiagnostics.h"
 #include "Net/NetClient.h"
 #include "Scenes/MultiplayerLevelScene.h"
 #include "Util/Log.h"
@@ -526,11 +527,27 @@ namespace bomberman
 
         if (disconnectClient)
         {
+            if (auto* netClient = game->getNetClient(); netClient != nullptr)
+            {
+                net::NetEvent event{};
+                event.type = net::NetEventType::Flow;
+                event.peerId = netClient->playerId();
+                event.note = std::string("leave lobby and disconnect: ") + std::string(reason);
+                netClient->clientDiagnostics().recordEvent(event);
+            }
             LOG_NET_CONN_INFO("Leaving lobby and disconnecting: {}", reason);
             game->disconnectNetClientIfActive(false);
         }
         else
         {
+            if (auto* netClient = game->getNetClient(); netClient != nullptr)
+            {
+                net::NetEvent event{};
+                event.type = net::NetEventType::Flow;
+                event.peerId = netClient->playerId();
+                event.note = std::string("lobby lost connection: ") + std::string(reason);
+                netClient->clientDiagnostics().recordEvent(event);
+            }
             LOG_NET_CONN_WARN("Lobby lost connection (state={}) - returning to menu", reason);
         }
 

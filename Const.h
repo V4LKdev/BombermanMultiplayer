@@ -24,7 +24,8 @@ namespace bomberman
     constexpr int playerStartX = 1; ///< Player spawn tile column.
     constexpr int playerStartY = 1; ///< Player spawn tile row.
 
-    constexpr unsigned int brickSpawnRandomize = 10; ///< Brick density — lower value means more bricks.
+    constexpr unsigned int kBrickSpawnRandomize = 10; ///< Shared brick-density knob for generated maps; lower means more bricks.
+    constexpr unsigned int brickSpawnRandomize = kBrickSpawnRandomize; ///< Legacy alias kept for older call sites.
     constexpr unsigned int doorSpawnRandomize  = 10; ///< Door placement — lower value means door spawns further in.
     constexpr unsigned int bangSpawnCells      = 5;  ///< Number of cells in the bang spread pattern.
     constexpr unsigned int minEnemiesOnLevel   = 2;

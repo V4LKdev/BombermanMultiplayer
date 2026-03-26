@@ -27,7 +27,7 @@ namespace bomberman::sim
     inline void generateTileMap(uint32_t seed, Tile outTiles[tileArrayHeight][tileArrayWidth])
     {
         std::mt19937 rng(seed);
-        std::uniform_int_distribution<int> brickDist(0, brickSpawnRandomize);
+        std::uniform_int_distribution<int> brickDist(0, kBrickSpawnRandomize);
 
         for (int row = 0; row < static_cast<int>(tileArrayHeight); ++row)
         {

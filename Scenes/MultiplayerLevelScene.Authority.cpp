@@ -270,10 +270,29 @@ namespace bomberman
 
     void MultiplayerLevelScene::logLivePredictionTelemetry(const unsigned int delta)
     {
+        const auto& stats = localPrediction_.stats();
+        if (game->isPredictionEnabled())
+        {
+            updateMaxPendingInputDepth();
+        }
+
+        if (auto* netClient = game->getNetClient(); netClient != nullptr)
+        {
+            netClient->updateLivePredictionStats(
+                game->isPredictionEnabled() &&
+                    shouldProcessOwnerPrediction() &&
+                    localPrediction_.isInitialized() &&
+                    !livePredictionTelemetry_.recoveryActive,
+                livePredictionTelemetry_.recoveryActive,
+                stats.correctionsApplied,
+                stats.correctionsMismatched,
+                livePredictionTelemetry_.lastCorrectionDeltaQ,
+                livePredictionTelemetry_.maxPendingInputDepth);
+        }
+
         if (!game->isPredictionEnabled() || !shouldProcessOwnerPrediction())
             return;
 
-        const auto& stats = localPrediction_.stats();
         if (stats.localInputsApplied == 0 &&
             stats.localInputsDeferred == 0 &&
             stats.rejectedLocalInputs == 0 &&
@@ -287,7 +306,6 @@ namespace bomberman
             return;
 
         livePredictionLogAccumulatorMs_ = 0;
-        updateMaxPendingInputDepth();
 
         auto* logger = bomberman::log::netInput();
         if (logger == nullptr || !logger->should_log(spdlog::level::debug))

@@ -5,9 +5,12 @@
 
 #include <csignal>
 #include <chrono>
+#include <ctime>
 #include <cstdlib>
 #include <filesystem>
+#include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <enet/enet.h>
@@ -40,6 +43,43 @@ namespace
     /// Global flag for graceful shutdown
     volatile std::sig_atomic_t gRunning = 1;
     void onSignal(int /*sig*/) { gRunning = 0; }
+
+    std::string currentLocalTimeTagForFilename()
+    {
+        const auto now = std::chrono::system_clock::now();
+        const auto nowTimeT = std::chrono::system_clock::to_time_t(now);
+
+        std::tm localTm{};
+#if defined(_WIN32)
+        localtime_s(&localTm, &nowTimeT);
+#else
+        localtime_r(&nowTimeT, &localTm);
+#endif
+
+        std::ostringstream out;
+        out << std::put_time(&localTm, "%H%M%S");
+        return out.str();
+    }
+
+    std::string makeUniqueJsonReportPath(const std::string_view basePathWithoutExtension)
+    {
+        std::string candidate = std::string(basePathWithoutExtension) + ".json";
+        if (!std::filesystem::exists(candidate))
+        {
+            return candidate;
+        }
+
+        for (uint32_t suffix = 2; suffix < 1000; ++suffix)
+        {
+            candidate = std::string(basePathWithoutExtension) + "_" + std::to_string(suffix) + ".json";
+            if (!std::filesystem::exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return std::string(basePathWithoutExtension) + "_overflow.json";
+    }
 
     struct CliOptions
     {
@@ -343,13 +383,14 @@ int main(int argc, char** argv)
     if (cli.diagnostics.netDiagEnabled)
     {
         std::filesystem::create_directories("logs");
-        if (state.diag.writeSessionReport("logs/server_diag.txt"))
+        const std::string reportPath = makeUniqueJsonReportPath("logs/diag_server_" + currentLocalTimeTagForFilename());
+        if (state.diag.writeJsonReport(reportPath))
         {
-            LOG_SERVER_INFO("Diagnostics report written to logs/server_diag.txt");
+            LOG_SERVER_INFO("Diagnostics JSON report written to {}", reportPath);
         }
         else
         {
-            LOG_SERVER_ERROR("Failed to write diagnostics report");
+            LOG_SERVER_ERROR("Failed to write diagnostics JSON report");
         }
     }
 
