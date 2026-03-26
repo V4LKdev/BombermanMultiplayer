@@ -12,6 +12,7 @@
 #include "Net/NetSend.h"
 #include "ServerBombs.h"
 #include "ServerHandlers.h"
+#include "ServerPowerups.h"
 #include "Sim/TileMapGen.h"
 #include "Util/Log.h"
 
@@ -261,6 +262,7 @@ namespace bomberman::server
 
         clearAllLobbyReadyFlags(state);
         clearBombsAndReleaseOwnership(state);
+        clearRoundPowerups(state);
         clearActiveMatchPlayers(state);
         rollNextRoundMapSeed(state);
     }
@@ -341,8 +343,10 @@ namespace bomberman::server
 
         clearAllLobbyReadyFlags(state);
         clearBombsAndReleaseOwnership(state);
+        clearRoundPowerups(state);
         clearActiveMatchPlayers(state);
         sim::generateTileMap(state.mapSeed, state.tiles);
+        placeRoundPowerups(state);
 
         net::MsgLevelInfo levelInfo{};
         levelInfo.matchId = state.currentMatchId;

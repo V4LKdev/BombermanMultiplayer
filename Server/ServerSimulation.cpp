@@ -11,6 +11,7 @@
 #include "Net/NetSend.h"
 #include "ServerBombs.h"
 #include "ServerFlow.h"
+#include "ServerPowerups.h"
 #include "ServerSnapshot.h"
 #include "Sim/SimConfig.h"
 #include "Util/Log.h"
@@ -35,6 +36,7 @@ namespace bomberman::server
             corr.lastProcessedInputSeq = matchPlayer.lastProcessedInputSeq;
             corr.xQ = static_cast<int16_t>(std::clamp(matchPlayer.pos.xQ, INT16_MIN, INT16_MAX));
             corr.yQ = static_cast<int16_t>(std::clamp(matchPlayer.pos.yQ, INT16_MIN, INT16_MAX));
+            corr.playerFlags = buildReplicatedPlayerFlags(matchPlayer, state.serverTick);
             return corr;
         }
 
@@ -166,6 +168,8 @@ namespace bomberman::server
         /** @brief Advances one accepted match player through authoritative input, movement, correction, and diagnostics. */
         void simulateAcceptedMatchPlayer(ServerState& state, MatchPlayerState& matchPlayer)
         {
+            refreshMatchPlayerPowerupLoadout(state, matchPlayer);
+
             if (!matchPlayer.alive || matchPlayer.inputLocked)
             {
                 matchPlayer.appliedButtons = 0;
@@ -188,7 +192,12 @@ namespace bomberman::server
 
             const int8_t moveX = buttonsToMoveX(matchPlayer.appliedButtons);
             const int8_t moveY = buttonsToMoveY(matchPlayer.appliedButtons);
-            matchPlayer.pos = sim::stepMovementWithCollision(matchPlayer.pos, moveX, moveY, state.tiles);
+            matchPlayer.pos = sim::stepMovementWithCollision(
+                matchPlayer.pos,
+                moveX,
+                moveY,
+                state.tiles,
+                hasSpeedBoost(matchPlayer, state.serverTick) ? sim::kSpeedBoostPlayerSpeedQ : sim::kPlayerSpeedQ);
             matchPlayer.previousTickButtons = matchPlayer.appliedButtons;
 
             queueMatchPlayerCorrection(state, matchPlayer);
@@ -294,6 +303,7 @@ namespace bomberman::server
         if (state.phase == ServerPhase::InMatch)
         {
             resolveExplodingBombs(state);
+            collectRevealedPowerups(state);
             evaluateRoundEnd(state);
         }
 

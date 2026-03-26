@@ -76,10 +76,10 @@ namespace bomberman::sim
      * @brief Advances a position by one simulation tick given a directional input.
      */
     [[nodiscard]]
-    inline TilePos stepMovement(TilePos pos, int8_t moveX, int8_t moveY)
+    inline TilePos stepMovement(TilePos pos, int8_t moveX, int8_t moveY, int32_t speedQ = kPlayerSpeedQ)
     {
-        pos.xQ += moveX * kPlayerSpeedQ;
-        pos.yQ += moveY * kPlayerSpeedQ;
+        pos.xQ += moveX * speedQ;
+        pos.yQ += moveY * speedQ;
         return pos;
     }
 
@@ -95,12 +95,16 @@ namespace bomberman::sim
      * @return New position, guaranteed not to overlap any solid tile.
      */
     [[nodiscard]]
-    inline TilePos stepMovementWithCollision(TilePos pos, int8_t  moveX, int8_t  moveY, const TileMap& map)
+    inline TilePos stepMovementWithCollision(TilePos pos,
+                                             int8_t moveX,
+                                             int8_t moveY,
+                                             const TileMap& map,
+                                             int32_t speedQ = kPlayerSpeedQ)
     {
         // Try X axis.
         if (moveX != 0)
         {
-            const int32_t newXQ = pos.xQ + moveX * kPlayerSpeedQ;
+            const int32_t newXQ = pos.xQ + moveX * speedQ;
             if (!overlapsWall(map, newXQ, pos.yQ))
                 pos.xQ = newXQ;
         }
@@ -108,7 +112,7 @@ namespace bomberman::sim
         // Try Y axis.
         if (moveY != 0)
         {
-            const int32_t newYQ = pos.yQ + moveY * kPlayerSpeedQ;
+            const int32_t newYQ = pos.yQ + moveY * speedQ;
             if (!overlapsWall(map, pos.xQ, newYQ))
                 pos.yQ = newYQ;
         }
@@ -154,4 +158,3 @@ namespace bomberman::sim
 } // namespace bomberman::sim
 
 #endif // BOMBERMAN_SIM_MOVEMENT_H
-

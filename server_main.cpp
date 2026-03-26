@@ -50,6 +50,7 @@ namespace
         uint32_t inputLeadTicks = static_cast<uint32_t>(bomberman::sim::kDefaultServerInputLeadTicks);
         uint32_t snapshotIntervalTicks = static_cast<uint32_t>(bomberman::sim::kDefaultServerSnapshotIntervalTicks);
         bool seedOverride = false;
+        bool powersEnabled = true;
     };
 
     void printUsage()
@@ -64,7 +65,7 @@ namespace
         std::cout
             << " [--port <port override>] [--seed <seed override>] [--input-lead-ticks <0-"
             << bomberman::server::kMaxBufferedInputLead
-            << ">] [--snapshot-interval-ticks <1-" << bomberman::sim::kTickRate << ">]\n"
+            << ">] [--snapshot-interval-ticks <1-" << bomberman::sim::kTickRate << ">] [--no-powers]\n"
             << "       Default log config location: " << bomberman::log::defaultConfigFilePath() << "\n";
     }
 
@@ -194,6 +195,12 @@ namespace
                 continue;
             }
 
+            if (arg == "--no-powers")
+            {
+                outOptions.powersEnabled = false;
+                continue;
+            }
+
             std::cerr << "Unknown argument: " << arg << '\n';
             printUsage();
             return ParseCliResult::Error;
@@ -273,6 +280,7 @@ int main(int argc, char** argv)
     LOG_SERVER_INFO("Listening on port {} with max {} peers ({} gameplay slots)", cli.port, bomberman::server::kServerPeerSessionCapacity, kMaxPlayers);
     LOG_SERVER_INFO("Server input lead={} tick(s)", cli.inputLeadTicks);
     LOG_SERVER_INFO("Server snapshot interval={} tick(s)", cli.snapshotIntervalTicks);
+    LOG_SERVER_INFO("Round powerups {}", cli.powersEnabled ? "enabled" : "disabled");
     LOG_SERVER_DEBUG("ENet peer liveness ping={}ms timeoutLimit={} timeoutRange=[{}..{}]ms",
                      bomberman::net::kPeerPingIntervalMs,
                      bomberman::net::kPeerTimeoutLimit,
@@ -287,7 +295,8 @@ int main(int argc, char** argv)
                                        cli.seedOverride,
                                        cli.seed,
                                        cli.inputLeadTicks,
-                                       cli.snapshotIntervalTicks);
+                                       cli.snapshotIntervalTicks,
+                                       cli.powersEnabled);
 
     auto lastTickTime = ServerClock::now();
     SimDuration accumulator{};

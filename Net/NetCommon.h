@@ -8,6 +8,7 @@
 #include <string_view>
 
 #include "Const.h"
+#include "Sim/PowerupConfig.h"
 
 /**
  * @file NetCommon.h
@@ -30,7 +31,7 @@ namespace bomberman::net
 
     // ----- Protocol Constants -----
 
-    constexpr uint16_t      kProtocolVersion = 8;
+    constexpr uint16_t      kProtocolVersion = 9;
 
     constexpr uint16_t      kDefaultServerPort = 12345;  ///< Default server port used by both client and server.
     constexpr std::size_t   kMaxPacketSize = 1400;       ///< Upper packet size bound (below typical 1500-byte MTU).
@@ -45,6 +46,7 @@ namespace bomberman::net
     constexpr std::size_t   kPlayerNameMax = 16;
     constexpr uint8_t       kMaxPlayers = 4;             ///< Maximum supported player count in a game instance.
     constexpr uint8_t       kMaxSnapshotBombs = kMaxPlayers * 4; ///< Maximum bombs carried by one snapshot payload.
+    constexpr uint8_t       kMaxSnapshotPowerups = sim::kPowerupsPerRound; ///< Maximum revealed powerups carried by one snapshot payload.
     constexpr std::size_t   kMaxExplosionBlastCells =
         1u + 4u * (static_cast<std::size_t>((tileArrayWidth > tileArrayHeight) ?
             tileArrayWidth :
@@ -183,6 +185,7 @@ namespace bomberman::net
         sizeof(uint32_t) + // serverTick
         sizeof(uint8_t) +  // playerCount
         sizeof(uint8_t) +  // bombCount
+        sizeof(uint8_t) +  // powerupCount
         kMaxPlayers *
             (sizeof(uint8_t) +   // playerId
              sizeof(int16_t) +   // xQ
@@ -192,14 +195,20 @@ namespace bomberman::net
             (sizeof(uint8_t) +   // ownerId
              sizeof(uint8_t) +   // col
              sizeof(uint8_t) +   // row
-             sizeof(uint8_t));   // radius
+             sizeof(uint8_t)) +  // radius
+        kMaxSnapshotPowerups *
+            (sizeof(uint8_t) +   // type
+             sizeof(uint8_t) +   // col
+             sizeof(uint8_t));   // row
 
     constexpr std::size_t kMsgCorrectionSize =
         sizeof(uint32_t) + // matchId
         sizeof(uint32_t) + // serverTick
         sizeof(uint32_t) + // lastProcessedInputSeq
         sizeof(int16_t) +  // xQ
-        sizeof(int16_t);   // yQ
+        sizeof(int16_t) +  // yQ
+        sizeof(uint8_t) +  // playerFlags
+        3u;                // reserved
 
     constexpr std::size_t kMsgBombPlacedSize =
         sizeof(uint32_t) + // matchId
@@ -243,8 +252,8 @@ namespace bomberman::net
     static_assert(kMsgLobbyStateSeatSize    == 18, "MsgLobbyState seat size mismatch");
     static_assert(kMsgLobbyStateSize        == 76, "MsgLobbyState size mismatch");
     static_assert(kMsgInputSize             == 21, "MsgInput size mismatch");
-    static_assert(kMsgSnapshotSize          == 98, "MsgSnapshot size mismatch");
-    static_assert(kMsgCorrectionSize        == 16, "MsgCorrection size mismatch");
+    static_assert(kMsgSnapshotSize          == 111, "MsgSnapshot size mismatch");
+    static_assert(kMsgCorrectionSize        == 20, "MsgCorrection size mismatch");
     static_assert(kMsgBombPlacedSize        == 16, "MsgBombPlaced size mismatch");
     static_assert(kMsgExplosionResolvedSize == 497,"MsgExplosionResolved size mismatch");
 
@@ -252,7 +261,8 @@ namespace bomberman::net
         sizeof(uint32_t) + // matchId
         sizeof(uint32_t) + // serverTick
         sizeof(uint8_t) +  // playerCount
-        sizeof(uint8_t);   // bombCount
+        sizeof(uint8_t) +  // bombCount
+        sizeof(uint8_t);   // powerupCount
     constexpr std::size_t kSnapshotPlayerEntrySize =
         sizeof(uint8_t) +  // playerId
         sizeof(int16_t) +  // xQ
@@ -265,6 +275,12 @@ namespace bomberman::net
         sizeof(uint8_t) +  // col
         sizeof(uint8_t) +  // row
         sizeof(uint8_t);   // radius
+    constexpr std::size_t kSnapshotPowerupsOffset =
+        kSnapshotBombsOffset + kMaxSnapshotBombs * kSnapshotBombEntrySize;
+    constexpr std::size_t kSnapshotPowerupEntrySize =
+        sizeof(uint8_t) +  // type
+        sizeof(uint8_t) +  // col
+        sizeof(uint8_t);   // row
 
     constexpr std::size_t kExplosionBlastCellsOffset =
         sizeof(uint32_t) + // matchId
@@ -623,12 +639,13 @@ namespace bomberman::net
     /**
      * @brief Snapshot payload broadcast by the server to all clients.
      *
-     * Contains active authoritative round player state plus active bombs for
-     * already-connected clients. Players are packed in ascending player-id
-     * slot order. Bombs are packed in ascending cell order.
+     * Contains active authoritative round player state plus active bombs and
+     * revealed powerups for already-connected clients. Players are packed in
+     * ascending player-id slot order. Bombs and revealed powerups are packed
+     * in ascending cell order.
      *
      * Truth boundary today:
-     * - authoritative for player positions / replicated player flags / active bomb membership
+     * - authoritative for player positions / replicated player flags / active bomb membership / revealed powerup membership
      * - not a payload for mid-match joins or recovery
      * - does not encode destroyed tiles, round-result presentation state, or
      *   enough world state to rebuild an in-progress round after disconnect
@@ -642,6 +659,7 @@ namespace bomberman::net
         uint32_t serverTick = 0;        ///< Authoritative server tick at which this snapshot was produced.
         uint8_t playerCount = 0;        ///< Number of active entries stored in `players`.
         uint8_t bombCount = 0;          ///< Number of active entries stored in `bombs`.
+        uint8_t powerupCount = 0;       ///< Number of active revealed entries stored in `powerups`.
 
         struct PlayerEntry
         {
@@ -653,14 +671,20 @@ namespace bomberman::net
             {
                 None = 0x00,            ///< No replicated player flags are set.
                 Alive = 0x01,           ///< Player is alive if set, dead if unset.
-                Invulnerable = 0x02,    ///< Player is invulnerable if set (e.g. spawn protection).
-                InputLocked = 0x04      ///< Player input/movement is server-locked if set.
+                Invulnerable = 0x02,    ///< Player is invulnerable if set.
+                InputLocked = 0x04,     ///< Player input/movement is server-locked if set.
+                BombRangeBoost = 0x08,  ///< Player currently has the bomb-range boost active.
+                MaxBombsBoost = 0x10,   ///< Player currently has the max-bombs boost active.
+                SpeedBoost = 0x20       ///< Player currently has the speed boost active.
             };
 
             static constexpr uint8_t kKnownFlags =
                 static_cast<uint8_t>(EPlayerFlags::Alive) |
                 static_cast<uint8_t>(EPlayerFlags::Invulnerable) |
-                static_cast<uint8_t>(EPlayerFlags::InputLocked);
+                static_cast<uint8_t>(EPlayerFlags::InputLocked) |
+                static_cast<uint8_t>(EPlayerFlags::BombRangeBoost) |
+                static_cast<uint8_t>(EPlayerFlags::MaxBombsBoost) |
+                static_cast<uint8_t>(EPlayerFlags::SpeedBoost);
 
             EPlayerFlags flags = EPlayerFlags::None; ///< Player alive status and other state flags.
         };
@@ -676,6 +700,15 @@ namespace bomberman::net
         };
 
         BombEntry bombs[kMaxSnapshotBombs]; ///< Packed active bombs; slots beyond `bombCount` are ignored.
+
+        struct PowerupEntry
+        {
+            sim::PowerupType type = sim::PowerupType::SpeedBoost; ///< Revealed powerup type occupying this cell.
+            uint8_t col = 0;                                      ///< Tile-map column occupied by the revealed powerup.
+            uint8_t row = 0;                                      ///< Tile-map row occupied by the revealed powerup.
+        };
+
+        PowerupEntry powerups[kMaxSnapshotPowerups]; ///< Packed revealed powerups; slots beyond `powerupCount` are ignored.
     };
 
     /**
@@ -692,6 +725,8 @@ namespace bomberman::net
         uint32_t lastProcessedInputSeq = 0; ///< Highest input seq the server has processed for this player.
         int16_t xQ = 0;                     ///< Corrected X position in tile-space Q8.
         int16_t yQ = 0;                     ///< Corrected Y position in tile-space Q8.
+        uint8_t playerFlags = 0;            ///< Owner-local copy of the current replicated player flags.
+        uint8_t reserved[3]{};              ///< Reserved for future correction-owned player state.
     };
 
     /**
@@ -799,6 +834,12 @@ namespace bomberman::net
     constexpr std::size_t snapshotBombOffset(std::size_t index)
     {
         return kSnapshotBombsOffset + index * kSnapshotBombEntrySize;
+    }
+
+    /** @brief Returns the payload offset of the snapshot powerup entry at `index`. */
+    constexpr std::size_t snapshotPowerupOffset(std::size_t index)
+    {
+        return kSnapshotPowerupsOffset + index * kSnapshotPowerupEntrySize;
     }
 
     /** @brief Sets `MsgHello::name` from `string_view` with truncation and zero padding. */
@@ -1337,9 +1378,9 @@ namespace bomberman::net
     /**
      * @brief Serializes `MsgSnapshot` to its fixed-size wire payload.
      *
-     * @note Callers are expected to keep entries beyond `playerCount`
-     * zero-initialized because the current wire format always writes all
-     * `kMaxPlayers` slots.
+     * @note Callers are expected to keep entries beyond the active counts
+     * zero-initialized because the current wire format always writes every
+     * fixed-size snapshot slot.
      */
     inline void serializeMsgSnapshot(const MsgSnapshot& snap, uint8_t* out) noexcept
     {
@@ -1347,8 +1388,10 @@ namespace bomberman::net
         writeU32LE(out + 4, snap.serverTick);
         const uint8_t playerCount = (snap.playerCount <= kMaxPlayers) ? snap.playerCount : kMaxPlayers;
         const uint8_t bombCount = (snap.bombCount <= kMaxSnapshotBombs) ? snap.bombCount : kMaxSnapshotBombs;
+        const uint8_t powerupCount = (snap.powerupCount <= kMaxSnapshotPowerups) ? snap.powerupCount : kMaxSnapshotPowerups;
         out[8] = playerCount;
         out[9] = bombCount;
+        out[10] = powerupCount;
 
         for (std::size_t i = 0; i < kMaxPlayers; ++i)
         {
@@ -1369,6 +1412,15 @@ namespace bomberman::net
             out[offset + 2] = bomb.row;
             out[offset + 3] = bomb.radius;
         }
+
+        for (std::size_t i = 0; i < kMaxSnapshotPowerups; ++i)
+        {
+            const auto& powerup = snap.powerups[i];
+            const std::size_t offset = snapshotPowerupOffset(i);
+            out[offset] = static_cast<uint8_t>(powerup.type);
+            out[offset + 1] = powerup.col;
+            out[offset + 2] = powerup.row;
+        }
     }
 
     /** @brief Deserializes `MsgSnapshot` from fixed-size wire payload. */
@@ -1384,11 +1436,16 @@ namespace bomberman::net
         outSnap.serverTick = readU32LE(in + 4);
         outSnap.playerCount = in[8];
         outSnap.bombCount = in[9];
+        outSnap.powerupCount = in[10];
         if (outSnap.playerCount > kMaxPlayers)
         {
             return false;
         }
         if (outSnap.bombCount > kMaxSnapshotBombs)
+        {
+            return false;
+        }
+        if (outSnap.powerupCount > kMaxSnapshotPowerups)
         {
             return false;
         }
@@ -1475,6 +1532,39 @@ namespace bomberman::net
             }
         }
 
+        uint16_t previousPowerupCellKey = 0;
+        bool hasPreviousPowerup = false;
+        for (std::size_t i = 0; i < kMaxSnapshotPowerups; ++i)
+        {
+            const std::size_t offset = snapshotPowerupOffset(i);
+            auto& powerup = outSnap.powerups[i];
+            const uint8_t rawType = in[offset];
+            powerup.type = static_cast<sim::PowerupType>(rawType);
+            powerup.col = in[offset + 1];
+            powerup.row = in[offset + 2];
+
+            if (i < outSnap.powerupCount)
+            {
+                if (!sim::isValidPowerupType(rawType) ||
+                    powerup.col >= ::bomberman::tileArrayWidth ||
+                    powerup.row >= ::bomberman::tileArrayHeight)
+                {
+                    return false;
+                }
+
+                const uint16_t powerupCellKey =
+                    static_cast<uint16_t>(powerup.row) * static_cast<uint16_t>(::bomberman::tileArrayWidth) +
+                    static_cast<uint16_t>(powerup.col);
+                if (hasPreviousPowerup && powerupCellKey <= previousPowerupCellKey)
+                {
+                    return false;
+                }
+
+                previousPowerupCellKey = powerupCellKey;
+                hasPreviousPowerup = true;
+            }
+        }
+
         return true;
     }
 
@@ -1486,6 +1576,10 @@ namespace bomberman::net
         writeU32LE(out + 8, corr.lastProcessedInputSeq);
         writeU16LE(out + 12, static_cast<uint16_t>(corr.xQ));
         writeU16LE(out + 14, static_cast<uint16_t>(corr.yQ));
+        out[16] = corr.playerFlags;
+        out[17] = 0;
+        out[18] = 0;
+        out[19] = 0;
     }
 
     /** @brief Deserializes `MsgCorrection` from fixed-size wire payload. */
@@ -1501,6 +1595,7 @@ namespace bomberman::net
         outCorr.lastProcessedInputSeq = readU32LE(in + 8);
         outCorr.xQ = static_cast<int16_t>(readU16LE(in + 12));
         outCorr.yQ = static_cast<int16_t>(readU16LE(in + 14));
+        outCorr.playerFlags = in[16];
         return true;
     }
 

@@ -46,6 +46,7 @@ namespace bomberman::net
     {
         sim::TilePos posQ{};
         uint8_t buttons = 0; ///< Latest local buttons, used for local facing/animation context.
+        uint8_t playerFlags = 0; ///< Owner-local replicated flags that affect prediction, such as speed boost.
     };
 
     // ----- Diagnostics and Telemetry -----
@@ -176,7 +177,9 @@ namespace bomberman::net
         // ----- Correction helpers -----
 
         /** @brief Replaces the presented local state with the correction baseline. */
-        void setCurrentAuthoritativeState(sim::TilePos posQ, uint8_t buttons = 0) noexcept;
+        void setCurrentAuthoritativeState(sim::TilePos posQ,
+                                          uint8_t buttons = 0,
+                                          uint8_t playerFlags = 0) noexcept;
         /** @brief Switches prediction into authoritative recovery mode after replay failed. */
         void enterRecoveryFromReplayFailure(sim::TilePos authoritativePosQ,
                                             uint32_t lastProcessedInputSeq,
@@ -187,22 +190,26 @@ namespace bomberman::net
         bool replayFromAuthoritativeBaseline(uint32_t lastProcessedInputSeq,
                                              sim::TilePos authoritativePosQ,
                                              uint8_t authoritativeButtons,
+                                             uint8_t authoritativePlayerFlags,
                                              const sim::TileMap& map,
                                              CorrectionReplayResult& result) noexcept;
         /** @brief Handles the first authoritative correction that seeds prediction. */
         void handleAwaitingBaselineCorrection(uint32_t lastProcessedInputSeq,
                                               sim::TilePos authoritativePosQ,
+                                              uint8_t authoritativePlayerFlags,
                                               const sim::TileMap& map,
                                               CorrectionReplayResult& result) noexcept;
         /** @brief Handles a correction while recovery is waiting for authority to catch up. */
         void handleRecoveringCorrection(uint32_t lastProcessedInputSeq,
                                         sim::TilePos authoritativePosQ,
+                                        uint8_t authoritativePlayerFlags,
                                         const sim::TileMap& map,
                                         CorrectionReplayResult& result) noexcept;
         /** @brief Handles a correction during normal active prediction. */
         void handleActiveCorrection(uint32_t lastProcessedInputSeq,
                                     sim::TilePos authoritativePosQ,
                                     uint8_t authoritativeButtons,
+                                    uint8_t authoritativePlayerFlags,
                                     const sim::TileMap& map,
                                     CorrectionReplayResult& result) noexcept;
         /** @brief Measures correction delta against retained predicted state at the acked seq. */

@@ -157,6 +157,7 @@ namespace bomberman
 
         applySnapshotToRemotePlayers(snapshot, localId);
         applySnapshotBombs(snapshot);
+        applySnapshotPowerups(snapshot);
         lastAppliedSnapshotTick_ = snapshot.serverTick;
     }
 
@@ -188,6 +189,7 @@ namespace bomberman
         }
 
         const auto replayResult = localPrediction_.reconcileAndReplay(correction, tiles);
+        localPlayerEffectFlags_ = correction.playerFlags;
         if (replayResult.ignoredStaleCorrection)
         {
             if (!currentMatchResult_.has_value())
@@ -287,9 +289,13 @@ namespace bomberman
         livePredictionLogAccumulatorMs_ = 0;
         updateMaxPendingInputDepth();
 
-#ifndef NDEBUG
+        auto* logger = bomberman::log::netInput();
+        if (logger == nullptr || !logger->should_log(spdlog::level::debug))
+            return;
+
         const uint32_t pendingDepth = pendingInputDepth();
-        LOG_NET_INPUT_DEBUG(
+        logger->log(
+            spdlog::level::debug,
             "Prediction live ackSeq={} corrTick={} pendingDepth={} pendingAgeMs={} lastDeltaQ={} lastReplay={} "
             "lastMissingInputs={} remainingDeferredInputs={} recoveryActive={} recoveryCatchUpSeq={} maxPendingDepth={}",
             livePredictionTelemetry_.lastAckedInputSeq,
@@ -303,7 +309,6 @@ namespace bomberman
             livePredictionTelemetry_.recoveryActive ? "yes" : "no",
             livePredictionTelemetry_.recoveryCatchUpSeq,
             livePredictionTelemetry_.maxPendingInputDepth);
-#endif
     }
 
     void MultiplayerLevelScene::updateMaxPendingInputDepth()
@@ -335,14 +340,18 @@ namespace bomberman
             return;
         }
 
-#ifndef NDEBUG
+        auto* logger = bomberman::log::netInput();
+        if (logger == nullptr || !logger->should_log(spdlog::level::debug))
+            return;
+
         const double avgCorrectionDeltaQ =
             (stats.correctionsWithRetainedPredictedState > 0)
                 ? static_cast<double>(stats.totalCorrectionDeltaQ) /
                     static_cast<double>(stats.correctionsWithRetainedPredictedState)
                 : 0.0;
 
-        LOG_NET_INPUT_DEBUG(
+        logger->log(
+            spdlog::level::debug,
             "Prediction summary localInputs={} deferredInputs={} rejectedInputs={} corrections={} mismatches={} "
             "avgDeltaQ={:.2f} maxDeltaQ={} replayedInputs={} maxReplay={} truncations={} recoveries={} "
             "recoveryResolutions={} maxMissingInputs={} maxPendingDepth={}",
@@ -360,7 +369,6 @@ namespace bomberman
             stats.recoveryResolutions,
             stats.maxMissingInputHistory,
             livePredictionTelemetry_.maxPendingInputDepth);
-#endif
     }
 
     bool MultiplayerLevelScene::shouldProcessOwnerPrediction() const

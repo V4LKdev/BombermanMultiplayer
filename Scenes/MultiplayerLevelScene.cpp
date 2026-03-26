@@ -43,7 +43,12 @@ namespace bomberman
 
     bool MultiplayerLevelScene::wantsNetworkInputPolling() const
     {
-        if (!matchStarted_ || !gameplayUnlocked_ || !localPlayerAlive_ || localPlayerInputLocked_ || returningToMenu_)
+        if (exited_ ||
+            !matchStarted_ ||
+            !gameplayUnlocked_ ||
+            !localPlayerAlive_ ||
+            localPlayerInputLocked_ ||
+            returningToMenu_)
         {
             return false;
         }
@@ -60,6 +65,9 @@ namespace bomberman
 
     void MultiplayerLevelScene::updateLevel(const unsigned int delta)
     {
+        if (exited_)
+            return;
+
         net::NetClient* netClient = requireConnectedNetClient();
         if (netClient == nullptr)
             return;
@@ -250,6 +258,7 @@ namespace bomberman
         updateSceneObjects(delta);
         updateExplosionPresentations(delta);
         updateRemotePlayerPresentations(delta);
+        updatePowerupEffectPresentations(delta);
         updateLocalPlayerTagPosition();
         updateCamera();
         logLivePredictionTelemetry(delta);
@@ -257,9 +266,11 @@ namespace bomberman
 
     void MultiplayerLevelScene::onExit()
     {
+        exited_ = true;
         logPredictionSummary();
         removeAllRemotePlayers();
         removeAllSnapshotBombs();
+        removeAllSnapshotPowerups();
         localPrediction_.reset();
         lastAppliedSnapshotTick_ = 0;
         lastAppliedCorrectionTick_ = 0;
@@ -267,19 +278,21 @@ namespace bomberman
         localPlayerId_.reset();
         matchId_ = 0;
         matchBootstrapStartedMs_ = 0;
-        matchStarted_ = true;
-        gameplayUnlocked_ = true;
-        matchLoadedAckSent_ = true;
+        matchStarted_ = false;
+        gameplayUnlocked_ = false;
+        matchLoadedAckSent_ = false;
         goBannerHideTick_ = 0;
         currentMatchStart_.reset();
         currentMatchResult_.reset();
         localPlayerAlive_ = true;
         localPlayerInputLocked_ = false;
+        localPlayerEffectFlags_ = 0;
+        powerupBlinkAccumulatorMs_ = 0;
         livePredictionTelemetry_ = {};
         localFacingDirection_ = MovementDirection::Right;
         livePredictionLogAccumulatorMs_ = 0;
         gameplayConnectionDegraded_ = false;
-        returningToMenu_ = false;
+        returningToMenu_ = true;
         pendingGameplayEvents_.clear();
 
         if (localPlayerTag_)

@@ -159,9 +159,13 @@ namespace bomberman::net
         uint64_t bufferedDeadlineRecoveries = 0; ///< Times redundant batch history supplied the exact sequence by deadline without the direct/newest entry also being present.
         uint64_t bombsPlaced = 0; ///< Authoritative bomb placements accepted by the server simulation.
         uint64_t bricksDestroyed = 0; ///< Total bricks destroyed by authoritative explosions.
+        uint64_t powerupsRevealed = 0; ///< Total hidden powerups revealed into world state.
+        uint64_t powerupsCollected = 0; ///< Total revealed powerups collected from world state.
+        std::array<uint64_t, sim::kPowerupTypeCount> powerupRevealsByType{}; ///< Reveals keyed by powerup type.
+        std::array<uint64_t, sim::kPowerupTypeCount> powerupCollectionsByType{}; ///< Collections keyed by powerup type.
         uint64_t roundsEnded = 0; ///< Total rounds that reached a server-side end state.
         uint64_t roundsDrawn = 0; ///< Total rounds that ended with no surviving player.
-        uint64_t helloRejectsGameInProgress = 0; ///< Hello packets rejected because the current round could not be bootstrapped cleanly.
+        uint64_t helloRejectsRoundNotAdmittingPlayers = 0; ///< Hello packets rejected because the current round is not admitting fresh players.
         std::array<uint64_t, kMaxPlayers> roundWinsByPlayerId{}; ///< Round wins keyed by authoritative player id.
     };
 
@@ -248,6 +252,10 @@ namespace bomberman::net
         void recordBombPlaced();
         /** @brief Records bricks destroyed by one authoritative explosion resolution. */
         void recordBricksDestroyed(uint32_t count);
+        /** @brief Records one powerup revealed from under a destroyed brick. */
+        void recordPowerupRevealed(sim::PowerupType type);
+        /** @brief Records one powerup collected by a player. */
+        void recordPowerupCollected(sim::PowerupType type);
         /** @brief Records one authoritative round-end outcome. */
         void recordRoundEnded(std::optional<uint8_t> winnerPlayerId, bool endedInDraw, uint32_t serverTick);
         /** @brief Records a reject reason that should surface in diagnostics summaries. */

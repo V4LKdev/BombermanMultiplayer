@@ -8,6 +8,7 @@
 #include <random>
 
 #include "ServerFlow.h"
+#include "ServerPowerups.h"
 #include "Sim/SpawnSlots.h"
 #include "Sim/TileMapGen.h"
 #include "Util/Log.h"
@@ -56,13 +57,15 @@ namespace bomberman::server
                          const bool overrideMapSeed,
                          uint32_t mapSeed,
                          const uint32_t inputLeadTicks,
-                         const uint32_t snapshotIntervalTicks)
+                         const uint32_t snapshotIntervalTicks,
+                         const bool powersEnabled)
     {
         state.host = host;
         state.phase = ServerPhase::Lobby;
         state.serverTick = 0;
         state.inputLeadTicks = inputLeadTicks;
         state.snapshotIntervalTicks = snapshotIntervalTicks;
+        state.powersEnabled = powersEnabled;
 
         // Reset all live peer sessions.
         for (auto& slot : state.peerSessions)
@@ -75,6 +78,8 @@ namespace bomberman::server
         // Reset all active bomb slots for the new session.
         for (auto& slot : state.bombs)
             slot.reset();
+
+        clearRoundPowerups(state);
 
         // Reset accepted-player metadata for the new dedicated-server session.
         for (auto& slot : state.playerSlots)
@@ -298,6 +303,10 @@ namespace bomberman::server
         matchPlayer.activeBombCount = 0;
         matchPlayer.maxBombs = sim::kDefaultPlayerMaxBombs;
         matchPlayer.bombRange = sim::kDefaultPlayerBombRange;
+        matchPlayer.invincibleUntilTick = 0;
+        matchPlayer.speedBoostUntilTick = 0;
+        matchPlayer.bombRangeBoostUntilTick = 0;
+        matchPlayer.maxBombsBoostUntilTick = 0;
         matchPlayer.previousTickButtons = 0;
     }
 

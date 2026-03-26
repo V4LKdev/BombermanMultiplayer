@@ -39,7 +39,9 @@ namespace bomberman::multiplayer_level_scene_internal
     inline constexpr uint32_t kLivePredictionLogIntervalMs = 1000;
     inline constexpr uint32_t kSimulationTickMs = 1000u / static_cast<uint32_t>(sim::kTickRate);
     inline constexpr uint32_t kPreStartReturnTimeoutMs = 7000;
+    inline constexpr uint32_t kPowerupBlinkIntervalMs = 140;
     inline constexpr int kBombAnimationFrameCount = 4;
+    inline constexpr int kBoostedBombExtraPx = 4;
     inline constexpr int kExplosionAnimationStartFrame = 1;
     inline constexpr int kExplosionAnimationFrameCount = 11;
     inline constexpr uint32_t kExplosionLifetimeMs = 800;
@@ -95,6 +97,34 @@ namespace bomberman::multiplayer_level_scene_internal
     {
         const auto flags = static_cast<uint8_t>(entry.flags);
         return (flags & static_cast<uint8_t>(net::MsgSnapshot::PlayerEntry::EPlayerFlags::InputLocked)) != 0;
+    }
+
+    [[nodiscard]]
+    inline bool snapshotEntryInvulnerable(const net::MsgSnapshot::PlayerEntry& entry)
+    {
+        const auto flags = static_cast<uint8_t>(entry.flags);
+        return (flags & static_cast<uint8_t>(net::MsgSnapshot::PlayerEntry::EPlayerFlags::Invulnerable)) != 0;
+    }
+
+    [[nodiscard]]
+    inline bool snapshotEntryBombRangeBoost(const net::MsgSnapshot::PlayerEntry& entry)
+    {
+        const auto flags = static_cast<uint8_t>(entry.flags);
+        return (flags & static_cast<uint8_t>(net::MsgSnapshot::PlayerEntry::EPlayerFlags::BombRangeBoost)) != 0;
+    }
+
+    [[nodiscard]]
+    inline bool snapshotEntryMaxBombsBoost(const net::MsgSnapshot::PlayerEntry& entry)
+    {
+        const auto flags = static_cast<uint8_t>(entry.flags);
+        return (flags & static_cast<uint8_t>(net::MsgSnapshot::PlayerEntry::EPlayerFlags::MaxBombsBoost)) != 0;
+    }
+
+    [[nodiscard]]
+    inline bool snapshotEntrySpeedBoost(const net::MsgSnapshot::PlayerEntry& entry)
+    {
+        const auto flags = static_cast<uint8_t>(entry.flags);
+        return (flags & static_cast<uint8_t>(net::MsgSnapshot::PlayerEntry::EPlayerFlags::SpeedBoost)) != 0;
     }
 
     [[nodiscard]]

@@ -16,6 +16,7 @@
 #include "Net/NetCommon.h"
 #include "Net/NetDiagnostics.h"
 #include "Sim/Movement.h"
+#include "Sim/PowerupConfig.h"
 
 namespace bomberman::server
 {
@@ -60,6 +61,9 @@ namespace bomberman::server
      */
     constexpr std::size_t kServerBombCapacity = static_cast<std::size_t>(tileArrayWidth) *
                                                 static_cast<std::size_t>(tileArrayHeight);
+
+    /** @brief Maximum number of hidden/revealed round powerups the server tracks at once. */
+    constexpr std::size_t kServerPowerupCapacity = sim::kPowerupsPerRound;
 
     // ----- Server phase -----
 
@@ -141,6 +145,10 @@ namespace bomberman::server
         uint8_t activeBombCount = 0; ///< Number of currently active bombs owned by this player.
         uint8_t maxBombs = sim::kDefaultPlayerMaxBombs; ///< Current bomb-cap loadout.
         uint8_t bombRange = sim::kDefaultPlayerBombRange; ///< Current blast-radius loadout.
+        uint32_t invincibleUntilTick = 0; ///< Exclusive server tick when invincibility expires.
+        uint32_t speedBoostUntilTick = 0; ///< Exclusive server tick when the speed boost expires.
+        uint32_t bombRangeBoostUntilTick = 0; ///< Exclusive server tick when the bomb-range boost expires.
+        uint32_t maxBombsBoostUntilTick = 0; ///< Exclusive server tick when the max-bombs boost expires.
 
         // ----- Input ring buffer -----
         std::array<InputRingEntry, kServerInputBufferSize> inputRing{}; ///< Indexed by `seq % @ref kServerInputBufferSize`.
@@ -192,6 +200,17 @@ namespace bomberman::server
         uint8_t radius = 0;       ///< Explosion radius snapped from the owner's loadout at placement time.
     };
 
+    /**
+     * @brief Authoritative state for one round-scoped hidden or revealed powerup.
+     */
+    struct PowerupState
+    {
+        sim::PowerupType type = sim::PowerupType::SpeedBoost; ///< Powerup effect type assigned to this placement.
+        BombCell cell{};                                      ///< Tile-map cell occupied by this hidden or revealed powerup.
+        bool revealed = false;                                ///< True once the covering brick has been destroyed.
+        uint32_t revealedTick = 0;                            ///< Server tick when this powerup became collectible world state.
+    };
+
     // ----- Shared server session state -----
 
     /**
@@ -209,6 +228,7 @@ namespace bomberman::server
 
         uint32_t inputLeadTicks = sim::kDefaultServerInputLeadTicks; ///< Fixed input consume delay in ticks.
         uint32_t snapshotIntervalTicks = sim::kDefaultServerSnapshotIntervalTicks; ///< Snapshot cadence in ticks.
+        bool powersEnabled = true; ///< True when round powerups are seeded and replicated in snapshots.
 
         /** @brief Stable-address live peer sessions indexed by ENet incoming peer id for `peer->data` back-pointers. */
         std::array<std::optional<PeerSession>, kServerPeerSessionCapacity> peerSessions{};
@@ -218,6 +238,8 @@ namespace bomberman::server
         std::array<std::optional<MatchPlayerState>, net::kMaxPlayers> matchPlayers{};
         /** @brief Active authoritative bombs for the current round. */
         std::array<std::optional<BombState>, kServerBombCapacity> bombs{};
+        /** @brief Hidden and revealed round powerups for the current or next authoritative match. */
+        std::array<std::optional<PowerupState>, kServerPowerupCapacity> powerups{};
 
         std::array<uint8_t, net::kMaxPlayers> playerIdPool{}; ///< Sorted free-list of available player ids, released immediately on disconnect.
         uint8_t playerIdPoolSize = 0; ///< Number of valid entries currently stored in `playerIdPool`.
@@ -270,7 +292,8 @@ namespace bomberman::server
                          bool overrideMapSeed = false,
                          uint32_t mapSeed = 0,
                          uint32_t inputLeadTicks = sim::kDefaultServerInputLeadTicks,
-                         uint32_t snapshotIntervalTicks = sim::kDefaultServerSnapshotIntervalTicks);
+                         uint32_t snapshotIntervalTicks = sim::kDefaultServerSnapshotIntervalTicks,
+                         bool powersEnabled = true);
 
     /** @brief Chooses the seed that should be used for the next authoritative round map. */
     void rollNextRoundMapSeed(ServerState& state);

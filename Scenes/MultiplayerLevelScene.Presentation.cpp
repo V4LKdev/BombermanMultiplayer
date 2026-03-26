@@ -21,8 +21,69 @@ namespace bomberman
 {
     using namespace multiplayer_level_scene_internal;
 
+    namespace
+    {
+        [[nodiscard]]
+        util::PlayerColor boostedBombAccentColor()
+        {
+            return {0xFF, 0x58, 0x58};
+        }
+
+        [[nodiscard]]
+        util::PlayerColor powerupEffectColor(const uint8_t effectFlags)
+        {
+            using PlayerFlags = net::MsgSnapshot::PlayerEntry::EPlayerFlags;
+
+            if ((effectFlags & static_cast<uint8_t>(PlayerFlags::Invulnerable)) != 0)
+                return {0xFF, 0xE6, 0x5A};
+            if ((effectFlags & static_cast<uint8_t>(PlayerFlags::SpeedBoost)) != 0)
+                return {0x42, 0xD9, 0xC7};
+            if ((effectFlags & static_cast<uint8_t>(PlayerFlags::BombRangeBoost)) != 0)
+                return boostedBombAccentColor();
+            if ((effectFlags & static_cast<uint8_t>(PlayerFlags::MaxBombsBoost)) != 0)
+                return {0xB8, 0x72, 0xFF};
+
+            return {0xFF, 0xFF, 0xFF};
+        }
+
+        [[nodiscard]]
+        bool hasVisiblePowerupEffect(const uint8_t effectFlags)
+        {
+            using PlayerFlags = net::MsgSnapshot::PlayerEntry::EPlayerFlags;
+
+            return (effectFlags & static_cast<uint8_t>(PlayerFlags::Invulnerable)) != 0 ||
+                   (effectFlags & static_cast<uint8_t>(PlayerFlags::SpeedBoost)) != 0 ||
+                   (effectFlags & static_cast<uint8_t>(PlayerFlags::BombRangeBoost)) != 0 ||
+                   (effectFlags & static_cast<uint8_t>(PlayerFlags::MaxBombsBoost)) != 0;
+        }
+
+        [[nodiscard]]
+        Texture textureForPowerupType(const sim::PowerupType type)
+        {
+            switch (type)
+            {
+                case sim::PowerupType::SpeedBoost:
+                    return Texture::PowerupSpeed;
+                case sim::PowerupType::Invincibility:
+                    return Texture::PowerupInvincible;
+                case sim::PowerupType::BombRangeBoost:
+                    return Texture::PowerupRange;
+                case sim::PowerupType::MaxBombsBoost:
+                    return Texture::PowerupBombs;
+            }
+
+            return Texture::PowerupSpeed;
+        }
+    } // namespace
+
     void MultiplayerLevelScene::updateGameplayConnectionHealth(const net::NetClient& netClient)
     {
+        if (!gameplayUnlocked_)
+        {
+            setGameplayConnectionDegraded(false, 0);
+            return;
+        }
+
         const uint32_t silenceMs = netClient.gameplaySilenceMs();
         setGameplayConnectionDegraded(silenceMs >= kGameplayDegradedThresholdMs, silenceMs);
     }
@@ -214,9 +275,11 @@ namespace bomberman
             const auto& entry = snapshot.players[i];
             const bool alive = snapshotEntryIsAlive(entry);
             const bool inputLocked = snapshotEntryInputLocked(entry);
+            const uint8_t rawFlags = static_cast<uint8_t>(entry.flags);
 
             if (entry.playerId == localId)
             {
+                localPlayerEffectFlags_ = rawFlags;
                 setLocalPlayerAlivePresentation(alive);
                 setLocalPlayerInputLock(inputLocked);
                 if (alive)
@@ -230,7 +293,7 @@ namespace bomberman
                 continue;
 
             seenRemoteIds.insert(entry.playerId);
-            updateOrCreateRemotePlayer(entry.playerId, entry.xQ, entry.yQ, snapshot.serverTick);
+            updateOrCreateRemotePlayer(entry.playerId, entry.xQ, entry.yQ, snapshot.serverTick, rawFlags);
         }
 
         pruneMissingRemotePlayers(seenRemoteIds);
@@ -251,10 +314,26 @@ namespace bomberman
         pruneMissingBombPresentations(seenBombCells);
     }
 
+    void MultiplayerLevelScene::applySnapshotPowerups(const net::MsgSnapshot& snapshot)
+    {
+        std::unordered_set<uint16_t> seenPowerupCells;
+        seenPowerupCells.reserve(snapshot.powerupCount);
+
+        for (uint8_t i = 0; i < snapshot.powerupCount; ++i)
+        {
+            const auto& entry = snapshot.powerups[i];
+            seenPowerupCells.insert(packCellKey(entry.col, entry.row));
+            updateOrCreatePowerupPresentation(entry);
+        }
+
+        pruneMissingPowerupPresentations(seenPowerupCells);
+    }
+
     void MultiplayerLevelScene::updateOrCreateRemotePlayer(const uint8_t playerId,
                                                            const int16_t xQ,
                                                            const int16_t yQ,
-                                                           const uint32_t snapshotTick)
+                                                           const uint32_t snapshotTick,
+                                                           const uint8_t flags)
     {
         auto [it, inserted] = remotePlayerPresentations_.try_emplace(playerId);
         RemotePlayerPresentation& presentation = it->second;
@@ -279,6 +358,7 @@ namespace bomberman
             addObject(presentation.playerTag);
         }
 
+        presentation.effectFlags = flags;
         recordSnapshotSample(presentation, xQ, yQ, snapshotTick);
         updateRemoteAnimationFromSnapshotDelta(presentation);
 
@@ -298,6 +378,7 @@ namespace bomberman
         const uint16_t bombCellKey = packCellKey(entry.col, entry.row);
         auto [it, inserted] = bombPresentations_.try_emplace(bombCellKey);
         BombPresentation& presentation = it->second;
+        const bool boostedRangeBomb = entry.radius > sim::kDefaultPlayerBombRange;
 
         if (inserted)
         {
@@ -314,9 +395,44 @@ namespace bomberman
         const util::PlayerColor color = util::colorForPlayerId(entry.ownerId);
         presentation.bombSprite->setColorMod(color.r, color.g, color.b);
 
+        const int bombExtraPx = boostedRangeBomb ? kBoostedBombExtraPx : 0;
+        const int bombSize = scaledTileSize + bombExtraPx;
+        presentation.bombSprite->setSize(bombSize, bombSize);
+
+        const int screenX = fieldPositionX + static_cast<int>(entry.col) * scaledTileSize - bombExtraPx / 2;
+        const int screenY = fieldPositionY + static_cast<int>(entry.row) * scaledTileSize - bombExtraPx / 2;
+        presentation.bombSprite->setPosition(screenX, screenY);
+    }
+
+    void MultiplayerLevelScene::updateOrCreatePowerupPresentation(const net::MsgSnapshot::PowerupEntry& entry)
+    {
+        const uint16_t powerupCellKey = packCellKey(entry.col, entry.row);
+        auto [it, inserted] = powerupPresentations_.try_emplace(powerupCellKey);
+        PowerupPresentation& presentation = it->second;
+
+        if (!inserted && presentation.type != entry.type)
+        {
+            if (presentation.powerupSprite)
+                removeObject(presentation.powerupSprite);
+
+            presentation = {};
+            inserted = true;
+        }
+
+        if (inserted || !presentation.powerupSprite)
+        {
+            presentation.powerupSprite =
+                std::make_shared<Sprite>(game->getAssetManager()->getTexture(textureForPowerupType(entry.type)),
+                                         game->getRenderer());
+            presentation.powerupSprite->setSize(scaledTileSize, scaledTileSize);
+            insertObject(presentation.powerupSprite, backgroundObjectLastNumber);
+        }
+
+        presentation.type = entry.type;
+
         const int screenX = fieldPositionX + static_cast<int>(entry.col) * scaledTileSize;
         const int screenY = fieldPositionY + static_cast<int>(entry.row) * scaledTileSize;
-        presentation.bombSprite->setPosition(screenX, screenY);
+        presentation.powerupSprite->setPosition(screenX, screenY);
     }
 
     void MultiplayerLevelScene::pruneMissingRemotePlayers(const std::unordered_set<uint8_t>& seenRemoteIds)
@@ -355,6 +471,23 @@ namespace bomberman
         }
     }
 
+    void MultiplayerLevelScene::pruneMissingPowerupPresentations(const std::unordered_set<uint16_t>& seenPowerupCells)
+    {
+        for (auto it = powerupPresentations_.begin(); it != powerupPresentations_.end();)
+        {
+            if (seenPowerupCells.contains(it->first))
+            {
+                ++it;
+                continue;
+            }
+
+            if (it->second.powerupSprite)
+                removeObject(it->second.powerupSprite);
+
+            it = powerupPresentations_.erase(it);
+        }
+    }
+
     void MultiplayerLevelScene::removeAllRemotePlayers()
     {
         for (auto& entry : remotePlayerPresentations_)
@@ -379,6 +512,18 @@ namespace bomberman
         }
 
         bombPresentations_.clear();
+    }
+
+    void MultiplayerLevelScene::removeAllSnapshotPowerups()
+    {
+        for (auto& entry : powerupPresentations_)
+        {
+            auto& presentation = entry.second;
+            if (presentation.powerupSprite)
+                removeObject(presentation.powerupSprite);
+        }
+
+        powerupPresentations_.clear();
     }
 
     void MultiplayerLevelScene::applyBombPlacedEvent(const net::MsgBombPlaced& bombPlaced)
@@ -624,6 +769,58 @@ namespace bomberman
             presentation.playerSprite->setPosition(screenX, screenY);
 
             updateRemotePlayerTagPosition(presentation);
+        }
+    }
+
+    void MultiplayerLevelScene::updatePowerupEffectPresentations(const unsigned int delta)
+    {
+        powerupBlinkAccumulatorMs_ += delta;
+        const bool highlightOn =
+            ((powerupBlinkAccumulatorMs_ / kPowerupBlinkIntervalMs) % 2u) == 0u;
+
+        if (player && localPlayerId_.has_value())
+        {
+            const util::PlayerColor baseColor = util::colorForPlayerId(localPlayerId_.value());
+            util::PlayerColor appliedColor = baseColor;
+            if (localPlayerAlive_ &&
+                hasVisiblePowerupEffect(localPlayerEffectFlags_) &&
+                highlightOn)
+            {
+                appliedColor = powerupEffectColor(localPlayerEffectFlags_);
+            }
+
+            player->setColorMod(appliedColor.r, appliedColor.g, appliedColor.b);
+        }
+
+        for (auto& entry : remotePlayerPresentations_)
+        {
+            auto& presentation = entry.second;
+            if (!presentation.playerSprite)
+                continue;
+
+            const util::PlayerColor baseColor = util::colorForPlayerId(entry.first);
+            util::PlayerColor appliedColor = baseColor;
+            if (hasVisiblePowerupEffect(presentation.effectFlags) && highlightOn)
+            {
+                appliedColor = powerupEffectColor(presentation.effectFlags);
+            }
+
+            presentation.playerSprite->setColorMod(appliedColor.r, appliedColor.g, appliedColor.b);
+        }
+
+        for (auto& entry : bombPresentations_)
+        {
+            auto& presentation = entry.second;
+            if (!presentation.bombSprite)
+                continue;
+
+            util::PlayerColor appliedColor = util::colorForPlayerId(presentation.ownerId);
+            if (presentation.radius > sim::kDefaultPlayerBombRange && highlightOn)
+            {
+                appliedColor = boostedBombAccentColor();
+            }
+
+            presentation.bombSprite->setColorMod(appliedColor.r, appliedColor.g, appliedColor.b);
         }
     }
 

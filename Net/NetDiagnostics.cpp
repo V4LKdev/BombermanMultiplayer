@@ -88,6 +88,22 @@ namespace bomberman::net
                 << (mask & 0xFFu);
             return out.str();
         }
+
+        /** @brief Formats one per-type powerup counter array as a compact diffable report value. */
+        std::string formatPowerupTypeCounts(const std::array<uint64_t, sim::kPowerupTypeCount>& counts)
+        {
+            std::ostringstream out;
+            for (std::size_t i = 0; i < counts.size(); ++i)
+            {
+                if (i > 0)
+                    out << ',';
+
+                const auto type = static_cast<sim::PowerupType>(i);
+                out << sim::powerupTypeName(type) << ':' << counts[i];
+            }
+
+            return out.str();
+        }
     }
 
     // =================================================================================================================
@@ -405,6 +421,24 @@ namespace bomberman::net
         summary_.bricksDestroyed += count;
     }
 
+    void NetDiagnostics::recordPowerupRevealed(const sim::PowerupType type)
+    {
+        if (!enabled_ || !sessionActive_)
+            return;
+
+        summary_.powerupsRevealed++;
+        summary_.powerupRevealsByType[sim::powerupTypeIndex(type)]++;
+    }
+
+    void NetDiagnostics::recordPowerupCollected(const sim::PowerupType type)
+    {
+        if (!enabled_ || !sessionActive_)
+            return;
+
+        summary_.powerupsCollected++;
+        summary_.powerupCollectionsByType[sim::powerupTypeIndex(type)]++;
+    }
+
     void NetDiagnostics::recordRoundEnded(const std::optional<uint8_t> winnerPlayerId,
                                           const bool endedInDraw,
                                           const uint32_t serverTick)
@@ -438,7 +472,7 @@ namespace bomberman::net
             return;
 
         if (reason == MsgReject::EReason::GameInProgress)
-            summary_.helloRejectsGameInProgress++;
+            summary_.helloRejectsRoundNotAdmittingPlayers++;
     }
 
     void NetDiagnostics::samplePeerTransport(const uint8_t peerId,
@@ -556,9 +590,13 @@ namespace bomberman::net
         writeKeyValue("buffered_deadline_recoveries", summary_.bufferedDeadlineRecoveries);
         writeKeyValue("bombs_placed", summary_.bombsPlaced);
         writeKeyValue("bricks_destroyed", summary_.bricksDestroyed);
+        writeKeyValue("powerups_revealed", summary_.powerupsRevealed);
+        writeKeyValue("powerups_collected", summary_.powerupsCollected);
+        writeKeyValue("powerup_reveals_by_type", formatPowerupTypeCounts(summary_.powerupRevealsByType));
+        writeKeyValue("powerup_collections_by_type", formatPowerupTypeCounts(summary_.powerupCollectionsByType));
         writeKeyValue("rounds_ended", summary_.roundsEnded);
         writeKeyValue("rounds_drawn", summary_.roundsDrawn);
-        writeKeyValue("hello_rejects_round_not_admitting_players", summary_.helloRejectsGameInProgress);
+        writeKeyValue("hello_rejects_round_not_admitting_players", summary_.helloRejectsRoundNotAdmittingPlayers);
         out << "round_wins_by_player_id=";
         for (std::size_t i = 0; i < summary_.roundWinsByPlayerId.size(); ++i)
         {

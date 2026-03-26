@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <array>
 
+#include "ServerPowerups.h"
 #include "ServerState.h"
 #include "Util/Log.h"
 
@@ -43,18 +44,8 @@ namespace bomberman::server
             entry.xQ = static_cast<int16_t>(std::clamp(matchPlayer.pos.xQ, INT16_MIN, INT16_MAX));
             entry.yQ = static_cast<int16_t>(std::clamp(matchPlayer.pos.yQ, INT16_MIN, INT16_MAX));
 
-            uint8_t flags = 0;
-            if (matchPlayer.alive)
-            {
-                flags |= static_cast<uint8_t>(net::MsgSnapshot::PlayerEntry::EPlayerFlags::Alive);
-            }
-            if (matchPlayer.inputLocked)
-            {
-                flags |= static_cast<uint8_t>(net::MsgSnapshot::PlayerEntry::EPlayerFlags::InputLocked);
-            }
-
-            // The protocol reserves Invulnerable, but the server does not track it yet.
-            entry.flags = static_cast<net::MsgSnapshot::PlayerEntry::EPlayerFlags>(flags);
+            entry.flags = static_cast<net::MsgSnapshot::PlayerEntry::EPlayerFlags>(
+                buildReplicatedPlayerFlags(matchPlayer, state.serverTick));
         }
 
         snapshot.playerCount = playerCount;
@@ -101,6 +92,37 @@ namespace bomberman::server
         }
 
         snapshot.bombCount = static_cast<uint8_t>(packedBombCount);
+
+        std::array<const PowerupState*, kServerPowerupCapacity> revealedPowerups{};
+        std::size_t revealedPowerupCount = 0;
+        for (const auto& powerupEntry : state.powerups)
+        {
+            if (!powerupEntry.has_value() || !powerupEntry->revealed)
+                continue;
+
+            revealedPowerups[revealedPowerupCount++] = &powerupEntry.value();
+        }
+
+        std::sort(revealedPowerups.begin(),
+                  revealedPowerups.begin() + static_cast<std::ptrdiff_t>(revealedPowerupCount),
+                  [](const PowerupState* lhs, const PowerupState* rhs)
+                  {
+                      if (lhs->cell.row != rhs->cell.row)
+                          return lhs->cell.row < rhs->cell.row;
+
+                      return lhs->cell.col < rhs->cell.col;
+                  });
+
+        for (std::size_t i = 0; i < revealedPowerupCount; ++i)
+        {
+            const PowerupState& powerup = *revealedPowerups[i];
+            auto& entry = snapshot.powerups[i];
+            entry.type = powerup.type;
+            entry.col = powerup.cell.col;
+            entry.row = powerup.cell.row;
+        }
+
+        snapshot.powerupCount = static_cast<uint8_t>(revealedPowerupCount);
         return snapshot;
     }
 } // namespace bomberman::server

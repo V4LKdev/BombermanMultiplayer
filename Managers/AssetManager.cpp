@@ -21,6 +21,10 @@ namespace bomberman
         loadTexture(renderer, Texture::Bomb, "assets/bomb.png");
         loadTexture(renderer, Texture::Explosion, "assets/explosion.png");
         loadTexture(renderer, Texture::Door, "assets/door.png");
+        loadTexture(renderer, Texture::PowerupSpeed, "assets/Powerup_Speed.png");
+        loadTexture(renderer, Texture::PowerupInvincible, "assets/Powerup_Invincible.png");
+        loadTexture(renderer, Texture::PowerupRange, "assets/Powerup_Range.png");
+        loadTexture(renderer, Texture::PowerupBombs, "assets/Powerup_Bombs.png");
         // load music
         loadMusic(MusicEnum::MainMenu, "assets/main_theme.ogg");
         loadMusic(MusicEnum::Level, "assets/level.ogg");

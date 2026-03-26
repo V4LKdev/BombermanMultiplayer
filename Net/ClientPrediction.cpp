@@ -136,12 +136,17 @@ namespace bomberman::net
             correction.xQ,
             correction.yQ
         };
+        const uint8_t authoritativePlayerFlags = correction.playerFlags;
 
         measureCorrectionAtAck(correction.lastProcessedInputSeq, authoritativePosQ, predictedButtonsAtAck, result);
 
         if (phase_ == PredictionPhase::AwaitingBaseline)
         {
-            handleAwaitingBaselineCorrection(correction.lastProcessedInputSeq, authoritativePosQ, map, result);
+            handleAwaitingBaselineCorrection(correction.lastProcessedInputSeq,
+                                             authoritativePosQ,
+                                             authoritativePlayerFlags,
+                                             map,
+                                             result);
             return result;
         }
 
@@ -149,14 +154,23 @@ namespace bomberman::net
 
         if (phase_ == PredictionPhase::Recovering)
         {
-            handleRecoveringCorrection(correction.lastProcessedInputSeq, authoritativePosQ, map, result);
+            handleRecoveringCorrection(correction.lastProcessedInputSeq,
+                                       authoritativePosQ,
+                                       authoritativePlayerFlags,
+                                       map,
+                                       result);
             return result;
         }
 
         const uint8_t authoritativeButtons =
             result.hadRetainedPredictedStateAtAck ? predictedButtonsAtAck : 0;
 
-        handleActiveCorrection(correction.lastProcessedInputSeq, authoritativePosQ, authoritativeButtons, map, result);
+        handleActiveCorrection(correction.lastProcessedInputSeq,
+                               authoritativePosQ,
+                               authoritativeButtons,
+                               authoritativePlayerFlags,
+                               map,
+                               result);
 
         return result;
     }
@@ -166,10 +180,12 @@ namespace bomberman::net
     // =================================================================================================================
 
     void ClientPrediction::setCurrentAuthoritativeState(const sim::TilePos posQ,
-                                                        const uint8_t buttons) noexcept
+                                                        const uint8_t buttons,
+                                                        const uint8_t playerFlags) noexcept
     {
         currentState_.posQ = posQ;
         currentState_.buttons = buttons;
+        currentState_.playerFlags = playerFlags;
     }
 
     void ClientPrediction::enterRecoveryFromReplayFailure(const sim::TilePos authoritativePosQ,
@@ -181,7 +197,7 @@ namespace bomberman::net
          * The retained suffix is no longer complete enough to rebuild safely.
          * Fall back to authoritative presentation until a later correction catches up.
          */
-        setCurrentAuthoritativeState(authoritativePosQ, 0);
+        setCurrentAuthoritativeState(authoritativePosQ, 0, currentState_.playerFlags);
         invalidateStateHistoryRange(lastProcessedInputSeq + 1u, lastRecordedInputSeq_);
 
         phase_ = PredictionPhase::Recovering;
@@ -204,10 +220,11 @@ namespace bomberman::net
     bool ClientPrediction::replayFromAuthoritativeBaseline(const uint32_t lastProcessedInputSeq,
                                                            const sim::TilePos authoritativePosQ,
                                                            const uint8_t authoritativeButtons,
+                                                           const uint8_t authoritativePlayerFlags,
                                                            const sim::TileMap& map,
                                                            CorrectionReplayResult& result) noexcept
     {
-        setCurrentAuthoritativeState(authoritativePosQ, authoritativeButtons);
+        setCurrentAuthoritativeState(authoritativePosQ, authoritativeButtons, authoritativePlayerFlags);
 
         if (lastRecordedInputSeq_ <= lastProcessedInputSeq)
         {
@@ -227,6 +244,7 @@ namespace bomberman::net
 
     void ClientPrediction::handleAwaitingBaselineCorrection(const uint32_t lastProcessedInputSeq,
                                                             const sim::TilePos authoritativePosQ,
+                                                            const uint8_t authoritativePlayerFlags,
                                                             const sim::TileMap& map,
                                                             CorrectionReplayResult& result) noexcept
     {
@@ -240,7 +258,12 @@ namespace bomberman::net
 
         discardAcknowledgedHistory(lastProcessedInputSeq);
 
-        if (replayFromAuthoritativeBaseline(lastProcessedInputSeq, authoritativePosQ, 0, map, result))
+        if (replayFromAuthoritativeBaseline(lastProcessedInputSeq,
+                                            authoritativePosQ,
+                                            0,
+                                            authoritativePlayerFlags,
+                                            map,
+                                            result))
             return;
 
         /* If replay fails here, the retained input suffix is incomplete. */
@@ -249,19 +272,25 @@ namespace bomberman::net
 
     void ClientPrediction::handleRecoveringCorrection(const uint32_t lastProcessedInputSeq,
                                                       const sim::TilePos authoritativePosQ,
+                                                      const uint8_t authoritativePlayerFlags,
                                                       const sim::TileMap& map,
                                                       CorrectionReplayResult& result) noexcept
     {
         if (lastProcessedInputSeq < recoveryCatchUpSeq_)
         {
-            setCurrentAuthoritativeState(authoritativePosQ, 0);
+            setCurrentAuthoritativeState(authoritativePosQ, 0, authoritativePlayerFlags);
             result.recoveryStillActive = true;
             result.remainingDeferredInputs = countRetainedInputSuffixAfter(lastProcessedInputSeq);
             result.recoveryCatchUpSeq = recoveryCatchUpSeq_;
             return;
         }
 
-        if (replayFromAuthoritativeBaseline(lastProcessedInputSeq, authoritativePosQ, 0, map, result))
+        if (replayFromAuthoritativeBaseline(lastProcessedInputSeq,
+                                            authoritativePosQ,
+                                            0,
+                                            authoritativePlayerFlags,
+                                            map,
+                                            result))
         {
             phase_ = PredictionPhase::Active;
             recoveryCatchUpSeq_ = 0;
@@ -276,12 +305,14 @@ namespace bomberman::net
     void ClientPrediction::handleActiveCorrection(const uint32_t lastProcessedInputSeq,
                                                   const sim::TilePos authoritativePosQ,
                                                   const uint8_t authoritativeButtons,
+                                                  const uint8_t authoritativePlayerFlags,
                                                   const sim::TileMap& map,
                                                   CorrectionReplayResult& result) noexcept
     {
         if (replayFromAuthoritativeBaseline(lastProcessedInputSeq,
                                             authoritativePosQ,
                                             authoritativeButtons,
+                                            authoritativePlayerFlags,
                                             map,
                                             result))
             return;
@@ -445,11 +476,15 @@ namespace bomberman::net
     {
         LocalPlayerState nextState = baseState;
         nextState.buttons = buttons;
+        const bool speedBoostActive =
+            (baseState.playerFlags &
+             static_cast<uint8_t>(MsgSnapshot::PlayerEntry::EPlayerFlags::SpeedBoost)) != 0;
         nextState.posQ = sim::stepMovementWithCollision(
             baseState.posQ,
             buttonsToMoveX(buttons),
             buttonsToMoveY(buttons),
-            map);
+            map,
+            speedBoostActive ? sim::kSpeedBoostPlayerSpeedQ : sim::kPlayerSpeedQ);
         return nextState;
     }
 

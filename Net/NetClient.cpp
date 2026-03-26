@@ -1256,7 +1256,6 @@ namespace bomberman::net
         }
 
         impl_->matchFlow.matchStart = matchStart;
-        impl_->lastGameplayReceiveTime = SteadyClock::now();
         LOG_NET_CONN_INFO("Received MatchStart matchId={} goTick={} unlockTick={}",
                           matchStart.matchId,
                           matchStart.goShowServerTick,

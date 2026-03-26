@@ -98,6 +98,7 @@ namespace bomberman
             MovementDirection facingDirection = MovementDirection::Right;
             float ticksSinceLatestSnapshot = 0.0f;
             bool receivedSnapshotThisUpdate = false;
+            uint8_t effectFlags = 0;
         };
 
         /** @brief Scene-owned presentation state for one snapshot-authoritative bomb. */
@@ -106,6 +107,13 @@ namespace bomberman
             std::shared_ptr<Sprite> bombSprite = nullptr;
             uint8_t ownerId = 0;
             uint8_t radius = 0;
+        };
+
+        /** @brief Scene-owned presentation state for one snapshot-authoritative revealed powerup. */
+        struct PowerupPresentation
+        {
+            std::shared_ptr<Sprite> powerupSprite = nullptr;
+            sim::PowerupType type = sim::PowerupType::SpeedBoost;
         };
 
         /** @brief One short-lived explosion visual spawned from a reliable authoritative event. */
@@ -222,6 +230,8 @@ namespace bomberman
         void setLocalPlayerInputLock(bool locked);
         /** @brief Repositions the local multiplayer tag above the current player sprite. */
         void updateLocalPlayerTagPosition();
+        /** @brief Refreshes active local/remote effect visuals and boosted bomb presentation. */
+        void updatePowerupEffectPresentations(unsigned int delta);
         /** @brief Removes one remote-player presentation immediately after an authoritative kill event. */
         void removeRemotePlayerPresentation(uint8_t playerId);
 
@@ -231,18 +241,26 @@ namespace bomberman
         void applySnapshotToRemotePlayers(const net::MsgSnapshot& snapshot, uint8_t localId);
         /** @brief Applies snapshot-owned bomb membership and positions to scene presentation. */
         void applySnapshotBombs(const net::MsgSnapshot& snapshot);
+        /** @brief Applies snapshot-owned revealed powerup membership and positions to scene presentation. */
+        void applySnapshotPowerups(const net::MsgSnapshot& snapshot);
         /** @brief Creates or refreshes one remote player's snapshot-owned presentation state. */
-        void updateOrCreateRemotePlayer(uint8_t playerId, int16_t xQ, int16_t yQ, uint32_t snapshotTick);
+        void updateOrCreateRemotePlayer(uint8_t playerId, int16_t xQ, int16_t yQ, uint32_t snapshotTick, uint8_t flags);
         /** @brief Creates or refreshes one snapshot-owned bomb presentation for the given tile cell. */
         void updateOrCreateBombPresentation(const net::MsgSnapshot::BombEntry& entry);
+        /** @brief Creates or refreshes one snapshot-owned revealed powerup presentation for the given tile cell. */
+        void updateOrCreatePowerupPresentation(const net::MsgSnapshot::PowerupEntry& entry);
         /** @brief Removes remote player presentations absent from the newest authoritative snapshot. */
         void pruneMissingRemotePlayers(const std::unordered_set<uint8_t>& seenRemoteIds);
         /** @brief Removes bomb presentations absent from the newest authoritative snapshot. */
         void pruneMissingBombPresentations(const std::unordered_set<uint16_t>& seenBombCells);
+        /** @brief Removes revealed powerup presentations absent from the newest authoritative snapshot. */
+        void pruneMissingPowerupPresentations(const std::unordered_set<uint16_t>& seenPowerupCells);
         /** @brief Removes every remote player presentation object owned by this scene. */
         void removeAllRemotePlayers();
         /** @brief Removes every snapshot-owned bomb presentation object owned by this scene. */
         void removeAllSnapshotBombs();
+        /** @brief Removes every snapshot-owned revealed powerup presentation object owned by this scene. */
+        void removeAllSnapshotPowerups();
         /** @brief Applies one reliable authoritative bomb-placement event for presentation acceleration. */
         void applyBombPlacedEvent(const net::MsgBombPlaced& bombPlaced);
         /** @brief Applies one reliable authoritative explosion-resolution event to client world presentation. */
@@ -309,14 +327,18 @@ namespace bomberman
         uint32_t lastAppliedGameplayEventTick_ = 0;
         bool localPlayerAlive_ = true;
         bool localPlayerInputLocked_ = false;
+        uint8_t localPlayerEffectFlags_ = 0;
+        uint32_t powerupBlinkAccumulatorMs_ = 0;
         std::shared_ptr<Sound> explosionSound_ = nullptr;
 
         std::unordered_map<uint8_t, RemotePlayerPresentation> remotePlayerPresentations_;
         std::unordered_map<uint16_t, BombPresentation> bombPresentations_;
+        std::unordered_map<uint16_t, PowerupPresentation> powerupPresentations_;
         std::unordered_map<uint16_t, std::shared_ptr<Object>> brickPresentations_;
         std::vector<ExplosionPresentation> explosionPresentations_;
         std::deque<net::NetClient::GameplayEvent> pendingGameplayEvents_;
         bool gameplayConnectionDegraded_ = false;
+        bool exited_ = false;
         bool returningToMenu_ = false;
     };
 } // namespace bomberman

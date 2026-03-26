@@ -10,6 +10,7 @@
 
 #include "Net/NetSend.h"
 #include "ServerFlow.h"
+#include "ServerFlowInternal.h"
 #include "Sim/SimConfig.h"
 #include "Util/Log.h"
 
@@ -184,15 +185,7 @@ namespace bomberman::server
             lobbyState.phase = state.phase == ServerPhase::LobbyCountdown
                 ? MsgLobbyState::EPhase::Countdown
                 : MsgLobbyState::EPhase::Idle;
-            lobbyState.countdownSecondsRemaining = 0;
-            if (state.phase == ServerPhase::LobbyCountdown &&
-                state.currentLobbyCountdownDeadlineTick > state.serverTick)
-            {
-                const uint32_t remainingTicks = state.currentLobbyCountdownDeadlineTick - state.serverTick;
-                lobbyState.countdownSecondsRemaining =
-                    static_cast<uint8_t>((remainingTicks + static_cast<uint32_t>(sim::kTickRate) - 1u) /
-                                         static_cast<uint32_t>(sim::kTickRate));
-            }
+            lobbyState.countdownSecondsRemaining = flow_internal::computeCountdownSecondsRemaining(state);
 
             for (uint8_t playerId = 0; playerId < kMaxPlayers; ++playerId)
             {

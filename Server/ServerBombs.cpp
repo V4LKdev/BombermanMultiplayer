@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "Net/NetSend.h"
+#include "ServerPowerups.h"
 #include "Util/Log.h"
 
 using namespace bomberman::net;
@@ -273,6 +274,9 @@ namespace bomberman::server
                 if (!matchPlayer.alive)
                     continue;
 
+                if (hasInvincibility(matchPlayer, state.serverTick))
+                    continue;
+
                 bool hitByBlast = false;
                 for (std::size_t i = 0; i < blastCellCount; ++i)
                 {
@@ -327,6 +331,9 @@ namespace bomberman::server
                                                        destroyedBrickCount);
             retainCurrentlyIntactBricks(state.tiles, destroyedBricks, destroyedBrickCount);
             applyDestroyedBricks(state, destroyedBricks, destroyedBrickCount);
+            revealPowerupsUnderDestroyedBricks(
+                state,
+                std::span<const BombCell>(destroyedBricks.data(), destroyedBrickCount));
 
             uint8_t killedPlayerMask = 0;
             const uint8_t killedPlayerCount =

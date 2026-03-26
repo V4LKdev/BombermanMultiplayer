@@ -27,7 +27,11 @@ namespace bomberman
         Enemy3,
         Bomb,
         Explosion,
-        Door
+        Door,
+        PowerupSpeed,
+        PowerupInvincible,
+        PowerupRange,
+        PowerupBombs
     };
     /**
      * @brief Enumeration for Music
