@@ -1,5 +1,49 @@
 # Bomberman Multiplayer – Dev Log
 
+## 2026-03-27 (cd6e56d) – Finish Feature Lock Polish And Lobby Reclaim
+
+### Goal
+Close the remaining small multiplayer seams before feature lock:
+- add missing local placement feedback for bombs
+- finish the last diagnostics flow/reporting cleanup
+- add a simple lobby-only reconnect reclaim path
+- remove the remaining misleading future-facing reconnect wording
+
+### What landed
+- Added a local-only `BombSpark` flipbook so bomb placement input gets immediate visual feedback even before authoritative bomb state arrives.
+- Limited that spark to plausible local placements so it does not spam while the local player is already at bomb capacity.
+- Added coarse server flow diagnostics state:
+  - `lobby`
+  - `in_match`
+  - `end_of_match`
+  - derived `idle`
+- Added bounded lobby-only reconnect reclaim:
+  - reconnect with the same name
+  - reclaim the same `playerId` and carried wins only if that seat is still free
+  - otherwise fall back to normal lobby admission
+- Changed client `MatchResult` logging/diagnostics wording to local-perspective `win` / `loss` / `draw`.
+
+### Cleanup
+- Removed the remaining verbose server diagnostics flow spam in favor of the coarse flow state.
+- Documented that same-seat reclaim exists, while live seat reshuffle still requires a broader identity/seat refactor.
+- Reworded snapshot/correction seam comments so they no longer imply mid-match reconnect or full-world rebuild support.
+- Left `MsgCorrection.reserved[3]` as explicitly unused wire padding rather than an active planned feature.
+
+### Validation
+- Rebuilt both targets in:
+  - `cmake-build-debug`
+  - `cmake-build-release`
+- Rechecked local multi-client diagnostics after the manual multiplayer pacing fix and confirmed the gap storm was gone at `inputLead=1`.
+
+### Result
+- The remaining small multiplayer polish items are closed.
+- The agreed MVP scope is now at feature lock:
+  - no mid-match reconnect
+  - no live seat reshuffle
+  - lobby-only reclaim and diagnostics/debug support in place
+  - local placement feedback in place
+  - reconnect/prediction/docs aligned with the actual runtime contract
+
 ## 2026-03-26 (388680c) – Add Authoritative Multiplayer Powerups
 
 ### Goal
