@@ -85,6 +85,9 @@ namespace bomberman::server
         for (auto& slot : state.playerSlots)
             slot.reset();
 
+        for (auto& reclaimEntry : state.disconnectedPlayerReclaims)
+            reclaimEntry.reset();
+
         // Clear ENet back-pointers owned by the host's current peer array.
         if (state.host != nullptr)
         {
@@ -133,6 +136,7 @@ namespace bomberman::server
             .maxPlayers = net::kMaxPlayers,
             .powersEnabled = state.powersEnabled
         });
+        refreshServerFlowDiagnostics(state);
     }
 
     void rollNextRoundMapSeed(ServerState& state)
@@ -162,6 +166,23 @@ namespace bomberman::server
 
         --state.playerIdPoolSize;
         return playerId;
+    }
+
+    bool acquireSpecificPlayerId(ServerState& state, const uint8_t playerId)
+    {
+        for (uint8_t i = 0; i < state.playerIdPoolSize; ++i)
+        {
+            if (state.playerIdPool[i] != playerId)
+                continue;
+
+            for (uint8_t j = i + 1; j < state.playerIdPoolSize; ++j)
+                state.playerIdPool[j - 1] = state.playerIdPool[j];
+
+            --state.playerIdPoolSize;
+            return true;
+        }
+
+        return false;
     }
 
     void releasePlayerId(ServerState& state, const uint8_t playerId)
@@ -254,7 +275,8 @@ namespace bomberman::server
     void acceptPeerSession(ServerState& state,
                            PeerSession& session,
                            const uint8_t playerId,
-                           const std::string_view playerName)
+                           const std::string_view playerName,
+                           const uint8_t carriedWins)
     {
         auto& slotEntry = state.playerSlots[playerId];
         slotEntry.emplace();
@@ -262,7 +284,11 @@ namespace bomberman::server
         slot.playerId = playerId;
         slot.playerName = std::string(playerName);
         slot.ready = false;
-        slot.wins = 0;
+        slot.wins = carriedWins;
+
+        // Once the seat is occupied again, any previous reclaim metadata for
+        // that playerId is no longer relevant.
+        state.disconnectedPlayerReclaims[playerId].reset();
 
         // Bind the accepted player seat to the live session.
         session.playerId = playerId;
@@ -281,11 +307,17 @@ namespace bomberman::server
         if (releasedPlayerId.has_value())
         {
             const uint8_t playerId = releasedPlayerId.value();
+            if (const auto& slotEntry = state.playerSlots[playerId]; slotEntry.has_value())
+            {
+                state.disconnectedPlayerReclaims[playerId] = DisconnectedPlayerReclaim{
+                    .playerName = slotEntry->playerName,
+                    .wins = slotEntry->wins
+                };
+            }
 
             destroyMatchPlayerState(state, playerId);
             state.playerSlots[playerId].reset();
 
-            // Under the current no-reconnect policy, disconnect immediately frees the id.
             releasePlayerId(state, playerId);
             clearPeerSessionStorage(state, peer);
             handleAcceptedPlayerReleased(state, playerId);

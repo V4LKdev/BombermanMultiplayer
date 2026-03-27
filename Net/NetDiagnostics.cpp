@@ -473,6 +473,43 @@ namespace bomberman::net
         peerSummary.lastProcessedInputSeq = lastProcessedInputSeq;
     }
 
+    void NetDiagnostics::recordServerFlowState(const std::string_view stateName,
+                                               const bool idle,
+                                               const uint32_t serverTick,
+                                               const uint32_t matchId)
+    {
+        if (!enabled_ || !sessionActive_)
+            return;
+
+        const bool stateChanged = serverFlowState_ != stateName;
+        const bool idleChanged = serverIdle_ != idle;
+        if (!stateChanged && !idleChanged)
+            return;
+
+        serverFlowState_.assign(stateName.begin(), stateName.end());
+        serverIdle_ = idle;
+
+        if (stateChanged)
+        {
+            NetEvent event{};
+            event.type = NetEventType::Flow;
+            event.detailA = matchId;
+            event.detailB = serverTick;
+            event.note = std::string("server flow: ") + serverFlowState_;
+            recordRecentEvent(std::move(event));
+        }
+
+        if (idleChanged)
+        {
+            NetEvent event{};
+            event.type = NetEventType::Flow;
+            event.detailA = matchId;
+            event.detailB = serverTick;
+            event.note = idle ? "server idle" : "server active";
+            recordRecentEvent(std::move(event));
+        }
+    }
+
     void NetDiagnostics::recordSessionConfig(const ServerSessionConfig config)
     {
         config_ = config;
@@ -596,6 +633,10 @@ namespace bomberman::net
                 {"ticks", summary_.tickCount},
                 {"recent_events_recorded", summary_.recentEventsRecorded},
                 {"recent_events_evicted", summary_.recentEventsEvicted}
+            }},
+            {"server_flow", {
+                {"state", serverFlowState_},
+                {"idle", serverIdle_}
             }},
             {"packets", {
                 {"sent_attempts", summary_.packetsSent},
@@ -733,6 +774,8 @@ namespace bomberman::net
         config_ = {};
         summary_ = {};
         keyMessages_ = {};
+        serverFlowState_.clear();
+        serverIdle_ = false;
         summary_.enabled = enabled_;
         summary_.active = true;
         summary_.beginTimestampMs = nowMs();

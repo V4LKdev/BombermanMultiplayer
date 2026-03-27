@@ -57,12 +57,12 @@ namespace bomberman::server
             if (const auto releasedPlayerId = releasePeerSession(state, peer); releasedPlayerId.has_value())
             {
                 const uint8_t playerId = releasedPlayerId.value();
-                if (const auto& slotEntry = state.playerSlots[playerId];
-                    slotEntry.has_value() && !slotEntry->playerName.empty())
+                if (const auto& reclaimEntry = state.disconnectedPlayerReclaims[playerId];
+                    reclaimEntry.has_value() && !reclaimEntry->playerName.empty())
                 {
                     LOG_SERVER_INFO("Peer disconnected (playerId={}, name=\"{}\")",
                                     playerId,
-                                    slotEntry->playerName);
+                                    reclaimEntry->playerName);
                 }
                 else
                 {

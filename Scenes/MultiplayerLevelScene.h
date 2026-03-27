@@ -123,6 +123,20 @@ namespace bomberman
             uint32_t remainingLifetimeMs = 0;
         };
 
+        /** @brief One short-lived local-only bomb spark shown when local bomb input is queued. */
+        struct BombSparkPresentation
+        {
+            std::shared_ptr<Sprite> sparkSprite = nullptr;
+            uint32_t remainingLifetimeMs = 0;
+        };
+
+        /** @brief One temporary local reservation for a bomb input already queued but not yet reflected by authority. */
+        struct PendingLocalBombPlacement
+        {
+            uint16_t cellKey = 0;
+            uint32_t remainingLifetimeMs = 0;
+        };
+
         /** @brief Rolling per-session telemetry mirrored into periodic diagnostic logs. */
         struct LivePredictionTelemetry
         {
@@ -275,10 +289,21 @@ namespace bomberman
         void destroyBrickPresentation(uint8_t col, uint8_t row);
         /** @brief Removes one bomb presentation immediately, if present. */
         void removeBombPresentation(uint8_t col, uint8_t row);
+        /** @brief Returns true when the latest authoritative local state still allows a plausible bomb placement. */
+        [[nodiscard]]
+        bool canSpawnLocalBombSparkPresentation() const;
+        /** @brief Spawns one short-lived local-only bomb spark at the current local bomb cell. */
+        void spawnLocalBombSparkPresentation();
         /** @brief Spawns one short-lived explosion sprite at the given tile cell. */
         void spawnExplosionPresentation(const net::MsgCell& cell);
+        /** @brief Expires temporary local bomb reservations once authority has had time to catch up. */
+        void updatePendingLocalBombPlacements(unsigned int delta);
+        /** @brief Retires expired local bomb spark sprites after their visual lifetime ends. */
+        void updateLocalBombSparkPresentations(unsigned int delta);
         /** @brief Retires expired explosion sprites after their visual lifetime ends. */
         void updateExplosionPresentations(unsigned int delta);
+        /** @brief Removes every active local bomb spark sprite owned by this scene. */
+        void removeAllLocalBombSparkPresentations();
         /** @brief Removes every active explosion sprite owned by this scene. */
         void removeAllExplosionPresentations();
 
@@ -337,6 +362,7 @@ namespace bomberman
         uint32_t lastAppliedGameplayEventTick_ = 0;
         bool localPlayerAlive_ = true;
         bool localPlayerInputLocked_ = false;
+        bool localBombHeldOnLastQueuedInput_ = false;
         uint8_t localPlayerEffectFlags_ = 0;
         uint32_t powerupBlinkAccumulatorMs_ = 0;
         std::shared_ptr<Sound> explosionSound_ = nullptr;
@@ -345,6 +371,8 @@ namespace bomberman
         std::unordered_map<uint16_t, BombPresentation> bombPresentations_;
         std::unordered_map<uint16_t, PowerupPresentation> powerupPresentations_;
         std::unordered_map<uint16_t, std::shared_ptr<Object>> brickPresentations_;
+        std::vector<BombSparkPresentation> bombSparkPresentations_;
+        std::vector<PendingLocalBombPlacement> pendingLocalBombPlacements_;
         std::vector<ExplosionPresentation> explosionPresentations_;
         std::deque<net::NetClient::GameplayEvent> pendingGameplayEvents_;
         bool gameplayConnectionDegraded_ = false;

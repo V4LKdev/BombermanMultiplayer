@@ -106,8 +106,27 @@ namespace bomberman
 
     void MultiplayerLevelScene::onNetInputQueued(const uint32_t inputSeq, const uint8_t buttons)
     {
-        if (!localPlayerAlive_ || localPlayerInputLocked_)
+        const bool bombHeldNow = (buttons & net::kInputBomb) != 0;
+        const bool bombPressedNow = bombHeldNow && !localBombHeldOnLastQueuedInput_;
+        localBombHeldOnLastQueuedInput_ = bombHeldNow;
+
+        if (!matchStarted_ ||
+            !gameplayUnlocked_ ||
+            !localPlayerAlive_ ||
+            localPlayerInputLocked_ ||
+            currentMatchResult_.has_value() ||
+            returningToMenu_)
+        {
             return;
+        }
+
+        if (bombPressedNow)
+        {
+            if (canSpawnLocalBombSparkPresentation())
+            {
+                spawnLocalBombSparkPresentation();
+            }
+        }
 
         if (!game->isPredictionEnabled())
         {
@@ -474,6 +493,10 @@ namespace bomberman
     void MultiplayerLevelScene::setLocalPlayerAlivePresentation(const bool alive)
     {
         localPlayerAlive_ = alive;
+        if (!alive)
+        {
+            localBombHeldOnLastQueuedInput_ = false;
+        }
 
         if (!player)
             return;
@@ -494,6 +517,10 @@ namespace bomberman
     {
         const bool wasLocked = localPlayerInputLocked_;
         localPlayerInputLocked_ = locked;
+        if (locked)
+        {
+            localBombHeldOnLastQueuedInput_ = false;
+        }
 
         if (!player)
             return;

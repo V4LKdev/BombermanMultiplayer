@@ -186,6 +186,9 @@ namespace bomberman::net
         /** @brief Stores the latest input progression cursors for a peer. */
         void samplePeerInputContinuity(uint8_t peerId, uint32_t lastReceivedInputSeq, uint32_t lastProcessedInputSeq);
 
+        /** @brief Records the current coarse server flow state and derived idle flag. */
+        void recordServerFlowState(std::string_view stateName, bool idle, uint32_t serverTick, uint32_t matchId = 0);
+
         // ---- Reporting ----
 
         /** @brief Advances per-session tick bookkeeping. */
@@ -232,6 +235,8 @@ namespace bomberman::net
         ServerSessionConfig config_{}; ///< Static server config captured for the current session.
         NetSessionSummary summary_{}; ///< Aggregate totals for the current session.
         ServerKeyMessageAggregates keyMessages_{}; ///< Sparse per-message aggregates useful for tuning.
+        std::string serverFlowState_; ///< Latest coarse server flow state recorded for the session.
+        bool serverIdle_ = false; ///< Latest derived idle flag recorded for the session.
 
         std::array<NetEvent, kRecentEventCapacity> recentEvents_{}; ///< Fixed-size recent event storage.
         std::size_t recentStart_ = 0;                               ///< Ring buffer head index.

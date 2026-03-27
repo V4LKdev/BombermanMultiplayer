@@ -140,14 +140,7 @@ namespace bomberman::server::flow_internal
         state.currentLobbyCountdownDeadlineTick = state.serverTick + kLobbyCountdownTicks;
         state.currentLobbyCountdownLastBroadcastSecond = computeCountdownSecondsRemaining(state);
         broadcastLobbyState(state);
-        {
-            net::NetEvent event{};
-            event.type = net::NetEventType::Flow;
-            event.detailA = std::popcount(participantMask);
-            event.detailB = state.currentLobbyCountdownLastBroadcastSecond;
-            event.note = "lobby countdown started";
-            state.diag.recordEvent(event);
-        }
+        refreshServerFlowDiagnostics(state);
         LOG_SERVER_INFO("Lobby countdown started players={} seconds={}",
                         std::popcount(participantMask),
                         static_cast<unsigned int>(state.currentLobbyCountdownLastBroadcastSecond));
@@ -163,6 +156,7 @@ namespace bomberman::server::flow_internal
         state.currentLobbyCountdownLastBroadcastSecond = 0;
         clearAllLobbyReadyFlags(state);
         broadcastLobbyState(state);
+        refreshServerFlowDiagnostics(state);
 
         if (countdownWasActive)
         {
@@ -240,14 +234,7 @@ namespace bomberman::server::flow_internal
         }
 
         net::flush(state.host);
-        {
-            net::NetEvent event{};
-            event.type = net::NetEventType::Flow;
-            event.detailA = state.currentMatchId;
-            event.detailB = state.currentMatchUnlockTick;
-            event.note = "match start committed";
-            state.diag.recordEvent(event);
-        }
+        refreshServerFlowDiagnostics(state);
         LOG_SERVER_INFO("Match start committed matchId={} players={} goTick={} unlockTick={}",
                         state.currentMatchId,
                         std::popcount(state.currentMatchPlayerMask),
@@ -275,6 +262,7 @@ namespace bomberman::server
         state.currentEndOfMatchReturnTick = 0;
         state.roundWinnerPlayerId.reset();
         state.roundEndedInDraw = false;
+        refreshServerFlowDiagnostics(state);
 
         clearAllLobbyReadyFlags(state);
         clearBombsAndReleaseOwnership(state);
@@ -324,6 +312,7 @@ namespace bomberman::server
         }
 
         resetLobbyParticipantsToUnready(state, "a participant joined");
+        refreshServerFlowDiagnostics(state);
     }
 
     bool beginMatchBootstrap(ServerState& state)
@@ -404,14 +393,7 @@ namespace bomberman::server
 
         state.currentMatchPlayerMask = bootstrappedMask;
         net::flush(state.host);
-        {
-            net::NetEvent event{};
-            event.type = net::NetEventType::Flow;
-            event.detailA = state.currentMatchId;
-            event.detailB = state.mapSeed;
-            event.note = "match bootstrap started";
-            state.diag.recordEvent(event);
-        }
+        refreshServerFlowDiagnostics(state);
         LOG_SERVER_INFO("Starting match bootstrap matchId={} players={} seed={}",
                         state.currentMatchId,
                         std::popcount(state.currentMatchPlayerMask),
@@ -453,6 +435,7 @@ namespace bomberman::server
         if (state.phase == ServerPhase::Lobby || state.phase == ServerPhase::LobbyCountdown)
         {
             resetLobbyParticipantsToUnready(state, "a participant disconnected");
+            refreshServerFlowDiagnostics(state);
             return;
         }
 
@@ -461,12 +444,14 @@ namespace bomberman::server
             cancelStartingMatch(state,
                                 state.currentMatchPlayerMask,
                                 "a participant disconnected before match start");
+            refreshServerFlowDiagnostics(state);
             return;
         }
 
         if (state.phase != ServerPhase::Lobby && state.currentMatchPlayerMask == 0)
         {
             resetRoundRuntimeToLobby(state);
+            refreshServerFlowDiagnostics(state);
             LOG_SERVER_INFO("Round state reset to lobby after the last player disconnected");
         }
     }

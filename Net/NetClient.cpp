@@ -1648,20 +1648,25 @@ namespace bomberman::net
         }
 
         impl_->matchFlow.matchResult = matchResult;
+        const bool localWon = matchResult.result == MsgMatchResult::EResult::Win &&
+                              playerId_ != kInvalidPlayerId &&
+                              matchResult.winnerPlayerId == playerId_;
+        const char* localResultName = matchResult.result == MsgMatchResult::EResult::Draw
+                                          ? "draw"
+                                          : (localWon ? "win" : "loss");
         {
             NetEvent event{};
             event.type = NetEventType::Flow;
-            event.peerId =
-                matchResult.result == MsgMatchResult::EResult::Win ? matchResult.winnerPlayerId : kInvalidPlayerId;
+            event.peerId = matchResult.result == MsgMatchResult::EResult::Win
+                               ? matchResult.winnerPlayerId
+                               : kInvalidPlayerId;
             event.detailA = matchResult.matchId;
-            event.note = matchResult.result == MsgMatchResult::EResult::Draw
-                             ? "match result received: draw"
-                             : "match result received: win";
+            event.note = std::string("match result received: ") + localResultName;
             impl_->diagnostics.recordEvent(event);
         }
         LOG_NET_CONN_INFO("Received MatchResult matchId={} result={}",
                           matchResult.matchId,
-                          matchResult.result == MsgMatchResult::EResult::Draw ? "draw" : "win");
+                          localResultName);
     }
 
     void NetClient::handleSnapshot(const uint8_t* payload, std::size_t payloadSize) const

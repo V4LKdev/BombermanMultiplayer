@@ -93,7 +93,20 @@ namespace bomberman::server
         uint8_t playerId = 0;   ///< Stable authoritative player seat in [0, net::kMaxPlayers) for the current assignment.
         std::string playerName; ///< Latest accepted player name for this active assignment.
         bool ready = false;     ///< Passive lobby ready toggle owned by the current assignment.
-        uint8_t wins = 0;       ///< Server-owned round wins for the current assignment only.
+        uint8_t wins = 0;       ///< Server-owned round wins currently carried by this active assignment.
+    };
+
+    /**
+     * @brief Bounded reconnect cache for one recently disconnected player seat.
+     *
+     * This is only used for simple lobby-only score reclaim. If the same
+     * player name rejoins before another admission takes the freed seat, the
+     * server can restore the prior `playerId` and carried win count.
+     */
+    struct DisconnectedPlayerReclaim
+    {
+        std::string playerName; ///< Last accepted player name that owned this playerId.
+        uint8_t wins = 0;       ///< Win count preserved from the disconnected assignment.
     };
 
     // ----- Live peer sessions -----
@@ -234,6 +247,8 @@ namespace bomberman::server
         std::array<std::optional<PeerSession>, kServerPeerSessionCapacity> peerSessions{};
         /** @brief Active accepted-player metadata keyed by authoritative player id. See @ref PlayerSlot. */
         std::array<std::optional<PlayerSlot>, net::kMaxPlayers> playerSlots{};
+        /** @brief Last disconnected occupant per player id for bounded lobby-only reconnect reclaim. */
+        std::array<std::optional<DisconnectedPlayerReclaim>, net::kMaxPlayers> disconnectedPlayerReclaims{};
         /** @brief Stable-address active in-match state keyed by authoritative player id. */
         std::array<std::optional<MatchPlayerState>, net::kMaxPlayers> matchPlayers{};
         /** @brief Active authoritative bombs for the current round. */
@@ -241,7 +256,7 @@ namespace bomberman::server
         /** @brief Hidden and revealed round powerups for the current or next authoritative match. */
         std::array<std::optional<PowerupState>, kServerPowerupCapacity> powerups{};
 
-        std::array<uint8_t, net::kMaxPlayers> playerIdPool{}; ///< Sorted free-list of available player ids, released immediately on disconnect.
+        std::array<uint8_t, net::kMaxPlayers> playerIdPool{}; ///< Sorted free-list of currently available player ids.
         uint8_t playerIdPoolSize = 0; ///< Number of valid entries currently stored in `playerIdPool`.
 
         std::optional<uint32_t> fixedMapSeedOverride{}; ///< Fixed map seed reused for every round when the server was started with `--seed`.
@@ -261,7 +276,6 @@ namespace bomberman::server
         std::optional<uint8_t> roundWinnerPlayerId{}; ///< Winner of the current or most recent round, if one exists.
         bool roundEndedInDraw = false; ///< True when the current or most recent round ended with no surviving player.
 
-        // TODO: Feed phase transitions and derived idle state into NetDiagnostics.
         net::NetDiagnostics diag; ///< Diagnostics recorder for this session.
     };
 
@@ -304,6 +318,10 @@ namespace bomberman::server
     [[nodiscard]]
     std::optional<uint8_t> acquirePlayerId(ServerState& state);
 
+    /** @brief Removes a specific playerId from the free pool if it is currently available. */
+    [[nodiscard]]
+    bool acquireSpecificPlayerId(ServerState& state, uint8_t playerId);
+
     /** @brief Returns a playerId to the free pool while keeping pool order deterministic. */
     void releasePlayerId(ServerState& state, uint8_t playerId);
 
@@ -335,22 +353,29 @@ namespace bomberman::server
     /**
      * @brief Commits an accepted peer session into active player metadata.
      *
-     * Creates the active @ref PlayerSlot for `playerId` and binds the
-     * authoritative assignment to the provided @ref PeerSession. Match state
-     * creation stays separate so accepted peers can remain in the lobby before
-     * a match starts.
+     * Creates the active @ref PlayerSlot for `playerId`, applies any carried
+     * win count for a reconnect reclaim, and binds the authoritative
+     * assignment to the provided @ref PeerSession. Match state creation stays
+     * separate so accepted peers can remain in the lobby before a match
+     * starts.
      */
-    void acceptPeerSession(ServerState& state, PeerSession& session, uint8_t playerId, std::string_view playerName);
+    void acceptPeerSession(ServerState& state,
+                           PeerSession& session,
+                           uint8_t playerId,
+                           std::string_view playerName,
+                           uint8_t carriedWins = 0);
 
     /**
      * @brief Releases the live peer session bound to `peer`, if any.
      *
      * Clears `peer.data`, destroys the active @ref PlayerSlot and any active
-     * @ref MatchPlayerState for the same player seat, and returns the freed
-     * player id to the pool immediately.
+     * @ref MatchPlayerState for the same player seat, stores bounded
+     * reconnect-reclaim metadata for that seat, and returns the freed player
+     * id to the pool immediately.
      *
-     * @note Disconnect ends the current player assignment. Any later join is a
-     * fresh admission from the current free-id pool.
+     * @note Disconnect still ends the current player assignment immediately.
+     * The only restoration path is a later lobby admission that reclaims the
+     * same free player id by exact player name.
      *
      * @return Freed player id on success, or `std::nullopt` if the peer had no accepted player seat attached.
      */

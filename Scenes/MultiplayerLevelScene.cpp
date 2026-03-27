@@ -257,6 +257,8 @@ namespace bomberman
     void MultiplayerLevelScene::finalizeFrameUpdate(const unsigned int delta)
     {
         updateSceneObjects(delta);
+        updatePendingLocalBombPlacements(delta);
+        updateLocalBombSparkPresentations(delta);
         updateExplosionPresentations(delta);
         updateRemotePlayerPresentations(delta);
         updatePowerupEffectPresentations(delta);
@@ -297,6 +299,7 @@ namespace bomberman
         currentMatchResult_.reset();
         localPlayerAlive_ = true;
         localPlayerInputLocked_ = false;
+        localBombHeldOnLastQueuedInput_ = false;
         localPlayerEffectFlags_ = 0;
         powerupBlinkAccumulatorMs_ = 0;
         livePredictionTelemetry_ = {};
@@ -322,6 +325,8 @@ namespace bomberman
         hideCenterBanner();
         removeDebugHudPresentations();
 
+        removeAllLocalBombSparkPresentations();
+        pendingLocalBombPlacements_.clear();
         removeAllExplosionPresentations();
         brickPresentations_.clear();
 

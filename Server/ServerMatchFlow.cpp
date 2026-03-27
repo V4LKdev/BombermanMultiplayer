@@ -90,6 +90,7 @@ namespace bomberman::server
         state.currentMatchGoShowTick = 0;
         state.currentMatchUnlockTick = 0;
         state.currentEndOfMatchReturnTick = state.serverTick + kEndOfMatchReturnTicks;
+        refreshServerFlowDiagnostics(state);
         state.diag.recordRoundEnded(state.roundWinnerPlayerId, state.roundEndedInDraw, state.serverTick);
         clearBombsAndReleaseOwnership(state);
 

@@ -6,6 +6,7 @@
 #ifndef BOMBERMAN_SERVER_SERVERFLOWINTERNAL_H
 #define BOMBERMAN_SERVER_SERVERFLOWINTERNAL_H
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -55,6 +56,35 @@ namespace bomberman::server::flow_internal
 
     [[nodiscard]]
     uint8_t computeCountdownSecondsRemaining(const ServerState& state);
+
+    [[nodiscard]]
+    constexpr std::string_view coarseServerFlowState(const ServerPhase phase)
+    {
+        switch (phase)
+        {
+            case ServerPhase::Lobby:
+            case ServerPhase::LobbyCountdown:
+            case ServerPhase::StartingMatch:
+                return "lobby";
+            case ServerPhase::InMatch:
+                return "in_match";
+            case ServerPhase::EndOfMatch:
+                return "end_of_match";
+        }
+
+        return "lobby";
+    }
+
+    [[nodiscard]]
+    inline bool isServerIdleForDiagnostics(const ServerState& state)
+    {
+        if (coarseServerFlowState(state.phase) != "lobby")
+            return false;
+
+        return std::none_of(state.playerSlots.begin(),
+                            state.playerSlots.end(),
+                            [](const auto& slotEntry) { return slotEntry.has_value(); });
+    }
 
     void cancelStartingMatch(ServerState& state, uint32_t notifyMask, std::string_view reason);
 } // namespace bomberman::server::flow_internal

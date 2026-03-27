@@ -20,6 +20,13 @@ namespace bomberman::server
 {
     namespace
     {
+        struct ReservedHelloPlayerSlot
+        {
+            uint8_t playerId = 0;
+            uint8_t carriedWins = 0;
+            bool reclaimed = false;
+        };
+
         constexpr std::string_view rejectReasonName(const MsgReject::EReason reason)
         {
             using enum MsgReject::EReason;
@@ -122,8 +129,25 @@ namespace bomberman::server
         }
 
         [[nodiscard]]
-        std::optional<uint8_t> reserveHelloPlayerId(PacketDispatchContext& ctx)
+        std::optional<ReservedHelloPlayerSlot> reserveHelloPlayerId(PacketDispatchContext& ctx, const std::string_view playerName)
         {
+            for (uint8_t playerId = 0; playerId < kMaxPlayers; ++playerId)
+            {
+                const auto& reclaimEntry = ctx.state.disconnectedPlayerReclaims[playerId];
+                if (!reclaimEntry.has_value() || reclaimEntry->playerName != playerName)
+                    continue;
+
+                if (!acquireSpecificPlayerId(ctx.state, playerId))
+                    continue;
+
+                ctx.recordedPlayerId = playerId;
+                return ReservedHelloPlayerSlot{
+                    .playerId = playerId,
+                    .carriedWins = reclaimEntry->wins,
+                    .reclaimed = true
+                };
+            }
+
             if (ctx.state.playerIdPoolSize == 0)
             {
                 LOG_NET_CONN_WARN("Server full ({}/{}) - rejecting peer {}",
@@ -143,8 +167,12 @@ namespace bomberman::server
                 return std::nullopt;
             }
 
-            ctx.recordedPlayerId = reservedPlayerId;
-            return reservedPlayerId;
+            ctx.recordedPlayerId = reservedPlayerId.value();
+            return ReservedHelloPlayerSlot{
+                .playerId = reservedPlayerId.value(),
+                .carriedWins = 0,
+                .reclaimed = false
+            };
         }
 
         [[nodiscard]]
@@ -230,23 +258,29 @@ namespace bomberman::server
         }
 
         [[nodiscard]]
-        bool finalizeAcceptedHello(PacketDispatchContext& ctx, const uint8_t playerId, const std::string_view playerName)
+        bool finalizeAcceptedHello(PacketDispatchContext& ctx,
+                                   const ReservedHelloPlayerSlot& reservedSlot,
+                                   const std::string_view playerName)
         {
             auto* session = getPeerSession(ctx.peer);
             if (session == nullptr)
             {
                 LOG_NET_CONN_ERROR("Peer {} lost its live session before Hello accept finalization", ctx.peer->incomingPeerID);
-                releasePlayerId(ctx.state, playerId);
+                releasePlayerId(ctx.state, reservedSlot.playerId);
                 ctx.receiveResult = NetPacketResult::Rejected;
                 enet_peer_reset(ctx.peer);
                 return false;
             }
 
-            acceptPeerSession(ctx.state, *session, playerId, playerName);
+            acceptPeerSession(ctx.state,
+                              *session,
+                              reservedSlot.playerId,
+                              playerName,
+                              reservedSlot.carriedWins);
 
             recordPeerLifecycle(ctx.diag,
                                 NetPeerLifecycleType::PlayerAccepted,
-                                playerId,
+                                reservedSlot.playerId,
                                 static_cast<uint32_t>(ctx.peer->incomingPeerID));
             ctx.receiveResult = NetPacketResult::Ok;
             return true;
@@ -326,25 +360,35 @@ namespace bomberman::server
             return;
         }
 
-        const std::optional<uint8_t> reservedPlayerId = reserveHelloPlayerId(ctx);
-        if (!reservedPlayerId.has_value())
+        const auto reservedSlot = reserveHelloPlayerId(ctx, playerName);
+        if (!reservedSlot.has_value())
         {
             return;
         }
 
-        const uint8_t playerId = reservedPlayerId.value();
+        const uint8_t playerId = reservedSlot->playerId;
         if (!queueWelcomeForHello(ctx, playerId))
         {
             return;
         }
 
-        if (!finalizeAcceptedHello(ctx, playerId, playerName))
+        if (!finalizeAcceptedHello(ctx, reservedSlot.value(), playerName))
         {
             return;
         }
 
         handleAcceptedPlayerJoined(ctx.state);
-        LOG_NET_CONN_INFO("Accepted playerId={} into the lobby", playerId);
+        if (reservedSlot->reclaimed)
+        {
+            LOG_NET_CONN_INFO("Reclaimed playerId={} into the lobby for \"{}\" (wins={})",
+                              playerId,
+                              playerName,
+                              reservedSlot->carriedWins);
+        }
+        else
+        {
+            LOG_NET_CONN_INFO("Accepted playerId={} into the lobby", playerId);
+        }
     }
 
     void onLobbyReady(PacketDispatchContext& ctx,

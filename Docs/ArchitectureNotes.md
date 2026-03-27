@@ -2,6 +2,15 @@
 
 ## Lobby Player-Id Reassignment
 
+Current dedicated-server behavior supports one narrow reconnect path:
+
+- if a player disconnects and later rejoins with the same name
+- and the original `playerId` is still free
+- the server restores that same seat and carried win count
+
+This is bounded seat reclaim only. It does not reorder or compact the
+remaining lobby seats while other players stay connected.
+
 Current multiplayer lobby seats are keyed directly by authoritative `playerId`, and that same `playerId` is also the active session identity used by:
 
 - `Welcome` / local client identity

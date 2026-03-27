@@ -26,6 +26,7 @@ namespace bomberman
         Enemy2,
         Enemy3,
         Bomb,
+        BombSpark,
         Explosion,
         Door,
         PowerupSpeed,

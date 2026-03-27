@@ -511,6 +511,18 @@ namespace bomberman
         presentation.ownerId = entry.ownerId;
         presentation.radius = entry.radius;
 
+        if (localPlayerId_.has_value() && entry.ownerId == localPlayerId_.value())
+        {
+            for (auto pendingIt = pendingLocalBombPlacements_.begin(); pendingIt != pendingLocalBombPlacements_.end(); ++pendingIt)
+            {
+                if (pendingIt->cellKey == bombCellKey)
+                {
+                    pendingLocalBombPlacements_.erase(pendingIt);
+                    break;
+                }
+            }
+        }
+
         const util::PlayerColor color = util::colorForPlayerId(entry.ownerId);
         presentation.bombSprite->setColorMod(color.r, color.g, color.b);
 
@@ -762,6 +774,81 @@ namespace bomberman
         bombPresentations_.erase(it);
     }
 
+    bool MultiplayerLevelScene::canSpawnLocalBombSparkPresentation() const
+    {
+        if (!player || !localPlayerId_.has_value() || scaledTileSize <= 0)
+            return false;
+
+        const int32_t col = playerPos_.xQ / 256;
+        const int32_t row = playerPos_.yQ / 256;
+        if (col < 0 || row < 0 ||
+            col >= static_cast<int32_t>(tileArrayWidth) ||
+            row >= static_cast<int32_t>(tileArrayHeight))
+        {
+            return false;
+        }
+
+        const Tile tile = tiles[row][col];
+        if (tile == Tile::Stone || tile == Tile::Brick)
+            return false;
+
+        const uint16_t cellKey = packCellKey(static_cast<uint8_t>(col), static_cast<uint8_t>(row));
+        const uint8_t localPlayerId = localPlayerId_.value();
+        const uint8_t maxBombs =
+            (localPlayerEffectFlags_ &
+             static_cast<uint8_t>(net::MsgSnapshot::PlayerEntry::EPlayerFlags::MaxBombsBoost))
+                ? sim::kBoostedMaxBombs
+                : sim::kDefaultPlayerMaxBombs;
+
+        uint8_t ownedAuthoritativeBombCount = 0;
+        for (const auto& [bombCellKey, presentation] : bombPresentations_)
+        {
+            if (bombCellKey == cellKey)
+                return false;
+
+            if (presentation.ownerId == localPlayerId)
+                ++ownedAuthoritativeBombCount;
+        }
+
+        for (const auto& pendingPlacement : pendingLocalBombPlacements_)
+        {
+            if (pendingPlacement.cellKey == cellKey)
+                return false;
+        }
+
+        return static_cast<uint8_t>(ownedAuthoritativeBombCount + pendingLocalBombPlacements_.size()) < maxBombs;
+    }
+
+    void MultiplayerLevelScene::spawnLocalBombSparkPresentation()
+    {
+        if (!player || scaledTileSize <= 0)
+            return;
+
+        const int32_t col = playerPos_.xQ / 256;
+        const int32_t row = playerPos_.yQ / 256;
+        if (col < 0 || row < 0 ||
+            col >= static_cast<int32_t>(tileArrayWidth) ||
+            row >= static_cast<int32_t>(tileArrayHeight))
+        {
+            return;
+        }
+
+        auto sparkSprite =
+            std::make_shared<Sprite>(game->getAssetManager()->getTexture(Texture::BombSpark), game->getRenderer());
+        sparkSprite->setSize(scaledTileSize, scaledTileSize);
+        attachBombSparkAnimation(sparkSprite);
+
+        const int screenX = fieldPositionX + static_cast<int>(col) * scaledTileSize;
+        const int screenY = fieldPositionY + static_cast<int>(row) * scaledTileSize;
+        sparkSprite->setPosition(screenX, screenY);
+        addObject(sparkSprite);
+
+        pendingLocalBombPlacements_.push_back(
+            {packCellKey(static_cast<uint8_t>(col), static_cast<uint8_t>(row)),
+             kPendingLocalBombPlacementLifetimeMs});
+        bombSparkPresentations_.push_back({sparkSprite, kBombSparkLifetimeMs});
+    }
+
     void MultiplayerLevelScene::spawnExplosionPresentation(const net::MsgCell& cell)
     {
         auto explosionSprite =
@@ -775,6 +862,40 @@ namespace bomberman
         addObject(explosionSprite);
 
         explosionPresentations_.push_back({explosionSprite, kExplosionLifetimeMs});
+    }
+
+    void MultiplayerLevelScene::updateLocalBombSparkPresentations(const unsigned int delta)
+    {
+        for (auto it = bombSparkPresentations_.begin(); it != bombSparkPresentations_.end();)
+        {
+            auto& presentation = *it;
+            if (presentation.remainingLifetimeMs > delta)
+            {
+                presentation.remainingLifetimeMs -= delta;
+                ++it;
+                continue;
+            }
+
+            if (presentation.sparkSprite)
+                removeObject(presentation.sparkSprite);
+
+            it = bombSparkPresentations_.erase(it);
+        }
+    }
+
+    void MultiplayerLevelScene::updatePendingLocalBombPlacements(const unsigned int delta)
+    {
+        for (auto it = pendingLocalBombPlacements_.begin(); it != pendingLocalBombPlacements_.end();)
+        {
+            if (it->remainingLifetimeMs > delta)
+            {
+                it->remainingLifetimeMs -= delta;
+                ++it;
+                continue;
+            }
+
+            it = pendingLocalBombPlacements_.erase(it);
+        }
     }
 
     void MultiplayerLevelScene::updateExplosionPresentations(const unsigned int delta)
@@ -794,6 +915,17 @@ namespace bomberman
 
             it = explosionPresentations_.erase(it);
         }
+    }
+
+    void MultiplayerLevelScene::removeAllLocalBombSparkPresentations()
+    {
+        for (auto& presentation : bombSparkPresentations_)
+        {
+            if (presentation.sparkSprite)
+                removeObject(presentation.sparkSprite);
+        }
+
+        bombSparkPresentations_.clear();
     }
 
     void MultiplayerLevelScene::removeAllExplosionPresentations()

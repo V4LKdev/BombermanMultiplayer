@@ -46,6 +46,12 @@ namespace bomberman::multiplayer_level_scene_internal
     inline constexpr uint32_t kPreStartReturnTimeoutMs = 7000;
     inline constexpr uint32_t kPowerupBlinkIntervalMs = 140;
     inline constexpr int kBombAnimationFrameCount = 4;
+    inline constexpr int kBombSparkAnimationFrameCount = 5;
+    inline constexpr int kBombSparkFrameSizePx = 32;
+    inline constexpr uint32_t kBombSparkAnimationIntervalMs = 50;
+    inline constexpr uint32_t kBombSparkLifetimeMs = 250;
+    inline constexpr uint32_t kPendingLocalBombPlacementLifetimeMs =
+        static_cast<uint32_t>((1000ull * sim::kDefaultBombFuseTicks) / sim::kTickRate);
     inline constexpr int kBoostedBombExtraPx = 4;
     inline constexpr int kExplosionAnimationStartFrame = 1;
     inline constexpr int kExplosionAnimationFrameCount = 11;
@@ -87,6 +93,26 @@ namespace bomberman::multiplayer_level_scene_internal
 
         animation->setSprite(explosionSprite.get());
         explosionSprite->addAnimation(animation);
+        animation->play();
+    }
+
+    inline void attachBombSparkAnimation(const std::shared_ptr<Sprite>& bombSparkSprite)
+    {
+        if (!bombSparkSprite)
+            return;
+
+        auto animation = std::make_shared<Animation>();
+        animation->setAnimationInterval(kBombSparkAnimationIntervalMs);
+        for (int frame = 0; frame < kBombSparkAnimationFrameCount; ++frame)
+        {
+            animation->addAnimationEntity(AnimationEntity(kBombSparkFrameSizePx * frame,
+                                                         0,
+                                                         kBombSparkFrameSizePx,
+                                                         kBombSparkFrameSizePx));
+        }
+
+        animation->setSprite(bombSparkSprite.get());
+        bombSparkSprite->addAnimation(animation);
         animation->play();
     }
 

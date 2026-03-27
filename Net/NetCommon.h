@@ -646,7 +646,7 @@ namespace bomberman::net
      *
      * Truth boundary today:
      * - authoritative for player positions / replicated player flags / active bomb membership / revealed powerup membership
-     * - not a payload for mid-match joins or recovery
+     * - not a full reconnect or world-rebuild payload
      * - does not encode destroyed tiles, round-result presentation state, or
      *   enough world state to rebuild an in-progress round after disconnect
      *
@@ -726,7 +726,7 @@ namespace bomberman::net
         int16_t xQ = 0;                     ///< Corrected X position in tile-space Q8.
         int16_t yQ = 0;                     ///< Corrected Y position in tile-space Q8.
         uint8_t playerFlags = 0;            ///< Owner-local copy of the current replicated player flags.
-        uint8_t reserved[3]{};              ///< Reserved for future correction-owned player state.
+        uint8_t reserved[3]{};              ///< Currently unused wire padding. If reused later, keep it owner-only (for example local pickup/bomb state) rather than treating it as general world-state data.
     };
 
     /**

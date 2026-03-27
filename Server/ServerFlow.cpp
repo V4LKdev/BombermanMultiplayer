@@ -14,6 +14,14 @@ namespace bomberman::server
 {
     using namespace flow_internal;
 
+    void refreshServerFlowDiagnostics(ServerState& state)
+    {
+        state.diag.recordServerFlowState(coarseServerFlowState(state.phase),
+                                         isServerIdleForDiagnostics(state),
+                                         state.serverTick,
+                                         state.currentMatchId);
+    }
+
     void advanceServerFlow(ServerState& state)
     {
         if (state.phase == ServerPhase::LobbyCountdown &&
@@ -59,14 +67,6 @@ namespace bomberman::server
             }
 
             LOG_SERVER_INFO("Gameplay unlocked matchId={} tick={}", state.currentMatchId, state.serverTick);
-            {
-                net::NetEvent event{};
-                event.type = net::NetEventType::Flow;
-                event.detailA = state.currentMatchId;
-                event.detailB = state.serverTick;
-                event.note = "gameplay unlocked";
-                state.diag.recordEvent(event);
-            }
             state.currentMatchUnlockTick = 0;
             return;
         }
@@ -81,13 +81,6 @@ namespace bomberman::server
 
         resetRoundRuntimeToLobby(state);
         broadcastLobbyState(state);
-        {
-            net::NetEvent event{};
-            event.type = net::NetEventType::Flow;
-            event.detailB = state.serverTick;
-            event.note = "returned to lobby after end-of-match cooldown";
-            state.diag.recordEvent(event);
-        }
         LOG_SERVER_INFO("Returned to lobby after end-of-match cooldown");
     }
 } // namespace bomberman::server

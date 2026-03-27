@@ -27,9 +27,10 @@ namespace bomberman::server
      *
      * Packs active `matchPlayers` plus active bombs into the payload.
      *
-     * @note This snapshot is intentionally incomplete for mid-match bootstrap:
-     * it does not encode tile destruction, round-result state, or enough data
-     * to reconstruct the full authoritative world on its own.
+     * @note This snapshot is intentionally not a full round-state rebuild
+     * payload. It does not encode tile destruction, round-result state, or
+     * enough data to reconstruct an in-progress authoritative world after a
+     * disconnect.
      */
     [[nodiscard]]
     net::MsgSnapshot buildSnapshot(const ServerState& state);
