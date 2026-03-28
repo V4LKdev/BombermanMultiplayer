@@ -1,0 +1,27 @@
+[2026-03-27 17:28:11.645] [game] [debug] Client multiplayer config: prediction=on, remoteSmoothing=on
+[2026-03-27 17:28:11.684] [game] [debug] Renderer pacing: manual-cap
+[2026-03-27 17:28:27.016] [net.conn] [debug] Async connect initiated to 127.0.0.1:46003
+[2026-03-27 17:28:27.024] [net.conn] [debug] ENet connect event received, sending Hello
+[2026-03-27 17:28:27.031] [net.conn] [info] Welcome: playerId=0, tickRate=60 - session connected, waiting for lobby or next round start
+[2026-03-27 17:28:34.180] [net.conn] [debug] Queued LobbyReady desiredReady=true
+[2026-03-27 17:28:37.761] [net.conn] [info] Received LevelInfo matchId=1 seed=84545378
+[2026-03-27 17:28:37.768] [net.conn] [info] Lobby received match bootstrap matchId=1 seed=84545378 - entering multiplayer level
+[2026-03-27 17:28:37.791] [net.conn] [debug] Queued MatchLoaded matchId=1
+[2026-03-27 17:28:37.791] [net.conn] [debug] Acknowledged match bootstrap loaded matchId=1
+[2026-03-27 17:28:37.798] [net.conn] [info] Received MatchStart matchId=1 goTick=2164 unlockTick=2164
+[2026-03-27 17:28:37.805] [net.conn] [info] Match start confirmed locally matchId=1
+[2026-03-27 17:28:38.805] [net.input] [debug] Local prediction armed from authoritative state tick=2165 lastProcessed=0 pos=(384, 384)
+[2026-03-27 17:28:39.287] [net.input] [debug] Sent Input seq=30 batch=[15..30] buttons=0x00
+[2026-03-27 17:28:39.789] [net.input] [debug] Sent Input seq=60 batch=[45..60] buttons=0x04
+[2026-03-27 17:28:39.842] [net.input] [debug] Prediction live ackSeq=62 corrTick=2227 pendingDepth=1 pendingAgeMs=16 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-27 17:28:40.289] [net.input] [debug] Sent Input seq=90 batch=[75..90] buttons=0x00
+[2026-03-27 17:28:40.785] [net.input] [debug] Sent Input seq=120 batch=[105..120] buttons=0x00
+[2026-03-27 17:28:40.885] [net.input] [debug] Prediction live ackSeq=124 corrTick=2289 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=2 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-27 17:28:41.291] [net.input] [debug] Sent Input seq=150 batch=[135..150] buttons=0x00
+[2026-03-27 17:28:41.574] [net.conn] [info] Received MatchResult matchId=1 result=loss
+[2026-03-27 17:28:44.573] [net.conn] [info] Leaving multiplayer match back to lobby (ReturnedToLobby)
+[2026-03-27 17:28:44.586] [net.input] [debug] Prediction summary localInputs=166 deferredInputs=1 rejectedInputs=0 corrections=140 mismatches=0 avgDeltaQ=0.00 maxDeltaQ=0 replayedInputs=189 maxReplay=2 truncations=0 recoveries=0 recoveryResolutions=0 maxMissingInputs=0 maxPendingDepth=3
+[2026-03-27 17:29:24.155] [net.conn] [info] Leaving lobby and disconnecting: LocalLeaveLobby
+[2026-03-27 17:29:24.155] [net.conn] [info] Queued graceful disconnect
+[2026-03-27 17:29:24.156] [net.conn] [info] Graceful disconnect completed
+[2026-03-27 17:29:24.158] [net.diag] [info] Client diagnostics JSON report written to logs/diag_client_p1_172924.json
