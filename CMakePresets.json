@@ -1,0 +1,73 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 24,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base-ninja",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "hidden": true
+    },
+    {
+      "name": "linux-debug",
+      "displayName": "Linux Debug",
+      "inherits": "base-ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "linux-release",
+      "displayName": "Linux Release",
+      "inherits": "base-ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "windows-release",
+      "displayName": "Windows Release (MinGW cross)",
+      "inherits": "base-ninja",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/mingw64.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "linux-client-debug",
+      "displayName": "Linux Client Debug",
+      "configurePreset": "linux-debug",
+      "targets": ["Bomberman"]
+    },
+    {
+      "name": "linux-client-release",
+      "displayName": "Linux Client Release",
+      "configurePreset": "linux-release",
+      "targets": ["Bomberman"]
+    },
+    {
+      "name": "linux-server-debug",
+      "displayName": "Linux Server Debug",
+      "configurePreset": "linux-debug",
+      "targets": ["Bomberman_Server"]
+    },
+    {
+      "name": "linux-server-release",
+      "displayName": "Linux Server Release",
+      "configurePreset": "linux-release",
+      "targets": ["Bomberman_Server"]
+    },
+    {
+      "name": "windows-client-release",
+      "displayName": "Windows Client Release",
+      "configurePreset": "windows-release",
+      "targets": ["Bomberman"]
+    }
+  ]
+}

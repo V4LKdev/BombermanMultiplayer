@@ -1,9 +1,0 @@
-Vendored from the locally installed Arch Linux nlohmann-json package.
-
-- Source path: /usr/include/nlohmann
-- Copied into the repository on 2026-03-26
-- Package/header version: 3.12.0
-
-This tree is used as the preferred header source by CMake.
-If the vendored copy is removed, CMake falls back to a system include path that provides
-`nlohmann/json.hpp`.

@@ -49,6 +49,9 @@ packages/
 logs/
 build-release/
 
+# Distribution staging (built artifacts, not source)
+staging/
+
 # SonarQube
 .sonar/
 .scannerwork/
