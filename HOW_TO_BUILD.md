@@ -8,7 +8,7 @@
 
 **Linux (client + server)**
 - GCC 12+ or Clang 15+ (C++20 required)
-- SDL2 dev packages:
+- SDL2 dev packages (only required when building the client):
   ```
   # Arch
   sudo pacman -S sdl2 sdl2_image sdl2_ttf sdl2_mixer
@@ -16,6 +16,7 @@
   # Ubuntu / Debian
   sudo apt install libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev libsdl2-mixer-dev
   ```
+  Skip SDL installs for server-only builds by configuring with `-DBOMBERMAN_BUILD_CLIENT=OFF`.
 
 **Windows client (cross-compile from Linux)**
 - MinGW-w64 toolchain:
@@ -23,10 +24,13 @@
   # Arch
   sudo pacman -S mingw-w64-gcc
   ```
-- SDL2 MinGW packages (headers + import libs in `/usr/x86_64-w64-mingw32/`):
+- SDL2 MinGW packages (headers + import libs in `/usr/x86_64-w64-mingw32/` by default):
   ```
   # Arch (AUR)
+  # paru
   paru -S mingw-w64-sdl2 mingw-w64-sdl2_image mingw-w64-sdl2_ttf mingw-w64-sdl2_mixer
+  # yay
+  yay -S mingw-w64-sdl2 mingw-w64-sdl2_image mingw-w64-sdl2_ttf mingw-w64-sdl2_mixer
   ```
 
 All other dependencies (ENet, spdlog, nlohmann/json) are vendored in `third_party/` — no additional installs needed.
@@ -47,6 +51,12 @@ No submodule init required. All dependencies are committed under `third_party/`.
 ## CLI builds
 
 Each build preset shares a configure directory. Running `cmake --preset <configure>` once is enough; both client and server can then be built from the same configured tree.
+
+Useful options:
+- `-DBOMBERMAN_BUILD_CLIENT=OFF` — server-only build (no SDL needed)
+- `-DBOMBERMAN_BUILD_SERVER=OFF` — client-only build
+- `-DBOMBERMAN_BUNDLE_DLLS=OFF` — skip DLL bundling in Windows client packages
+- `-DBOMBERMAN_MINGW_SYSROOT=<path>` — override MinGW sysroot (default `/usr/x86_64-w64-mingw32`)
 
 ### Configure
 
@@ -94,8 +104,4 @@ This produces archives in the build directory:
 
 ### Windows DLL bundling
 
-The Windows client package does not automatically include runtime DLLs. After packaging, copy the following from `/usr/x86_64-w64-mingw32/bin/` into the extracted client directory:
-
-- `SDL2.dll`, `SDL2_image.dll`, `SDL2_ttf.dll`, `SDL2_mixer.dll`
-- `libgcc_s_seh-1.dll`, `libstdc++-6.dll`, `libwinpthread-1.dll`
-- Image codec deps (`libpng16-16.dll`, `zlib1.dll`, `libjpeg-8.dll`, `libtiff-6.dll`, `libwebp*.dll`, etc.)
+By default, CPack bundles the SDL2 and MinGW runtime DLLs from `${BOMBERMAN_MINGW_SYSROOT}/bin` into the Windows client ZIP. Override the path with `-DBOMBERMAN_MINGW_SYSROOT=<path>` or disable bundling entirely with `-DBOMBERMAN_BUNDLE_DLLS=OFF` if you prefer to stage DLLs manually.
