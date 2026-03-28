@@ -1,5 +1,67 @@
 # Bomberman Multiplayer – Dev Log
 
+## 2026-03-28 (bb6cd48) – Add Final Test Matrix And Network Test Results
+
+### Goal
+Record the full structured test evidence for the assessment submission and archive the raw logs and diagnostics that back each scenario.
+
+### What landed
+- Added `Docs/FinalTestMatrix.md` covering 18 test scenarios across core flow, impairment and netcode, tooling and build, and capacity and variant coverage.
+- Archived logs and diagnostics for T01–T09, T11–T18 under `Docs/NetworkTests/TestMatrix03_26/`.
+- T19 (Windows run) and T20 (cross-network LAN) marked as planned external coverage.
+
+### Result
+- Assessment test evidence is complete and versioned.
+- Remaining open items: T07 desync investigation, T08 stale brick resolution, T09 high-impairment regression, T18 input-lead sweep follow-up — all tracked in the matrix.
+
+---
+
+## 2026-03-28 (768283b) – Fix Multiplayer Correctness Issues Found During Test Matrix Runs
+
+### Goal
+Address the correctness gaps surfaced by the structured test runs: stale client tile state under latency, prediction recovery using stale player flags, input sequence off-by-one, idempotent server handshake, and music lifecycle leak.
+
+### What landed
+- Fixed stale brick tile state on clients under higher latency: `applyExplosionResolvedTiles` now applies tile changes from `MsgExplosionResolved` in addition to the gameplay event, guarded by `shouldApplyGameplayEvent` to drop true duplicates.
+- Fixed `enterRecoveryFromReplayFailure` passing the live `currentState_.playerFlags` instead of the authoritative correction flags; now threads `authoritativePlayerFlags` through the call.
+- Fixed input sequence initialisation: `nextInputSeq` was starting at `0` instead of `kFirstInputSeq - 1`, causing the first sent input to land one sequence position too early.
+- Made duplicate `Hello` handling idempotent: server now replays the `Welcome` to an already-accepted peer rather than rejecting, so handshake recovery survives retransmission.
+- Fixed `nextConsumeServerTick` not including `inputLeadTicks` offset at lobby match-start; also fixed the late first-input realignment in `ServerSimulation` to respect the configured lead.
+- Added name truncation warning for oversized `Hello` names.
+- Improved unhandled-packet log from `TRACE` to `WARN` with message type, channel, and byte count.
+- Refreshed server flow diagnostics on lobby countdown cancel.
+- Fixed `LevelScene` music lifecycle: music now starts in `onEnter` and stops in `onExit` instead of starting unconditionally in the constructor, preventing audio leaking across scene transitions.
+- Removed the prediction `suspend()` call on input lock; locking input no longer interrupts the prediction timeline.
+
+### Validation
+- Rebuilt debug and release Linux targets.
+- Reran T08 (stale brick) and confirmed the tile state fix resolves the visible issue.
+
+---
+
+## 2026-03-28 (f8aec6b) – Clean Up Build System, Vendor Dependencies, And Toolchain
+
+### Goal
+Fix a broken fresh-clone build, eliminate accumulated dead config from iterative build work, and produce clean self-contained distribution packages for Linux and Windows.
+
+### What landed
+- Fixed broken fresh-clone: `third_party/json` and `third_party/spdlog` were untracked; any clone hit a `FATAL_ERROR` at configure time. Both vendored and committed. Completed the half-done `third_party/nlohmann → third_party/json` rename.
+- Committed `CMakePresets.json` and `cmake/toolchains/mingw64.cmake` which had never been added to git despite being essential.
+- Rewrote `CMakeLists.txt`: removed dead `FetchContent` fields (`GIT_REPOSITORY`, `GIT_TAG`), removed indirection variables (`ENET_LIB`, `SPDLOG_LIB`), removed dead `if(ENET_INCLUDE_DIR)` guard, folded include setup into a `foreach` loop, fixed `BOMBERMAN_SOURCE_DIR` to debug-only so release binaries no longer embed the developer source path, rewrote `BOMBERMAN_ENABLE_NET_DIAG` logic to the direct form, made `CPACK_GENERATOR` platform-conditional (TGZ Linux / ZIP Windows), made `CPACK_COMPONENTS_ALL` conditional so the Windows preset does not try to package a server that was never built, automated Windows DLL bundling via `install(FILES)` from `CMAKE_FIND_ROOT_PATH`, added enet `FOLDER ThirdParty` property, removed dead `CPACK_APPIMAGE_FILE_NAME`.
+- Restructured `CMakePresets.json`: consolidated four configure presets into three shared ones; client and server build presets now share a configured tree; added missing `linux-server-debug`; marked `base-ninja` hidden; added `displayName` to all presets; removed redundant `FETCHCONTENT_SOURCE_DIR_ENET` override from the Windows preset.
+- Suppressed enet `install()` rules from CPack output via `EXCLUDE_FROM_ALL`; enet static lib and headers were previously leaking into every distribution archive.
+- Removed `packages.config` (dead VS2015 NuGet legacy).
+- Removed `libenet-dev` and `libspdlog-dev` from CI apt step; bundled versions are always used.
+- Added `third_party/**` to `sonar.exclusions`.
+- Added `staging/` to `.gitignore`.
+- Added `HOW_TO_BUILD.md`.
+
+### Result
+- Fresh clone builds correctly on all four targets.
+- CPack produces `Bomberman-0.1.0-Linux-Client.tar.gz`, `Bomberman-0.1.0-Linux-Server.tar.gz`, and `Bomberman-0.1.0-win64-Client.zip` (self-contained with all runtime DLLs).
+
+---
+
 ## 2026-03-27 (cd6e56d) – Finish Feature Lock Polish And Lobby Reclaim
 
 ### Goal
