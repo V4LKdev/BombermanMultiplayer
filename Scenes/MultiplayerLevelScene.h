@@ -97,7 +97,7 @@ namespace bomberman
             SnapshotSample latestSnapshot{};
             MovementDirection facingDirection = MovementDirection::Right;
             float ticksSinceLatestSnapshot = 0.0f;
-            bool receivedSnapshotThisUpdate = false;
+            bool receivedSnapshotThisUpdate = false; ///< Set before `finalizeFrameUpdate()`; that same-frame interpolation pass clears it instead of aging the fresh sample.
             uint8_t effectFlags = 0;
         };
 
@@ -183,6 +183,11 @@ namespace bomberman
 
         /** @brief Applies one authoritative gameplay snapshot to local and remote scene state. */
         void applySnapshot(const net::MsgSnapshot& snapshot);
+        /** @brief Returns true when one reliable gameplay event is still newer than both applied snapshots and applied gameplay events. */
+        [[nodiscard]]
+        bool shouldApplyGameplayEvent(uint32_t gameplayEventTick, const char* gameplayEventName) const;
+        /** @brief Applies authoritative brick destruction from one explosion to the shared collision tile map. */
+        void applyExplosionResolvedTiles(const net::MsgExplosionResolved& explosion);
         /** @brief Ensures the local player's multiplayer color and tag match the assigned player ID. */
         void ensureLocalPresentation(uint8_t localId);
         /** @brief Seeds local player presentation from the assigned player-id spawn slot before the first snapshot/correction arrives. */
@@ -240,7 +245,7 @@ namespace bomberman
         void updateDeathBannerFlow();
         /** @brief Toggles local-player presentation visibility from authoritative alive state. */
         void setLocalPlayerAlivePresentation(bool alive);
-        /** @brief Toggles local-player control lock and disarms prediction while the authoritative lock is active. */
+        /** @brief Toggles local-player control lock and related local presentation state. */
         void setLocalPlayerInputLock(bool locked);
         /** @brief Repositions the local multiplayer tag above the current player sprite. */
         void updateLocalPlayerTagPosition();
@@ -285,7 +290,7 @@ namespace bomberman
         void applyBombPlacedEvent(const net::MsgBombPlaced& bombPlaced);
         /** @brief Applies one reliable authoritative explosion-resolution event to client world presentation. */
         void applyExplosionResolvedEvent(const net::MsgExplosionResolved& explosion);
-        /** @brief Removes one locally tracked brick presentation and updates collision tiles for that cell. */
+        /** @brief Removes one locally tracked brick presentation for that cell. */
         void destroyBrickPresentation(uint8_t col, uint8_t row);
         /** @brief Removes one bomb presentation immediately, if present. */
         void removeBombPresentation(uint8_t col, uint8_t row);

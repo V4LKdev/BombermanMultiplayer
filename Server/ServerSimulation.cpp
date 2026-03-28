@@ -61,6 +61,8 @@ namespace bomberman::server
             if (!matchPlayer.inputTimelineStarted)
             {
                 matchPlayer.inputTimelineStarted = true;
+                // The first input may arrive after the nominal unlock+lead deadline; realign to keep the configured
+                // lead buffer rather than walking forward on stale buttons.
                 matchPlayer.nextConsumeServerTick = state.serverTick + state.inputLeadTicks;
             }
 

@@ -99,6 +99,9 @@ namespace bomberman
                 applyBombPlacedEvent(gameplayEvent.bombPlaced);
                 break;
             case net::NetClient::GameplayEvent::EType::ExplosionResolved:
+                if (!shouldApplyGameplayEvent(gameplayEvent.explosionResolved.serverTick, "ExplosionResolved"))
+                    break;
+                applyExplosionResolvedTiles(gameplayEvent.explosionResolved);
                 applyExplosionResolvedEvent(gameplayEvent.explosionResolved);
                 break;
         }
@@ -157,6 +160,8 @@ namespace bomberman
         if (snapshot.serverTick <= lastAppliedSnapshotTick_)
             return;
 
+        // A late snapshot at the same tick as an already-applied reliable gameplay event is stale because the event may
+        // carry same-tick presentation deltas that snapshots do not preserve.
         if (snapshot.serverTick <= lastAppliedGameplayEventTick_)
         {
             LOG_NET_SNAPSHOT_DEBUG(
@@ -178,6 +183,37 @@ namespace bomberman
         applySnapshotBombs(snapshot);
         applySnapshotPowerups(snapshot);
         lastAppliedSnapshotTick_ = snapshot.serverTick;
+    }
+
+    bool MultiplayerLevelScene::shouldApplyGameplayEvent(const uint32_t gameplayEventTick,
+                                                         const char* const gameplayEventName) const
+    {
+        // Only drop true duplicates or regressions behind the newest applied gameplay event.
+        if (gameplayEventTick <= lastAppliedGameplayEventTick_)
+        {
+            LOG_NET_SNAPSHOT_DEBUG(
+                "Dropping stale {} tick={} because a newer gameplay event already applied lastGameplayEventTick={}",
+                gameplayEventName,
+                gameplayEventTick,
+                lastAppliedGameplayEventTick_);
+            return false;
+        }
+
+        return true;
+    }
+
+    void MultiplayerLevelScene::applyExplosionResolvedTiles(const net::MsgExplosionResolved& explosion)
+    {
+        for (uint8_t i = 0; i < explosion.destroyedBrickCount; ++i)
+        {
+            const auto& brickCell = explosion.destroyedBricks[i];
+            if (brickCell.row < tileArrayHeight &&
+                brickCell.col < tileArrayWidth &&
+                tiles[brickCell.row][brickCell.col] == Tile::Brick)
+            {
+                tiles[brickCell.row][brickCell.col] = Tile::Grass;
+            }
+        }
     }
 
     void MultiplayerLevelScene::seedLocalSpawnFromAssignedPlayerId()
@@ -208,6 +244,7 @@ namespace bomberman
         }
 
         const auto replayResult = localPrediction_.reconcileAndReplay(correction, tiles);
+        // Correction flags refresh owner-local effect/loadout state only; death/input-lock presentation still comes from snapshot/event authority.
         localPlayerEffectFlags_ = correction.playerFlags;
         if (replayResult.ignoredStaleCorrection)
         {
@@ -515,7 +552,6 @@ namespace bomberman
 
     void MultiplayerLevelScene::setLocalPlayerInputLock(const bool locked)
     {
-        const bool wasLocked = localPlayerInputLocked_;
         localPlayerInputLocked_ = locked;
         if (locked)
         {
@@ -527,10 +563,6 @@ namespace bomberman
 
         if (localPlayerInputLocked_)
         {
-            if (!wasLocked && game->isPredictionEnabled())
-            {
-                localPrediction_.suspend();
-            }
             player->setMovementDirection(MovementDirection::None);
         }
     }

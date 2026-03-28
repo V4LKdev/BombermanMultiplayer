@@ -225,9 +225,14 @@ namespace bomberman
         net::MsgMatchResult matchResult{};
         if (netClient.tryGetLatestMatchResult(matchResult) && matchResult.matchId == matchId_)
         {
+            const bool firstResultForThisMatch = !currentMatchResult_.has_value();
             currentMatchResult_ = matchResult;
             gameplayUnlocked_ = false;
             setGameplayConnectionDegraded(false);
+            if (firstResultForThisMatch && menuMusic != nullptr)
+            {
+                menuMusic->stop();
+            }
         }
 
         if (!currentMatchResult_.has_value())

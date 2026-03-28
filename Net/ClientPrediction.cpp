@@ -190,6 +190,7 @@ namespace bomberman::net
 
     void ClientPrediction::enterRecoveryFromReplayFailure(const sim::TilePos authoritativePosQ,
                                                           const uint32_t lastProcessedInputSeq,
+                                                          const uint8_t authoritativePlayerFlags,
                                                           CorrectionReplayResult& result,
                                                           const bool wasRecovering) noexcept
     {
@@ -197,7 +198,7 @@ namespace bomberman::net
          * The retained suffix is no longer complete enough to rebuild safely.
          * Fall back to authoritative presentation until a later correction catches up.
          */
-        setCurrentAuthoritativeState(authoritativePosQ, 0, currentState_.playerFlags);
+        setCurrentAuthoritativeState(authoritativePosQ, 0, authoritativePlayerFlags);
         invalidateStateHistoryRange(lastProcessedInputSeq + 1u, lastRecordedInputSeq_);
 
         phase_ = PredictionPhase::Recovering;
@@ -267,7 +268,11 @@ namespace bomberman::net
             return;
 
         /* If replay fails here, the retained input suffix is incomplete. */
-        enterRecoveryFromReplayFailure(authoritativePosQ, lastProcessedInputSeq, result, false);
+        enterRecoveryFromReplayFailure(authoritativePosQ,
+                                       lastProcessedInputSeq,
+                                       authoritativePlayerFlags,
+                                       result,
+                                       false);
     }
 
     void ClientPrediction::handleRecoveringCorrection(const uint32_t lastProcessedInputSeq,
@@ -299,7 +304,11 @@ namespace bomberman::net
             return;
         }
 
-        enterRecoveryFromReplayFailure(authoritativePosQ, lastProcessedInputSeq, result, true);
+        enterRecoveryFromReplayFailure(authoritativePosQ,
+                                       lastProcessedInputSeq,
+                                       authoritativePlayerFlags,
+                                       result,
+                                       true);
     }
 
     void ClientPrediction::handleActiveCorrection(const uint32_t lastProcessedInputSeq,
@@ -317,7 +326,11 @@ namespace bomberman::net
                                             result))
             return;
 
-        enterRecoveryFromReplayFailure(authoritativePosQ, lastProcessedInputSeq, result, false);
+        enterRecoveryFromReplayFailure(authoritativePosQ,
+                                       lastProcessedInputSeq,
+                                       authoritativePlayerFlags,
+                                       result,
+                                       false);
     }
 
     void ClientPrediction::measureCorrectionAtAck(const uint32_t lastProcessedInputSeq,

@@ -40,6 +40,9 @@ namespace bomberman
 
         virtual ~LevelScene() override = default;
 
+        void onEnter() override;
+        void onExit() override;
+
         /** @brief Returns the field transform needed to map tile-Q8 world coords to screen pixels. */
         [[nodiscard]]
         FieldTransform getFieldTransform() const

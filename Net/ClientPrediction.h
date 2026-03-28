@@ -183,6 +183,7 @@ namespace bomberman::net
         /** @brief Switches prediction into authoritative recovery mode after replay failed. */
         void enterRecoveryFromReplayFailure(sim::TilePos authoritativePosQ,
                                             uint32_t lastProcessedInputSeq,
+                                            uint8_t authoritativePlayerFlags,
                                             CorrectionReplayResult& result,
                                             bool wasRecovering) noexcept;
         /** @brief Applies a correction baseline and replays the retained suffix after it. */

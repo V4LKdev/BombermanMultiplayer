@@ -76,7 +76,11 @@ namespace bomberman::server
 
         if (!gDispatcher.dispatch(ctx, header, payload, payloadSize))
         {
-            LOG_NET_PACKET_TRACE("No handler for message type 0x{:02x}", static_cast<int>(header.type));
+            LOG_NET_PACKET_WARN("No handler for incoming {} (type=0x{:02x}, channel={}, bytes={})",
+                                msgTypeName(header.type),
+                                static_cast<int>(header.type),
+                                channelName(channelId),
+                                dataLength);
             state.diag.recordPacketRecv(header.type,
                                         ctx.recordedPlayerId.value_or(0xFF),
                                         channelId,

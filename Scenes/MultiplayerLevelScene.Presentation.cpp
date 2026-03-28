@@ -5,6 +5,7 @@
 
 #include "Scenes/MultiplayerLevelSceneInternal.h"
 
+#include <cassert>
 #include <cmath>
 #include <iomanip>
 #include <memory>
@@ -398,9 +399,24 @@ namespace bomberman
 
             if (entry.playerId == localId)
             {
-                localPlayerEffectFlags_ = rawFlags;
+                const bool shouldSuspendPredictionForLock =
+                    inputLocked &&
+                    !localPlayerInputLocked_ &&
+                    player &&
+                    game->isPredictionEnabled();
+                if (snapshot.serverTick >= lastAppliedCorrectionTick_)
+                {
+                    // Snapshot wins when it is same-tick or newer than the latest correction, but older snapshots must not
+                    // roll owner-local effect/loadout flags back behind a newer correction.
+                    localPlayerEffectFlags_ = rawFlags;
+                }
+                // Owner death/input-lock presentation remains snapshot/reliable-event authoritative rather than correction-owned.
                 setLocalPlayerAlivePresentation(alive);
                 setLocalPlayerInputLock(inputLocked);
+                if (shouldSuspendPredictionForLock)
+                {
+                    localPrediction_.suspend();
+                }
                 if (alive)
                 {
                     applyAuthoritativeLocalSnapshot(entry);
@@ -659,24 +675,6 @@ namespace bomberman
 
     void MultiplayerLevelScene::applyBombPlacedEvent(const net::MsgBombPlaced& bombPlaced)
     {
-        if (bombPlaced.serverTick < lastAppliedSnapshotTick_)
-        {
-            LOG_NET_SNAPSHOT_DEBUG("Dropping stale BombPlaced tick={} lastSnapshotTick={} lastGameplayEventTick={}",
-                                   bombPlaced.serverTick,
-                                   lastAppliedSnapshotTick_,
-                                   lastAppliedGameplayEventTick_);
-            return;
-        }
-
-        if (bombPlaced.serverTick < lastAppliedGameplayEventTick_)
-        {
-            LOG_NET_SNAPSHOT_DEBUG("Dropping stale BombPlaced tick={} lastSnapshotTick={} lastGameplayEventTick={}",
-                                   bombPlaced.serverTick,
-                                   lastAppliedSnapshotTick_,
-                                   lastAppliedGameplayEventTick_);
-            return;
-        }
-
         net::MsgSnapshot::BombEntry entry{};
         entry.ownerId = bombPlaced.ownerId;
         entry.col = bombPlaced.col;
@@ -688,26 +686,6 @@ namespace bomberman
 
     void MultiplayerLevelScene::applyExplosionResolvedEvent(const net::MsgExplosionResolved& explosion)
     {
-        if (explosion.serverTick < lastAppliedSnapshotTick_)
-        {
-            LOG_NET_SNAPSHOT_DEBUG(
-                "Dropping stale ExplosionResolved tick={} lastSnapshotTick={} lastGameplayEventTick={}",
-                explosion.serverTick,
-                lastAppliedSnapshotTick_,
-                lastAppliedGameplayEventTick_);
-            return;
-        }
-
-        if (explosion.serverTick < lastAppliedGameplayEventTick_)
-        {
-            LOG_NET_SNAPSHOT_DEBUG(
-                "Dropping stale ExplosionResolved tick={} lastSnapshotTick={} lastGameplayEventTick={}",
-                explosion.serverTick,
-                lastAppliedSnapshotTick_,
-                lastAppliedGameplayEventTick_);
-            return;
-        }
-
         removeBombPresentation(explosion.originCol, explosion.originRow);
 
         for (uint8_t i = 0; i < explosion.destroyedBrickCount; ++i)
@@ -734,7 +712,15 @@ namespace bomberman
 
             if (localPlayerId_.has_value() && localPlayerId_.value() == playerId)
             {
+                const bool shouldSuspendPredictionForDeath =
+                    !localPlayerInputLocked_ &&
+                    player &&
+                    game->isPredictionEnabled();
                 setLocalPlayerInputLock(true);
+                if (shouldSuspendPredictionForDeath)
+                {
+                    localPrediction_.suspend();
+                }
                 setLocalPlayerAlivePresentation(false);
                 continue;
             }
@@ -754,11 +740,6 @@ namespace bomberman
             if (it->second)
                 removeObject(it->second);
             brickPresentations_.erase(it);
-        }
-
-        if (row < tileArrayHeight && col < tileArrayWidth && tiles[row][col] == Tile::Brick)
-        {
-            tiles[row][col] = Tile::Grass;
         }
     }
 
@@ -962,6 +943,9 @@ namespace bomberman
                 return gameplayEvent.explosionResolved.serverTick;
         }
 
+        LOG_NET_SNAPSHOT_WARN("Unhandled gameplay event type={} - treating serverTick as 0",
+                              static_cast<unsigned int>(gameplayEvent.type));
+        assert(false && "Unhandled gameplay event type");
         return 0;
     }
 

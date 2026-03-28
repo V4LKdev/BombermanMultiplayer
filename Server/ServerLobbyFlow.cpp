@@ -130,6 +130,7 @@ namespace bomberman::server::flow_internal
         state.currentLobbyCountdownDeadlineTick = 0;
         state.currentLobbyCountdownLastBroadcastSecond = 0;
         broadcastLobbyState(state);
+        refreshServerFlowDiagnostics(state);
         LOG_SERVER_INFO("Lobby countdown cancelled ({})", reason);
     }
 
@@ -230,7 +231,8 @@ namespace bomberman::server::flow_internal
                 continue;
 
             matchEntry->inputTimelineStarted = true;
-            matchEntry->nextConsumeServerTick = matchStart.unlockServerTick;
+            // The first authoritative consume deadline is offset from gameplay unlock by the configured input lead.
+            matchEntry->nextConsumeServerTick = matchStart.unlockServerTick + state.inputLeadTicks;
         }
 
         net::flush(state.host);
@@ -453,6 +455,38 @@ namespace bomberman::server
             resetRoundRuntimeToLobby(state);
             refreshServerFlowDiagnostics(state);
             LOG_SERVER_INFO("Round state reset to lobby after the last player disconnected");
+            return;
+        }
+
+        if (state.phase == ServerPhase::InMatch)
+        {
+            uint8_t activePlayerCount = 0;
+            uint8_t alivePlayerCount = 0;
+            std::optional<uint8_t> survivingPlayerId{};
+
+            for (const auto& matchEntry : state.matchPlayers)
+            {
+                if (!matchEntry.has_value())
+                    continue;
+
+                ++activePlayerCount;
+                if (!matchEntry->alive)
+                    continue;
+
+                ++alivePlayerCount;
+                survivingPlayerId = matchEntry->playerId;
+            }
+
+            // Mid-match reconnect is unsupported, so once a disconnect leaves the remaining round state decided,
+            // end the round immediately instead of letting one more simulation tick mutate gameplay world state.
+            if (activePlayerCount > 0 && alivePlayerCount <= 1)
+            {
+                beginEndOfMatch(state,
+                                (alivePlayerCount == 1) ? survivingPlayerId : std::nullopt,
+                                alivePlayerCount == 0,
+                                activePlayerCount,
+                                alivePlayerCount);
+            }
         }
     }
 } // namespace bomberman::server

@@ -21,7 +21,26 @@ namespace bomberman
         scaledTileSize = static_cast<int>(std::round(scale * tileSize));
 
         menuMusic = std::make_shared<Music>(game->getAssetManager()->getMusic(MusicEnum::Level));
-        menuMusic->play();
+    }
+
+    void LevelScene::onEnter()
+    {
+        Scene::onEnter();
+
+        if (menuMusic != nullptr)
+        {
+            menuMusic->play();
+        }
+    }
+
+    void LevelScene::onExit()
+    {
+        if (menuMusic != nullptr)
+        {
+            menuMusic->stop();
+        }
+
+        Scene::onExit();
     }
 
     void LevelScene::initializeLevelWorld(std::optional<uint32_t> mapSeed)

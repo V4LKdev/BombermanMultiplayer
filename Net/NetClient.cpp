@@ -134,8 +134,8 @@ namespace bomberman::net
         ENetPeer* peer = nullptr;
         PacketDispatcher<NetClient> dispatcher;
 
-        // Input sequencing and history for resendable batches.
-        uint32_t nextInputSeq = 0;
+        // Store the next seq as first-valid minus one so the first sent input is exactly kFirstInputSeq.
+        uint32_t nextInputSeq = kFirstInputSeq - 1u;
         uint8_t inputHistory[kMaxInputBatchSize]{};
 
         // Async connect and handshake state. Cleared by clearSessionState().
@@ -583,7 +583,7 @@ namespace bomberman::net
             return;
         }
 
-        impl_->nextInputSeq = 0;
+        impl_->nextInputSeq = kFirstInputSeq - 1u;
         std::memset(impl_->inputHistory, 0, sizeof(impl_->inputHistory));
     }
 

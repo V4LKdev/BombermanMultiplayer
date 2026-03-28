@@ -203,6 +203,35 @@ namespace bomberman::server
         }
 
         [[nodiscard]]
+        bool resendWelcomeToAcceptedPeer(PacketDispatchContext& ctx, const uint8_t playerId)
+        {
+            MsgWelcome welcome{};
+            welcome.protocolVersion = kProtocolVersion;
+            welcome.playerId = playerId;
+            welcome.serverTickRate = sim::kTickRate;
+
+            if (!queueReliableControl(ctx.peer, makeWelcomePacket(welcome)))
+            {
+                LOG_NET_CONN_WARN("Failed to re-send Welcome to accepted playerId={} peer={}",
+                                  playerId,
+                                  ctx.peer->incomingPeerID);
+                recordControlPacketSent(ctx,
+                                        EMsgType::Welcome,
+                                        playerId,
+                                        kMsgWelcomeSize,
+                                        NetPacketResult::Dropped);
+                ctx.receiveResult = NetPacketResult::Dropped;
+                return false;
+            }
+
+            LOG_NET_CONN_DEBUG("Re-sent Welcome to accepted playerId={} peer={}", playerId, ctx.peer->incomingPeerID);
+            recordControlPacketSent(ctx, EMsgType::Welcome, playerId, kMsgWelcomeSize);
+            flush(ctx.state.host);
+            ctx.receiveResult = NetPacketResult::Ok;
+            return true;
+        }
+
+        [[nodiscard]]
         MsgLobbyState buildLobbyState(const ServerState& state)
         {
             MsgLobbyState lobbyState{};
@@ -322,9 +351,19 @@ namespace bomberman::server
     {
         if (hasAcceptedPlayer(ctx.peer))
         {
-            LOG_NET_CONN_DEBUG("Duplicate Hello from already-handshaked peer {} - ignoring", ctx.peer->incomingPeerID);
-            ctx.receiveResult = NetPacketResult::Rejected;
+            // Duplicate Hello replays the existing Welcome so handshake recovery stays idempotent.
             ctx.recordedPlayerId = acceptedPlayerId(ctx.peer);
+            if (ctx.recordedPlayerId.has_value())
+            {
+                if (!resendWelcomeToAcceptedPeer(ctx, ctx.recordedPlayerId.value()))
+                {
+                    return;
+                }
+            }
+            else
+            {
+                ctx.receiveResult = NetPacketResult::Rejected;
+            }
             return;
         }
 
@@ -345,6 +384,14 @@ namespace bomberman::server
             ctx.receiveResult = NetPacketResult::Rejected;
             sendReject(ctx, MsgReject::EReason::VersionMismatch);
             return;
+        }
+
+        if (boundedStrLen(reinterpret_cast<const char*>(payload + 2), kPlayerNameMax) == kPlayerNameMax)
+        {
+            LOG_NET_PROTO_WARN("Hello name from peer {} exceeded the {}-byte field and was truncated to \"{}\"",
+                               ctx.peer->incomingPeerID,
+                               kPlayerNameMax - 1,
+                               msgHello.name);
         }
 
         const std::string_view playerName(msgHello.name, boundedStrLen(msgHello.name, kPlayerNameMax));
