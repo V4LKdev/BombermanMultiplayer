@@ -5,21 +5,21 @@
 
 This is the core of the client networking work.
 It is the layer that turns server-driven multiplayer state into something the game can actually use:
- - `NetClient` handles transport, handshake, message intake, and cached authoritative state
- - `ClientPrediction` handles owner-local prediction, replay, and recovery after correction
- - `ClientDiagnostics` records what happened so networking behavior can be inspected and tested
+- `NetClient` handles transport, handshake, message intake, and cached authoritative state
+- `ClientPrediction` handles owner-local prediction, replay, and recovery after correction
+- `ClientDiagnostics` records what happened so networking behavior can be inspected and tested
 
 The important design boundary to understand:
- - this subsystem owns multiplayer netcode behavior on the client 
- - `MultiplayerLevelScene` owns presentation and match scene flow.
+- this subsystem owns multiplayer netcode behavior on the client
+- `MultiplayerLevelScene` owns presentation and match scene flow
 
 ---
 ## Design Rationale
 
 The client has to do three things at once:
- - stay connected to an authoritative server
- - feel responsive for the owning player
- - stay debuggable when prediction or delivery goes wrong
+- stay connected to an authoritative server
+- feel responsive for the owning player
+- stay debuggable when prediction or delivery goes wrong
 
 ## System View
 
@@ -38,6 +38,20 @@ The scene reads authoritative state from `NetClient`, while prediction and diagn
 `NetClient` stays one class, but its implementation is split by concern: connection, runtime, and protocol/cache handling.
 
 Relevant code:
-- [Net/Client](/home/valk/Projects/University/Bomberman/Net/Client)
-- [Net/Client/ClientPrediction.h](/home/valk/Projects/University/Bomberman/Net/Client/ClientPrediction.h)
-- [Net/ClientDiagnostics.h](/home/valk/Projects/University/Bomberman/Net/ClientDiagnostics.h)
+- `Net/Client/NetClient.h` - main client netcode class and public API
+- `Net/Client/NetClient.cpp` - top-level implementation entry point
+- `Net/Client/NetClient.Connection.cpp` - connection lifecycle and transport setup/teardown
+- `Net/Client/NetClient.Runtime.cpp` - runtime API, outgoing input, and live session behavior
+- `Net/Client/NetClient.Protocol.cpp` - protocol handlers, packet intake, and cached authoritative state
+- `Net/Client/ClientPrediction.h` - owner-local prediction and correction logic
+- `Net/Client/ClientPrediction.cpp` - prediction implementation
+- `Net/ClientDiagnostics.h` - telemetry recording for client netcode behavior
+- `Net/ClientDiagnostics.cpp` - diagnostics implementation
+
+<div class="section_buttons">
+
+| Previous | Next |
+|:--|--:|
+| [Networking](networking.md) | <a href="group__multiplayer__level__scene.html">Multiplayer Level Scene</a> |
+
+</div>

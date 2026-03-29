@@ -49,11 +49,12 @@ HTML_COLORSTYLE        = LIGHT
 HTML_DYNAMIC_MENUS     = YES
 DISABLE_INDEX          = NO
 FULL_SIDEBAR           = NO
-TREEVIEW_WIDTH         = 260
+TREEVIEW_WIDTH         = 335
 HTML_HEADER            = docs/theme/header.html
+PAGE_OUTLINE_PANEL     = NO
 
 MARKDOWN_SUPPORT       = YES
-TOC_INCLUDE_HEADINGS   = 0
+TOC_INCLUDE_HEADINGS   = 2
 AUTOLINK_SUPPORT       = YES
 IMAGE_PATH             = docs/assets
 
@@ -65,6 +66,7 @@ GENERATE_TREEVIEW      = YES
 SEARCHENGINE           = YES
 
 HAVE_DOT               = YES
+DOT_IMAGE_FORMAT       = svg
 CLASS_GRAPH            = YES
 COLLABORATION_GRAPH    = NO
 GROUP_GRAPHS           = NO
@@ -79,6 +81,7 @@ HTML_EXTRA_STYLESHEET  = docs/theme/doxygen-awesome.css \
                          docs/theme/doxygen-awesome-sidebar-only-darkmode-toggle.css \
                          docs/theme/custom.css
 HTML_EXTRA_FILES       = docs/theme/doxygen-awesome-darkmode-toggle.js \
+                         docs/theme/doxygen-awesome-interactive-toc.js \
                          docs/theme/image-modal.js \
                          docs/assets/diagrams/multiplayer-level-scene-structure-light.svg \
                          docs/assets/diagrams/multiplayer-level-scene-structure-dark.svg \
@@ -87,4 +90,8 @@ HTML_EXTRA_FILES       = docs/theme/doxygen-awesome-darkmode-toggle.js \
                          docs/assets/diagrams/net-client-boundaries-light.svg \
                          docs/assets/diagrams/net-client-boundaries-dark.svg \
                          docs/assets/diagrams/net-client-structure-light.svg \
-                         docs/assets/diagrams/net-client-structure-dark.svg
+                         docs/assets/diagrams/net-client-structure-dark.svg \
+                         docs/assets/diagrams/networking-bootstrap-flow-light.svg \
+                         docs/assets/diagrams/networking-bootstrap-flow-dark.svg \
+                         docs/assets/diagrams/networking-packet-correction-light.svg \
+                         docs/assets/diagrams/networking-packet-correction-dark.svg

@@ -3,13 +3,13 @@
 \defgroup multiplayer_level_scene Multiplayer Level Scene
 \brief Client-side multiplayer match orchestration and presentation subsystem.
 
-This subsystem is the client-side runtime for a multiplayer match. 
+This subsystem is the client-side runtime for a multiplayer match.
 It extends the shared `LevelScene` gameplay scaffold with:
- - authoritative networking
- - prediction-aware local control
- - remote player 
- - world presentation 
- - the scene flow around match bootstrap, active play, results, and exit handling
+- authoritative networking
+- prediction-aware local control
+- remote player presentation
+- world presentation
+- the scene flow around match bootstrap, active play, results, and exit handling
 
 In practice, this is the point where raw network state becomes the playable and visible multiplayer game.
 
@@ -40,6 +40,18 @@ Each frame applies local correction first, then merges authoritative state, then
 - Match flow, banners, and scene transitions are handled here.
 
 Relevant code:
-- [Scenes/MultiplayerLevelScene](/home/valk/Projects/University/Bomberman/Scenes/MultiplayerLevelScene)
-- [Scenes/MultiplayerLevelScene/MultiplayerLevelScene.cpp](/home/valk/Projects/University/Bomberman/Scenes/MultiplayerLevelScene/MultiplayerLevelScene.cpp)
-- [Scenes/MultiplayerLevelScene/MultiplayerLevelScene.Authority.cpp](/home/valk/Projects/University/Bomberman/Scenes/MultiplayerLevelScene/MultiplayerLevelScene.Authority.cpp)
+- `Scenes/MultiplayerLevelScene/`
+- `Scenes/MultiplayerLevelScene/MultiplayerLevelScene.cpp`
+- `Scenes/MultiplayerLevelScene/MultiplayerLevelScene.Authority.cpp`
+- `Scenes/MultiplayerLevelScene/MultiplayerLevelScene.Presentation.cpp`
+- `Scenes/MultiplayerLevelScene/MultiplayerLevelScene.RemotePresentation.cpp`
+- `Scenes/MultiplayerLevelScene/MultiplayerLevelScene.WorldPresentation.cpp`
+- `Scenes/MultiplayerLevelScene/MultiplayerLevelScene.Telemetry.cpp`
+
+<div class="section_buttons">
+
+| Previous | Next |
+|:--|--:|
+| <a href="group__net__client.html">Client Multiplayer Netcode</a> | [Testing](testing.md) |
+
+</div>
