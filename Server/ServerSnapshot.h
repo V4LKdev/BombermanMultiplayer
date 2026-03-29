@@ -5,6 +5,7 @@
 
 /**
  * @file ServerSnapshot.h
+ * @ingroup authoritative_server
  * @brief Authoritative snapshot cadence and connected-client snapshot construction helpers.
  */
 
@@ -14,23 +15,14 @@ namespace bomberman::server
 
     struct ServerState;
 
-    /**
-     * @brief Returns `true` when the current server tick should broadcast a snapshot.
-     *
-     * @note A snapshot interval of 0 disables snapshot broadcast.
-     */
+    /** @brief Returns `true` when the current tick should broadcast a snapshot. */
     [[nodiscard]]
     bool shouldBroadcastSnapshot(const ServerState& state);
 
     /**
-     * @brief Builds a `MsgSnapshot` from the current authoritative round state.
+     * @brief Builds a `MsgSnapshot` from the current round state.
      *
-     * Packs active `matchPlayers` plus active bombs into the payload.
-     *
-     * @note This snapshot is intentionally not a full round-state rebuild
-     * payload. It does not encode tile destruction, round-result state, or
-     * enough data to reconstruct an in-progress authoritative world after a
-     * disconnect.
+     * Packs active `matchPlayers`, bombs, and revealed powerups into the payload.
      */
     [[nodiscard]]
     net::MsgSnapshot buildSnapshot(const ServerState& state);

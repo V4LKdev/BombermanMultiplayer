@@ -1,5 +1,6 @@
 PROJECT_NAME           = "Bomberman Multiplayer"
 PROJECT_BRIEF          = "Authoritative multiplayer networking layer for Bomberman."
+PROJECT_LOGO           = docs/assets/logo-dark.svg
 OUTPUT_DIRECTORY       = build/docs-doxygen
 OUTPUT_LANGUAGE        = English
 USE_MDFILE_AS_MAINPAGE = README.md
@@ -22,6 +23,7 @@ INPUT                  = README.md \
                          docs/architecture.md \
                          docs/net-client.md \
                          docs/multiplayer-level-scene.md \
+                         docs/server.md \
                          docs/networking.md \
                          docs/testing.md \
                          docs/reference.md \
@@ -83,6 +85,7 @@ HTML_EXTRA_STYLESHEET  = docs/theme/doxygen-awesome.css \
 HTML_EXTRA_FILES       = docs/theme/doxygen-awesome-darkmode-toggle.js \
                          docs/theme/doxygen-awesome-interactive-toc.js \
                          docs/theme/image-modal.js \
+                         docs/assets/logo-light.svg \
                          docs/assets/diagrams/multiplayer-level-scene-structure-light.svg \
                          docs/assets/diagrams/multiplayer-level-scene-structure-dark.svg \
                          docs/assets/diagrams/multiplayer-level-scene-runtime-flow-light.svg \
@@ -94,4 +97,8 @@ HTML_EXTRA_FILES       = docs/theme/doxygen-awesome-darkmode-toggle.js \
                          docs/assets/diagrams/networking-bootstrap-flow-light.svg \
                          docs/assets/diagrams/networking-bootstrap-flow-dark.svg \
                          docs/assets/diagrams/networking-packet-correction-light.svg \
-                         docs/assets/diagrams/networking-packet-correction-dark.svg
+                         docs/assets/diagrams/networking-packet-correction-dark.svg \
+                         docs/assets/diagrams/server-state-player-layers-light.svg \
+                         docs/assets/diagrams/server-state-player-layers-dark.svg \
+                         docs/assets/diagrams/server-flow-state-light.svg \
+                         docs/assets/diagrams/server-flow-state-dark.svg

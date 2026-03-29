@@ -48,7 +48,12 @@ $extrastylesheet
  <tbody>
  <tr id="projectrow">
   <!--BEGIN PROJECT_LOGO-->
-  <td id="projectlogo"><img alt="Logo" src="$relpath^$projectlogo"$logosize/></td>
+  <td id="projectlogo">
+    <div class="project-logo-swap">
+      <img class="project-logo-light" alt="Logo" src="$relpath^logo-light.svg"$logosize/>
+      <img class="project-logo-dark" alt="Logo" src="$relpath^$projectlogo"$logosize/>
+    </div>
+  </td>
   <!--END PROJECT_LOGO-->
   <!--BEGIN PROJECT_NAME-->
   <td id="projectalign">

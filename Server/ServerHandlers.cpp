@@ -1,5 +1,6 @@
 /**
  * @file ServerHandlers.cpp
+ * @ingroup authoritative_server
  * @brief Authoritative server receive-path validation and dispatcher entry point.
  */
 
@@ -15,13 +16,6 @@ namespace bomberman::server
     namespace
     {
         [[nodiscard]]
-        std::optional<uint8_t> acceptedPlayerId(const ENetPeer* peer)
-        {
-            const auto* session = getPeerSession(peer);
-            return (session != nullptr) ? session->playerId : std::nullopt;
-        }
-
-        [[nodiscard]]
         PacketDispatcher<PacketDispatchContext> makeServerDispatcher()
         {
             PacketDispatcher<PacketDispatchContext> dispatcher{};
@@ -34,6 +28,12 @@ namespace bomberman::server
 
         const PacketDispatcher<PacketDispatchContext> gDispatcher = makeServerDispatcher();
     } // namespace
+
+    std::optional<uint8_t> acceptedPlayerId(const ENetPeer* peer)
+    {
+        const auto* session = getPeerSession(peer);
+        return (session != nullptr) ? session->playerId : std::nullopt;
+    }
 
     void handleReceiveEvent(const ENetEvent& event, ServerState& state)
     {

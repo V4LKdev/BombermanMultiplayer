@@ -1,5 +1,6 @@
 /**
  * @file ServerMatchFlow.cpp
+ * @ingroup authoritative_server
  * @brief Authoritative in-match result and return-to-lobby helpers.
  */
 
@@ -17,6 +18,17 @@ namespace bomberman::server
 
     namespace
     {
+        void lockActiveMatchInputs(ServerState& state)
+        {
+            for (auto& matchEntry : state.matchPlayers)
+            {
+                if (matchEntry.has_value())
+                {
+                    matchEntry->inputLocked = true;
+                }
+            }
+        }
+
         [[nodiscard]]
         std::string_view winnerDisplayName(const ServerState& state, const uint8_t playerId)
         {
@@ -103,14 +115,7 @@ namespace bomberman::server
             }
         }
 
-        for (auto& matchEntry : state.matchPlayers)
-        {
-            if (matchEntry.has_value())
-            {
-                matchEntry->inputLocked = true;
-            }
-        }
-
+        lockActiveMatchInputs(state);
         sendMatchResultToParticipants(state);
 
         if (state.roundEndedInDraw)

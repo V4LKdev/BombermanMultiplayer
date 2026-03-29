@@ -15,7 +15,9 @@ This page explains the system-level contract and message flow:
 - where to look next for deeper integration details
 
 \note
-For deeper implementation detail, see @ref net_client "Client Multiplayer Netcode"
+For deeper implementation detail, see
+@ref authoritative_server "Authoritative Server",
+@ref net_client "Client Multiplayer Netcode",
 and @ref multiplayer_level_scene "Multiplayer Level Scene".
 
 ## Core Design

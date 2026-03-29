@@ -1,5 +1,6 @@
 /**
  * @file ServerBombs.cpp
+ * @ingroup authoritative_server
  * @brief Authoritative server-side bomb placement, explosion, and lifecycle logic.
  */
 
@@ -20,11 +21,9 @@ namespace bomberman::server
 {
     namespace
     {
-        /** @brief Maximum number of blast cells produced by one cross-shaped explosion. */
         constexpr std::size_t kMaxBlastCellsPerBomb = kMaxExplosionBlastCells;
         constexpr std::size_t kMaxDestroyedBricksPerBomb = kMaxExplosionDestroyedBricks;
 
-        /** @brief Broadcasts one reliable gameplay packet to every accepted match player. */
         template<std::size_t N>
         bool broadcastReliableGameplayPacket(ServerState& state,
                                              const std::array<uint8_t, N>& bytes,
@@ -54,7 +53,6 @@ namespace bomberman::server
             return anyQueued;
         }
 
-        /** @brief Returns true when the current authoritative buttons contain a new bomb-press edge. */
         [[nodiscard]]
         bool hasBombPlacementEdge(const MatchPlayerState& matchPlayer)
         {
@@ -63,7 +61,6 @@ namespace bomberman::server
             return bombHeldNow && !bombHeldLastTick;
         }
 
-        /** @brief Converts an authoritative player center position into the occupied tile cell. */
         [[nodiscard]]
         std::optional<BombCell> bombCellFromPlayerPosition(const sim::TilePos& pos)
         {
@@ -82,7 +79,6 @@ namespace bomberman::server
             };
         }
 
-        /** @brief Returns true when no active bomb currently occupies the given tile cell. */
         [[nodiscard]]
         bool isBombCellUnoccupied(const ServerState& state, const BombCell& cell)
         {
@@ -98,7 +94,6 @@ namespace bomberman::server
             return true;
         }
 
-        /** @brief Returns a free authoritative bomb slot, or `std::nullopt` when capacity is exhausted. */
         [[nodiscard]]
         std::optional<std::size_t> findFreeBombSlot(const ServerState& state)
         {
@@ -111,7 +106,6 @@ namespace bomberman::server
             return std::nullopt;
         }
 
-        /** @brief Returns true when one active match player overlaps the full tile area of a blast cell. */
         [[nodiscard]]
         bool playerOverlapsBlastCell(const MatchPlayerState& matchPlayer, const BombCell& cell)
         {
@@ -131,7 +125,6 @@ namespace bomberman::server
                    playerBottomQ > tileTopQ;
         }
 
-        /** @brief Returns the active authoritative match player for one player id, if present. */
         [[nodiscard]]
         MatchPlayerState* findMatchPlayerState(ServerState& state, const uint8_t playerId)
         {
@@ -142,7 +135,6 @@ namespace bomberman::server
             return entry.has_value() ? &entry.value() : nullptr;
         }
 
-        /** @brief Decrements the active-bomb count for the owner of one resolved bomb, if still present. */
         void releaseBombOwnership(ServerState& state, const BombState& bomb)
         {
             MatchPlayerState* owner = findMatchPlayerState(state, bomb.ownerId);
@@ -152,7 +144,6 @@ namespace bomberman::server
             --owner->activeBombCount;
         }
 
-        /** @brief Appends one blast cell if it is not already present in the current blast set. */
         void appendUniqueBlastCell(std::array<BombCell, kMaxBlastCellsPerBomb>& blastCells,
                                    std::size_t& blastCellCount,
                                    const BombCell cell)
@@ -167,12 +158,7 @@ namespace bomberman::server
                 blastCells[blastCellCount++] = cell;
         }
 
-        /**
-         * @brief Computes the cross-shaped blast cells for one detonation against a read-only tile view.
-         *
-         * Bricks are included in the returned blast set and then stop propagation in that
-         * direction. Stone blocks are not included and also stop propagation.
-         */
+        /** @brief Computes the blast cells and destroyed bricks for one detonation. */
         void computeBlastCellsAndCollectDestroyedBricks(const sim::TileMap& tiles,
                                                         const BombState& bomb,
                                                         std::array<BombCell, kMaxBlastCellsPerBomb>& outBlastCells,
@@ -225,7 +211,6 @@ namespace bomberman::server
             }
         }
 
-        /** @brief Keeps only brick cells that are still intact in the live authoritative tile map. */
         void retainCurrentlyIntactBricks(const sim::TileMap& liveTiles,
                                          std::array<BombCell, kMaxDestroyedBricksPerBomb>& destroyedBricks,
                                          std::size_t& destroyedBrickCount)
@@ -243,7 +228,6 @@ namespace bomberman::server
             destroyedBrickCount = writeIndex;
         }
 
-        /** @brief Applies one authoritative list of destroyed bricks to the live tile map. */
         void applyDestroyedBricks(ServerState& state,
                                   const std::array<BombCell, kMaxDestroyedBricksPerBomb>& destroyedBricks,
                                   const std::size_t destroyedBrickCount)
@@ -255,7 +239,6 @@ namespace bomberman::server
             }
         }
 
-        /** @brief Kills any alive players whose hitbox overlaps one of the resolved blast cells. */
         uint8_t killPlayersInBlast(ServerState& state,
                                    const BombState& bomb,
                                    const std::array<BombCell, kMaxBlastCellsPerBomb>& blastCells,
@@ -309,7 +292,6 @@ namespace bomberman::server
             return killedCount;
         }
 
-        /** @brief Resolves one bomb detonation at the current authoritative tick against the shared pre-explosion tiles. */
         void resolveBombExplosion(ServerState& state,
                                   const std::size_t bombIndex,
                                   const sim::TileMap& preExplosionTiles)

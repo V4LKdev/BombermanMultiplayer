@@ -1,5 +1,6 @@
 /**
  * @file ServerControlHandlers.cpp
+ * @ingroup authoritative_server
  * @brief Authoritative server control-message handling and lobby-state broadcast.
  */
 
@@ -41,6 +42,8 @@ namespace bomberman::server
                 default:              return "unknown";
             }
         }
+
+        // ----- Packet send / diagnostics helpers -----
 
         void recordPeerLifecycle(NetDiagnostics* diag,
                                  const NetPeerLifecycleType type,
@@ -106,6 +109,8 @@ namespace bomberman::server
             enet_peer_disconnect_later(ctx.peer, 0);
         }
 
+        // ----- Hello admission helpers -----
+
         [[nodiscard]]
         bool hasAcceptedPlayer(const ENetPeer* peer)
         {
@@ -119,13 +124,6 @@ namespace bomberman::server
             return state.phase == ServerPhase::StartingMatch ||
                    state.phase == ServerPhase::InMatch ||
                    state.phase == ServerPhase::EndOfMatch;
-        }
-
-        [[nodiscard]]
-        std::optional<uint8_t> acceptedPlayerId(const ENetPeer* peer)
-        {
-            const auto* session = getPeerSession(peer);
-            return (session != nullptr) ? session->playerId : std::nullopt;
         }
 
         [[nodiscard]]
@@ -175,8 +173,14 @@ namespace bomberman::server
             };
         }
 
+        enum class WelcomeSendMode : uint8_t
+        {
+            InitialHello,
+            HandshakeReplay
+        };
+
         [[nodiscard]]
-        bool queueWelcomeForHello(PacketDispatchContext& ctx, const uint8_t playerId)
+        bool queueWelcome(PacketDispatchContext& ctx, const uint8_t playerId, const WelcomeSendMode mode)
         {
             MsgWelcome welcome{};
             welcome.protocolVersion = kProtocolVersion;
@@ -185,51 +189,51 @@ namespace bomberman::server
 
             if (!queueReliableControl(ctx.peer, makeWelcomePacket(welcome)))
             {
-                LOG_NET_CONN_ERROR("Failed to send Welcome to peer {} - rejecting", ctx.peer->incomingPeerID);
+                const auto result = (mode == WelcomeSendMode::InitialHello)
+                    ? NetPacketResult::Rejected
+                    : NetPacketResult::Dropped;
+
+                if (mode == WelcomeSendMode::InitialHello)
+                {
+                    LOG_NET_CONN_ERROR("Failed to send Welcome to peer {} - rejecting", ctx.peer->incomingPeerID);
+                }
+                else
+                {
+                    LOG_NET_CONN_WARN("Failed to re-send Welcome to accepted playerId={} peer={}",
+                                      playerId,
+                                      ctx.peer->incomingPeerID);
+                }
+
                 recordControlPacketSent(ctx,
                                         EMsgType::Welcome,
                                         playerId,
                                         kMsgWelcomeSize,
                                         NetPacketResult::Dropped);
-                releasePlayerId(ctx.state, playerId);
-                ctx.receiveResult = NetPacketResult::Rejected;
-                sendReject(ctx, MsgReject::EReason::Other);
+                ctx.receiveResult = result;
+                if (mode == WelcomeSendMode::InitialHello)
+                {
+                    releasePlayerId(ctx.state, playerId);
+                    sendReject(ctx, MsgReject::EReason::Other);
+                }
                 return false;
             }
 
-            LOG_NET_CONN_DEBUG("Queued Welcome to playerId={}", playerId);
-            recordControlPacketSent(ctx, EMsgType::Welcome, playerId, kMsgWelcomeSize);
-            return true;
-        }
-
-        [[nodiscard]]
-        bool resendWelcomeToAcceptedPeer(PacketDispatchContext& ctx, const uint8_t playerId)
-        {
-            MsgWelcome welcome{};
-            welcome.protocolVersion = kProtocolVersion;
-            welcome.playerId = playerId;
-            welcome.serverTickRate = sim::kTickRate;
-
-            if (!queueReliableControl(ctx.peer, makeWelcomePacket(welcome)))
+            if (mode == WelcomeSendMode::HandshakeReplay)
             {
-                LOG_NET_CONN_WARN("Failed to re-send Welcome to accepted playerId={} peer={}",
-                                  playerId,
-                                  ctx.peer->incomingPeerID);
-                recordControlPacketSent(ctx,
-                                        EMsgType::Welcome,
-                                        playerId,
-                                        kMsgWelcomeSize,
-                                        NetPacketResult::Dropped);
-                ctx.receiveResult = NetPacketResult::Dropped;
-                return false;
+                LOG_NET_CONN_DEBUG("Re-sent Welcome to accepted playerId={} peer={}", playerId, ctx.peer->incomingPeerID);
+                flush(ctx.state.host);
+                ctx.receiveResult = NetPacketResult::Ok;
+            }
+            else
+            {
+                LOG_NET_CONN_DEBUG("Queued Welcome to playerId={}", playerId);
             }
 
-            LOG_NET_CONN_DEBUG("Re-sent Welcome to accepted playerId={} peer={}", playerId, ctx.peer->incomingPeerID);
             recordControlPacketSent(ctx, EMsgType::Welcome, playerId, kMsgWelcomeSize);
-            flush(ctx.state.host);
-            ctx.receiveResult = NetPacketResult::Ok;
             return true;
         }
+
+        // ----- Lobby-state helpers -----
 
         [[nodiscard]]
         MsgLobbyState buildLobbyState(const ServerState& state)
@@ -355,7 +359,7 @@ namespace bomberman::server
             ctx.recordedPlayerId = acceptedPlayerId(ctx.peer);
             if (ctx.recordedPlayerId.has_value())
             {
-                if (!resendWelcomeToAcceptedPeer(ctx, ctx.recordedPlayerId.value()))
+                if (!queueWelcome(ctx, ctx.recordedPlayerId.value(), WelcomeSendMode::HandshakeReplay))
                 {
                     return;
                 }
@@ -414,7 +418,7 @@ namespace bomberman::server
         }
 
         const uint8_t playerId = reservedSlot->playerId;
-        if (!queueWelcomeForHello(ctx, playerId))
+        if (!queueWelcome(ctx, playerId, WelcomeSendMode::InitialHello))
         {
             return;
         }

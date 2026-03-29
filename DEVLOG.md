@@ -21,3 +21,6 @@
 - Added dedicated networking diagrams for bootstrap flow and correction packet structure, with light/dark variants integrated into the generated site.
 - Tightened `NetCommon.h` comments so the shared protocol file reads more clearly as the single client/server wire contract.
 - Reorganized and clarified `ServerState.h` comments and sectioning so the authoritative server state model is easier to review before the server-flow documentation pass.
+- Finalized the three core topic pages (`networking`, `net-client`, and `multiplayer-level-scene`) so they read consistently as short portfolio-facing subsystem overviews.
+- Added the new `server.md` topic page plus server-state / server-flow diagrams to complete the authoritative-server side of the documentation story.
+- Polished the Doxygen presentation with light/dark logo swapping and title-area sizing tweaks so the site header fits the wider sidebar layout cleanly.

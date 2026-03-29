@@ -1,5 +1,6 @@
 /**
  * @file ServerSimulation.cpp
+ * @ingroup authoritative_server
  * @brief Authoritative fixed-tick simulation, corrections, and snapshot broadcast.
  */
 
@@ -26,7 +27,6 @@ namespace bomberman::server
 
     namespace
     {
-        /** @brief Builds the owner correction that corresponds to the current authoritative tick. */
         [[nodiscard]]
         MsgCorrection buildCorrection(const ServerState& state, const MatchPlayerState& matchPlayer)
         {
@@ -40,14 +40,7 @@ namespace bomberman::server
             return corr;
         }
 
-        /**
-         * @brief Resolves which input bitmask the server should simulate for this match player on the current tick.
-         *
-         * Arms the fixed-delay consume timeline on first input, consumes the
-         * exact next sequence when it reaches its deadline, or permanently gaps
-         * forward using the last authoritative buttons when the deadline is
-         * missed.
-         */
+        /** @brief Resolves which input bitmask to simulate on the current tick. */
         void resolveMatchPlayerInputForTick(ServerState& state, MatchPlayerState& matchPlayer)
         {
             matchPlayer.appliedButtons = 0;
@@ -123,7 +116,6 @@ namespace bomberman::server
             }
         }
 
-        /** @brief Queues the owning match player's authoritative correction for the current server tick. */
         void queueMatchPlayerCorrection(ServerState& state, const MatchPlayerState& matchPlayer)
         {
             bool correctionQueued = false;
@@ -142,7 +134,6 @@ namespace bomberman::server
                                         correctionQueued ? NetPacketResult::Ok : NetPacketResult::Dropped);
         }
 
-        /** @brief Samples ENet transport health for one accepted match player when the sampling cadence is due. */
         void samplePeerTransport(ServerState& state, const MatchPlayerState& matchPlayer)
         {
             const auto* session = findPeerSessionByPlayerId(state, matchPlayer.playerId);
@@ -167,28 +158,40 @@ namespace bomberman::server
                                   queuedUnreliable);
         }
 
-        /** @brief Advances one accepted match player through authoritative input, movement, correction, and diagnostics. */
+        void finishMatchPlayerTick(ServerState& state, const MatchPlayerState& matchPlayer)
+        {
+            queueMatchPlayerCorrection(state, matchPlayer);
+            samplePeerTransport(state, matchPlayer);
+        }
+
+        void sampleMatchPlayerInputContinuity(ServerState& state, const MatchPlayerState& matchPlayer)
+        {
+            state.diag.samplePeerInputContinuity(matchPlayer.playerId,
+                                                 matchPlayer.lastReceivedInputSeq,
+                                                 matchPlayer.lastProcessedInputSeq);
+        }
+
+        void clearMatchPlayerButtons(MatchPlayerState& matchPlayer)
+        {
+            matchPlayer.appliedButtons = 0;
+            matchPlayer.lastAppliedButtons = 0;
+            matchPlayer.previousTickButtons = 0;
+        }
+
         void simulateAcceptedMatchPlayer(ServerState& state, MatchPlayerState& matchPlayer)
         {
             refreshMatchPlayerPowerupLoadout(state, matchPlayer);
 
             if (!matchPlayer.alive || matchPlayer.inputLocked)
             {
-                matchPlayer.appliedButtons = 0;
-                matchPlayer.lastAppliedButtons = 0;
-                matchPlayer.previousTickButtons = 0;
-                state.diag.samplePeerInputContinuity(matchPlayer.playerId,
-                                                     matchPlayer.lastReceivedInputSeq,
-                                                     matchPlayer.lastProcessedInputSeq);
-                queueMatchPlayerCorrection(state, matchPlayer);
-                samplePeerTransport(state, matchPlayer);
+                clearMatchPlayerButtons(matchPlayer);
+                sampleMatchPlayerInputContinuity(state, matchPlayer);
+                finishMatchPlayerTick(state, matchPlayer);
                 return;
             }
 
             resolveMatchPlayerInputForTick(state, matchPlayer);
-            state.diag.samplePeerInputContinuity(matchPlayer.playerId,
-                                                 matchPlayer.lastReceivedInputSeq,
-                                                 matchPlayer.lastProcessedInputSeq);
+            sampleMatchPlayerInputContinuity(state, matchPlayer);
 
             tryPlaceBomb(state, matchPlayer);
 
@@ -201,12 +204,9 @@ namespace bomberman::server
                 state.tiles,
                 hasSpeedBoost(matchPlayer, state.serverTick) ? sim::kSpeedBoostPlayerSpeedQ : sim::kPlayerSpeedQ);
             matchPlayer.previousTickButtons = matchPlayer.appliedButtons;
-
-            queueMatchPlayerCorrection(state, matchPlayer);
-            samplePeerTransport(state, matchPlayer);
+            finishMatchPlayerTick(state, matchPlayer);
         }
 
-        /** @brief Broadcasts the current authoritative snapshot when this tick is configured to do so. */
         void broadcastSnapshotIfDue(ServerState& state)
         {
             if (!shouldBroadcastSnapshot(state))
@@ -243,7 +243,6 @@ namespace bomberman::server
             flush(state.host);
         }
 
-        /** @brief Evaluates whether the current authoritative round has reached an end state. */
         void evaluateRoundEnd(ServerState& state)
         {
             if (state.phase != ServerPhase::InMatch)

@@ -1,5 +1,6 @@
 /**
  * @file ServerFlowInternal.h
+ * @ingroup authoritative_server
  * @brief Private helpers shared by authoritative server-flow implementation files.
  */
 

@@ -1,5 +1,6 @@
 /**
  * @file ServerFlow.cpp
+ * @ingroup authoritative_server
  * @brief Authoritative server-flow phase orchestration.
  */
 
@@ -13,6 +14,20 @@
 namespace bomberman::server
 {
     using namespace flow_internal;
+
+    namespace
+    {
+        void unlockMatchInputs(ServerState& state)
+        {
+            for (auto& matchEntry : state.matchPlayers)
+            {
+                if (matchEntry.has_value())
+                {
+                    matchEntry->inputLocked = false;
+                }
+            }
+        }
+    } // namespace
 
     void refreshServerFlowDiagnostics(ServerState& state)
     {
@@ -58,14 +73,7 @@ namespace bomberman::server
             state.currentMatchUnlockTick != 0 &&
             state.serverTick >= state.currentMatchUnlockTick)
         {
-            for (auto& matchEntry : state.matchPlayers)
-            {
-                if (matchEntry.has_value())
-                {
-                    matchEntry->inputLocked = false;
-                }
-            }
-
+            unlockMatchInputs(state);
             LOG_SERVER_INFO("Gameplay unlocked matchId={} tick={}", state.currentMatchId, state.serverTick);
             state.currentMatchUnlockTick = 0;
             return;

@@ -1,5 +1,6 @@
 /**
  * @file ServerSnapshot.cpp
+ * @ingroup authoritative_server
  * @brief Authoritative snapshot cadence and connected-client snapshot construction.
  */
 
@@ -17,6 +18,9 @@ namespace bomberman::server
     // =================================================================================================================
     // ===== Snapshot Broadcast ========================================================================================
     // =================================================================================================================
+
+    static_assert(kServerPowerupCapacity == net::kMaxSnapshotPowerups,
+                  "Server powerup capacity must match snapshot payload capacity");
 
     bool shouldBroadcastSnapshot(const ServerState& state)
     {

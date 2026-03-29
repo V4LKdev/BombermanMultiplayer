@@ -1,5 +1,6 @@
 /**
  * @file ServerPowerups.h
+ * @ingroup authoritative_server
  * @brief Authoritative hidden/revealed round powerup helpers.
  */
 
@@ -12,26 +13,26 @@
 
 namespace bomberman::server
 {
-    /** @brief Returns true while one player's invincibility timer is active for the current tick. */
+    /** @brief Returns true while invincibility is active. */
     [[nodiscard]]
     bool hasInvincibility(const MatchPlayerState& matchPlayer, uint32_t serverTick);
 
-    /** @brief Returns true while one player's speed-boost timer is active for the current tick. */
+    /** @brief Returns true while speed boost is active. */
     [[nodiscard]]
     bool hasSpeedBoost(const MatchPlayerState& matchPlayer, uint32_t serverTick);
 
-    /** @brief Returns true while one player's bomb-range boost timer is active for the current tick. */
+    /** @brief Returns true while bomb-range boost is active. */
     [[nodiscard]]
     bool hasBombRangeBoost(const MatchPlayerState& matchPlayer, uint32_t serverTick);
 
-    /** @brief Returns true while one player's max-bombs boost timer is active for the current tick. */
+    /** @brief Returns true while max-bombs boost is active. */
     [[nodiscard]]
     bool hasMaxBombsBoost(const MatchPlayerState& matchPlayer, uint32_t serverTick);
 
-    /** @brief Refreshes one match player's derived bomb loadout from active timed powerup effects. */
+    /** @brief Refreshes one match player's derived bomb loadout. */
     void refreshMatchPlayerPowerupLoadout(const ServerState& state, MatchPlayerState& matchPlayer);
 
-    /** @brief Builds the replicated player-flag bitmask used by snapshots and owner corrections. */
+    /** @brief Builds the replicated player-flag bitmask. */
     [[nodiscard]]
     uint8_t buildReplicatedPlayerFlags(const MatchPlayerState& matchPlayer, uint32_t serverTick);
 

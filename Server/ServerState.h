@@ -1,5 +1,6 @@
 /**
  * @file ServerState.h
+ * @ingroup authoritative_server
  * @brief Authoritative server state model, lifecycle helpers, and fixed-tick simulation API.
  */
 
@@ -35,12 +36,7 @@ namespace bomberman::server
 
     // ----- Input buffering constants -----
 
-    /**
-     * @brief Number of authoritative input slots retained per active @ref MatchPlayerState.
-     *
-     * Currently two times the size of @ref net::kMaxInputBatchSize to allow one full batch
-     * of buffered input history in addition to the next expected input sequence.
-     */
+    /** @brief Input slots retained per active @ref MatchPlayerState. */
     constexpr std::size_t kServerInputBufferSize = static_cast<std::size_t>(net::kMaxInputBatchSize) * 2u;
 
     /**
@@ -55,13 +51,7 @@ namespace bomberman::server
 
     // ----- Match gameplay-state constants -----
 
-    /**
-     * @brief Maximum number of simultaneously active bombs the server stores for one match.
-     *
-     * One bomb occupies one tile, so using the full tile-map area as the
-     * storage bound keeps the representation future-proof for higher per-player
-     * bomb caps without forcing a protocol or state-layout change later.
-     */
+    /** @brief Maximum bombs the server stores for one match. */
     constexpr std::size_t kServerBombCapacity = static_cast<std::size_t>(tileArrayWidth) *
                                                 static_cast<std::size_t>(tileArrayHeight);
 
@@ -186,13 +176,7 @@ namespace bomberman::server
         uint32_t nextGapWarnTick = 0;
     };
 
-    /**
-     * @brief Tile cell coordinate used by authoritative bomb state.
-     *
-     * Cell coordinates are stored in tile-map space, not world-pixel space, so
-     * later explosion propagation and tile destruction can work directly
-     * against @ref ServerState::tiles.
-     */
+    /** @brief Tile-map cell coordinate used by bomb and powerup state. */
     struct BombCell
     {
         uint8_t col = 0;
@@ -202,10 +186,7 @@ namespace bomberman::server
     /**
      * @brief Authoritative state for one active bomb in the current match.
      *
-     * Bombs snapshot their owner-derived gameplay properties at placement
-     * time, so player changes do not retroactively affect already-placed bombs.
-     * Once placed, they remain world state until they resolve or the round
-     * explicitly clears them.
+     * Owner-derived gameplay properties are snapped at placement time.
      */
     struct BombState
     {

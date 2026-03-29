@@ -4,22 +4,25 @@
 \brief Client-side connection, prediction, correction, and diagnostics layer for multiplayer play.
 
 This is the core of the client networking work.
+
 It is the layer that turns server-driven multiplayer state into something the game can actually use:
+
 - `NetClient` handles transport, handshake, message intake, and cached authoritative state
 - `ClientPrediction` handles owner-local prediction, replay, and recovery after correction
-- `ClientDiagnostics` records what happened so networking behavior can be inspected and tested
+- `ClientDiagnostics` records what happened so networking behaviour can be inspected and tested
 
-The important design boundary to understand:
-- this subsystem owns multiplayer netcode behavior on the client
-- `MultiplayerLevelScene` owns presentation and match scene flow
+The important design boundary is simple:
+this subsystem owns multiplayer netcode behaviour on the client, while `MultiplayerLevelScene` owns presentation and match scene flow.
 
----
-## Design Rationale
+## Ownership
 
 The client has to do three things at once:
+
 - stay connected to an authoritative server
 - feel responsive for the owning player
 - stay debuggable when prediction or delivery goes wrong
+
+That is why transport, prediction, and diagnostics are kept adjacent but distinct.
 
 ## System View
 
@@ -27,6 +30,7 @@ The client has to do three things at once:
   <img class="theme-image-light" src="net-client-boundaries-light.svg" alt="Client multiplayer netcode boundaries between scenes, NetClient, prediction, diagnostics, and the authoritative server">
   <img class="theme-image-dark" src="net-client-boundaries-dark.svg" alt="Client multiplayer netcode boundaries between scenes, NetClient, prediction, diagnostics, and the authoritative server">
 </div>
+
 The scene reads authoritative state from `NetClient`, while prediction and diagnostics stay in adjacent client-netcode helpers.
 
 ## Code Layout
@@ -35,23 +39,24 @@ The scene reads authoritative state from `NetClient`, while prediction and diagn
   <img class="theme-image-light" src="net-client-structure-light.svg" alt="Client multiplayer netcode code layout showing NetClient split into connection, runtime, and protocol responsibilities">
   <img class="theme-image-dark" src="net-client-structure-dark.svg" alt="Client multiplayer netcode code layout showing NetClient split into connection, runtime, and protocol responsibilities">
 </div>
+
 `NetClient` stays one class, but its implementation is split by concern: connection, runtime, and protocol/cache handling.
 
 Relevant code:
-- `Net/Client/NetClient.h` - main client netcode class and public API
-- `Net/Client/NetClient.cpp` - top-level implementation entry point
-- `Net/Client/NetClient.Connection.cpp` - connection lifecycle and transport setup/teardown
-- `Net/Client/NetClient.Runtime.cpp` - runtime API, outgoing input, and live session behavior
-- `Net/Client/NetClient.Protocol.cpp` - protocol handlers, packet intake, and cached authoritative state
-- `Net/Client/ClientPrediction.h` - owner-local prediction and correction logic
-- `Net/Client/ClientPrediction.cpp` - prediction implementation
-- `Net/ClientDiagnostics.h` - telemetry recording for client netcode behavior
-- `Net/ClientDiagnostics.cpp` - diagnostics implementation
+- `Net/Client/NetClient.h`
+- `Net/Client/NetClient.cpp`
+- `Net/Client/NetClient.Connection.cpp`
+- `Net/Client/NetClient.Runtime.cpp`
+- `Net/Client/NetClient.Protocol.cpp`
+- `Net/Client/ClientPrediction.h`
+- `Net/Client/ClientPrediction.cpp`
+- `Net/ClientDiagnostics.h`
+- `Net/ClientDiagnostics.cpp`
 
 <div class="section_buttons">
 
-| Previous | Next |
-|:--|--:|
+| Previous                    |                                                                        Next |
+|:----------------------------|----------------------------------------------------------------------------:|
 | [Networking](networking.md) | <a href="group__multiplayer__level__scene.html">Multiplayer Level Scene</a> |
 
 </div>

@@ -1,5 +1,6 @@
 /**
  * @file ServerSession.cpp
+ * @ingroup authoritative_server
  * @brief Authoritative server session lifecycle, peer-session binding, and player-slot management.
  */
 
@@ -45,6 +46,23 @@ namespace bomberman::server
                 state.peerSessions[index.value()].reset();
         }
 
+        void resetRoundFlowState(ServerState& state)
+        {
+            state.currentMatchId = 0;
+            state.nextMatchId = 1;
+            state.currentLobbyCountdownPlayerMask = 0;
+            state.currentLobbyCountdownDeadlineTick = 0;
+            state.currentLobbyCountdownLastBroadcastSecond = 0;
+            state.currentMatchPlayerMask = 0;
+            state.currentMatchLoadedMask = 0;
+            state.currentMatchStartDeadlineTick = 0;
+            state.currentMatchGoShowTick = 0;
+            state.currentMatchUnlockTick = 0;
+            state.currentEndOfMatchReturnTick = 0;
+            state.roundWinnerPlayerId.reset();
+            state.roundEndedInDraw = false;
+        }
+
     } // namespace
 
     // =================================================================================================================
@@ -67,26 +85,12 @@ namespace bomberman::server
         state.snapshotIntervalTicks = snapshotIntervalTicks;
         state.powersEnabled = powersEnabled;
 
-        // Reset all live peer sessions.
-        for (auto& slot : state.peerSessions)
-            slot.reset();
-
-        // Reset all active match-player slots.
-        for (auto& slot : state.matchPlayers)
-            slot.reset();
-
-        // Reset all active bomb slots for the new session.
-        for (auto& slot : state.bombs)
-            slot.reset();
-
-        clearRoundPowerups(state);
-
-        // Reset accepted-player metadata for the new dedicated-server session.
-        for (auto& slot : state.playerSlots)
-            slot.reset();
-
-        for (auto& reclaimEntry : state.disconnectedPlayerReclaims)
-            reclaimEntry.reset();
+        state.peerSessions.fill(std::nullopt);
+        state.matchPlayers.fill(std::nullopt);
+        state.bombs.fill(std::nullopt);
+        state.powerups.fill(std::nullopt);
+        state.playerSlots.fill(std::nullopt);
+        state.disconnectedPlayerReclaims.fill(std::nullopt);
 
         // Clear ENet back-pointers owned by the host's current peer array.
         if (state.host != nullptr)
@@ -106,19 +110,7 @@ namespace bomberman::server
         state.fixedMapSeedOverride = overrideMapSeed ? std::optional<uint32_t>{mapSeed} : std::nullopt;
         rollNextRoundMapSeed(state);
         sim::generateTileMap(state.mapSeed, state.tiles);
-        state.currentMatchId = 0;
-        state.nextMatchId = 1;
-        state.currentLobbyCountdownPlayerMask = 0;
-        state.currentLobbyCountdownDeadlineTick = 0;
-        state.currentLobbyCountdownLastBroadcastSecond = 0;
-        state.currentMatchPlayerMask = 0;
-        state.currentMatchLoadedMask = 0;
-        state.currentMatchStartDeadlineTick = 0;
-        state.currentMatchGoShowTick = 0;
-        state.currentMatchUnlockTick = 0;
-        state.currentEndOfMatchReturnTick = 0;
-        state.roundWinnerPlayerId.reset();
-        state.roundEndedInDraw = false;
+        resetRoundFlowState(state);
 
         if (state.fixedMapSeedOverride.has_value())
             LOG_SERVER_INFO("Map generated with provided seed={}", state.mapSeed);

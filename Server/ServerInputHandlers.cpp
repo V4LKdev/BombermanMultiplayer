@@ -1,5 +1,6 @@
 /**
  * @file ServerInputHandlers.cpp
+ * @ingroup authoritative_server
  * @brief Authoritative server gameplay-input receive handling.
  */
 

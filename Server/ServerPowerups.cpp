@@ -1,5 +1,6 @@
 /**
  * @file ServerPowerups.cpp
+ * @ingroup authoritative_server
  * @brief Authoritative round powerup placement and reveal logic.
  */
 
@@ -16,6 +17,12 @@ namespace bomberman::server
 {
     namespace
     {
+        [[nodiscard]]
+        bool effectActive(const uint32_t untilTick, const uint32_t serverTick)
+        {
+            return untilTick > serverTick;
+        }
+
         [[nodiscard]]
         uint32_t refreshedEffectUntilTick(const uint32_t currentUntilTick,
                                           const uint32_t serverTick,
@@ -45,22 +52,22 @@ namespace bomberman::server
 
     bool hasInvincibility(const MatchPlayerState& matchPlayer, const uint32_t serverTick)
     {
-        return matchPlayer.invincibleUntilTick > serverTick;
+        return effectActive(matchPlayer.invincibleUntilTick, serverTick);
     }
 
     bool hasSpeedBoost(const MatchPlayerState& matchPlayer, const uint32_t serverTick)
     {
-        return matchPlayer.speedBoostUntilTick > serverTick;
+        return effectActive(matchPlayer.speedBoostUntilTick, serverTick);
     }
 
     bool hasBombRangeBoost(const MatchPlayerState& matchPlayer, const uint32_t serverTick)
     {
-        return matchPlayer.bombRangeBoostUntilTick > serverTick;
+        return effectActive(matchPlayer.bombRangeBoostUntilTick, serverTick);
     }
 
     bool hasMaxBombsBoost(const MatchPlayerState& matchPlayer, const uint32_t serverTick)
     {
-        return matchPlayer.maxBombsBoostUntilTick > serverTick;
+        return effectActive(matchPlayer.maxBombsBoostUntilTick, serverTick);
     }
 
     void refreshMatchPlayerPowerupLoadout(const ServerState& state, MatchPlayerState& matchPlayer)

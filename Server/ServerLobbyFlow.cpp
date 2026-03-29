@@ -1,5 +1,6 @@
 /**
  * @file ServerLobbyFlow.cpp
+ * @ingroup authoritative_server
  * @brief Authoritative lobby, countdown, bootstrap, and match-start helpers.
  */
 
@@ -18,6 +19,31 @@
 
 namespace bomberman::server::flow_internal
 {
+    void broadcastLobbyStateAndRefreshFlow(ServerState& state)
+    {
+        broadcastLobbyState(state);
+        refreshServerFlowDiagnostics(state);
+    }
+
+    void clearLobbyCountdownState(ServerState& state)
+    {
+        state.currentLobbyCountdownPlayerMask = 0;
+        state.currentLobbyCountdownDeadlineTick = 0;
+        state.currentLobbyCountdownLastBroadcastSecond = 0;
+    }
+
+    void clearCurrentRoundFlowState(ServerState& state)
+    {
+        state.currentMatchPlayerMask = 0;
+        state.currentMatchLoadedMask = 0;
+        state.currentMatchStartDeadlineTick = 0;
+        state.currentMatchGoShowTick = 0;
+        state.currentMatchUnlockTick = 0;
+        state.currentEndOfMatchReturnTick = 0;
+        state.roundWinnerPlayerId.reset();
+        state.roundEndedInDraw = false;
+    }
+
     [[nodiscard]]
     bool hasMinimumParticipants(const uint32_t playerMask)
     {
@@ -126,11 +152,8 @@ namespace bomberman::server::flow_internal
     void cancelLobbyCountdown(ServerState& state, const std::string_view reason)
     {
         state.phase = ServerPhase::Lobby;
-        state.currentLobbyCountdownPlayerMask = 0;
-        state.currentLobbyCountdownDeadlineTick = 0;
-        state.currentLobbyCountdownLastBroadcastSecond = 0;
-        broadcastLobbyState(state);
-        refreshServerFlowDiagnostics(state);
+        clearLobbyCountdownState(state);
+        broadcastLobbyStateAndRefreshFlow(state);
         LOG_SERVER_INFO("Lobby countdown cancelled ({})", reason);
     }
 
@@ -140,8 +163,7 @@ namespace bomberman::server::flow_internal
         state.currentLobbyCountdownPlayerMask = participantMask;
         state.currentLobbyCountdownDeadlineTick = state.serverTick + kLobbyCountdownTicks;
         state.currentLobbyCountdownLastBroadcastSecond = computeCountdownSecondsRemaining(state);
-        broadcastLobbyState(state);
-        refreshServerFlowDiagnostics(state);
+        broadcastLobbyStateAndRefreshFlow(state);
         LOG_SERVER_INFO("Lobby countdown started players={} seconds={}",
                         std::popcount(participantMask),
                         static_cast<unsigned int>(state.currentLobbyCountdownLastBroadcastSecond));
@@ -152,12 +174,9 @@ namespace bomberman::server::flow_internal
         const bool countdownWasActive = state.phase == ServerPhase::LobbyCountdown;
 
         state.phase = ServerPhase::Lobby;
-        state.currentLobbyCountdownPlayerMask = 0;
-        state.currentLobbyCountdownDeadlineTick = 0;
-        state.currentLobbyCountdownLastBroadcastSecond = 0;
+        clearLobbyCountdownState(state);
         clearAllLobbyReadyFlags(state);
-        broadcastLobbyState(state);
-        refreshServerFlowDiagnostics(state);
+        broadcastLobbyStateAndRefreshFlow(state);
 
         if (countdownWasActive)
         {
@@ -173,7 +192,7 @@ namespace bomberman::server::flow_internal
         const uint32_t cancelledMatchId = state.currentMatchId;
         sendMatchCancelledToParticipants(state, cancelledMatchId, notifyMask);
         resetRoundRuntimeToLobby(state);
-        broadcastLobbyState(state);
+        broadcastLobbyStateAndRefreshFlow(state);
         LOG_SERVER_WARN("Match bootstrap cancelled matchId={} ({})", cancelledMatchId, reason);
     }
 
@@ -253,17 +272,8 @@ namespace bomberman::server
     {
         state.phase = ServerPhase::Lobby;
         state.currentMatchId = 0;
-        state.currentLobbyCountdownPlayerMask = 0;
-        state.currentLobbyCountdownDeadlineTick = 0;
-        state.currentLobbyCountdownLastBroadcastSecond = 0;
-        state.currentMatchPlayerMask = 0;
-        state.currentMatchLoadedMask = 0;
-        state.currentMatchStartDeadlineTick = 0;
-        state.currentMatchGoShowTick = 0;
-        state.currentMatchUnlockTick = 0;
-        state.currentEndOfMatchReturnTick = 0;
-        state.roundWinnerPlayerId.reset();
-        state.roundEndedInDraw = false;
+        clearLobbyCountdownState(state);
+        clearCurrentRoundFlowState(state);
         refreshServerFlowDiagnostics(state);
 
         clearAllLobbyReadyFlags(state);
@@ -314,7 +324,6 @@ namespace bomberman::server
         }
 
         resetLobbyParticipantsToUnready(state, "a participant joined");
-        refreshServerFlowDiagnostics(state);
     }
 
     bool beginMatchBootstrap(ServerState& state)
@@ -336,17 +345,10 @@ namespace bomberman::server
 
         state.phase = ServerPhase::StartingMatch;
         state.currentMatchId = state.nextMatchId++;
-        state.currentLobbyCountdownPlayerMask = 0;
-        state.currentLobbyCountdownDeadlineTick = 0;
-        state.currentLobbyCountdownLastBroadcastSecond = 0;
+        clearLobbyCountdownState(state);
+        clearCurrentRoundFlowState(state);
         state.currentMatchPlayerMask = participantMask;
-        state.currentMatchLoadedMask = 0;
         state.currentMatchStartDeadlineTick = state.serverTick + kMatchStartLoadTimeoutTicks;
-        state.currentMatchGoShowTick = 0;
-        state.currentMatchUnlockTick = 0;
-        state.currentEndOfMatchReturnTick = 0;
-        state.roundWinnerPlayerId.reset();
-        state.roundEndedInDraw = false;
 
         clearAllLobbyReadyFlags(state);
         clearBombsAndReleaseOwnership(state);
@@ -437,7 +439,6 @@ namespace bomberman::server
         if (state.phase == ServerPhase::Lobby || state.phase == ServerPhase::LobbyCountdown)
         {
             resetLobbyParticipantsToUnready(state, "a participant disconnected");
-            refreshServerFlowDiagnostics(state);
             return;
         }
 
@@ -446,14 +447,12 @@ namespace bomberman::server
             cancelStartingMatch(state,
                                 state.currentMatchPlayerMask,
                                 "a participant disconnected before match start");
-            refreshServerFlowDiagnostics(state);
             return;
         }
 
         if (state.phase != ServerPhase::Lobby && state.currentMatchPlayerMask == 0)
         {
             resetRoundRuntimeToLobby(state);
-            refreshServerFlowDiagnostics(state);
             LOG_SERVER_INFO("Round state reset to lobby after the last player disconnected");
             return;
         }

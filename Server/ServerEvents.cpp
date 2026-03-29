@@ -1,5 +1,6 @@
 /**
  * @file ServerEvents.cpp
+ * @ingroup authoritative_server
  * @brief Dedicated-server ENet connect, receive, and disconnect event servicing.
  */
 

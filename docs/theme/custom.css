@@ -4,16 +4,69 @@
   --primary-light-color: #4d8fcd;
   --image-modal-overlay: rgba(15, 23, 42, 0.82);
   --image-modal-caption: #e5e7eb;
+  --top-height: 156px;
 }
 
 #projectname {
   font-size: 1.35rem;
   font-weight: 700;
+  line-height: 1.24;
+  padding-bottom: 0.1rem;
 }
 
 #projectbrief {
   font-size: 0.82rem;
   line-height: 1.35;
+}
+
+#projectalign {
+  width: 100%;
+  min-width: 0;
+}
+
+#projectname,
+#projectbrief {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+#projectlogo img {
+  max-height: 52px;
+  width: auto;
+}
+
+#projectlogo .project-logo-swap {
+  display: inline-flex;
+  align-items: center;
+}
+
+#projectlogo .project-logo-swap img {
+  cursor: default;
+  pointer-events: none !important;
+}
+
+#projectlogo .project-logo-dark {
+  display: none;
+}
+
+html.dark-mode #projectlogo .project-logo-light {
+  display: none;
+}
+
+html.dark-mode #projectlogo .project-logo-dark {
+  display: inline-block;
+}
+
+html:not(.dark-mode) #projectlogo .project-logo-light {
+  display: inline-block;
+}
+
+html:not(.dark-mode) #projectlogo .project-logo-dark {
+  display: none;
+}
+
+#nav-tree-contents {
+  padding-top: 0.35rem;
 }
 
 .contents div.image object,
@@ -32,6 +85,10 @@ html.dark-mode .theme-image-swap .theme-image-light {
 
 html.dark-mode .theme-image-swap .theme-image-dark {
   display: inline-block;
+}
+
+html.dark-mode .theme-image-swap--invert-dark .theme-image-dark {
+  filter: invert(1) hue-rotate(180deg);
 }
 
 html:not(.dark-mode) .theme-image-swap .theme-image-light {

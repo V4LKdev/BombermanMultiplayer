@@ -1,5 +1,6 @@
 /**
  * @file ServerBombs.h
+ * @ingroup authoritative_server
  * @brief Authoritative server-side bomb placement, explosion, and lifecycle helpers.
  */
 
