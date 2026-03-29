@@ -24,3 +24,4 @@
 - Finalized the three core topic pages (`networking`, `net-client`, and `multiplayer-level-scene`) so they read consistently as short portfolio-facing subsystem overviews.
 - Added the new `server.md` topic page plus server-state / server-flow diagrams to complete the authoritative-server side of the documentation story.
 - Polished the Doxygen presentation with light/dark logo swapping and title-area sizing tweaks so the site header fits the wider sidebar layout cleanly.
+- Finished the shared `README.md` landing page as a portfolio-first project overview, with contribution framing, goals, technical highlights, stack summary, guided reading, build instructions, limitations, and media/link placeholders that stay compatible with both GitHub and Doxygen.

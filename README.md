@@ -1,46 +1,58 @@
 # Bomberman Multiplayer
 
-Authoritative multiplayer networking layer for a Bomberman student project, with client prediction, dedicated server authority, diagnostics, and structured network testing.
+Authoritative multiplayer networking layer for a Bomberman student project, with dedicated server flow,
+explicit packet protocol, client prediction and correction, and built-in diagnostics.
 
-![Multiplayer Screenshot][hero-image]
+> Placeholder: add one hero screenshot or short gameplay GIF here.
 
-[![Watch Demo][demo-thumbnail]][demo-video-url]
+### Goals
+
+This project extends a provided singleplayer Bomberman base in SDL2 with a client-server multiplayer architecture built on ENet.
+
+The work focuses on four goals:
+- add a clear **authoritative networking model** to an existing local game
+- synchronise **gameplay-relevant state** across multiple clients
+- keep runtime behaviour **observable** through logs, diagnostics, and test tooling
+- document the system through clear architecture and design decisions
 
 ### My Contribution
 
-This project builds on a provided singleplayer Bomberman base. My work focuses on the multiplayer and networking layer added on top: dedicated server flow, protocol design, client prediction and correction, diagnostics, test methodology, and the accompanying documentation pass.
+My contribution is the multiplayer and networking layer added around the provided singleplayer base.
 
-The goal of this repository is to present that networking work clearly and honestly, both as a student assessment artifact and as a portfolio project for gameplay and multiplayer engineering roles.
+This includes:
+- designing and maintaining the shared protocol in `Net/NetCommon.h`
+- implementing the dedicated server runtime and authoritative round flow
+- building the client netcode for connection handling, prediction, correction, and recovery
+- integrating authoritative state into the multiplayer gameplay scene
+- adding diagnostics, testing hooks, and technical documentation
 
 ### Key Technical Highlights
 
-- Authoritative dedicated server built on ENet
-- Lobby, bootstrap, match start, and end-of-round flow
-- Client prediction, reconciliation, and recovery handling
-- Snapshot and owner-correction replication model
-- Diagnostics logging and reproducible network-focused test runs
+- **Authoritative client-server architecture** built on ENet
+- **Fixed-size packet protocol** with explicit message ids, payload sizes, and channel assignments
+- **Lobby bootstrap flow** from connect and ready state into synchronised match start
+- **Prediction and correction pipeline** with replay-based recovery for the owning player
+- **Built-in diagnostics and telemetry** for transport, correction, and runtime behaviour
+
+### Third-Party Libraries
+
+- `ENet`: lightweight UDP-based networking with channels and optional reliability
+- `SDL2`: core client runtime for rendering, input, windowing, and timing
+- `SDL2_image`: image loading for the client
+- `SDL2_ttf`: font and text rendering for the client
+- `SDL2_mixer`: audio playback for the client
+- `spdlog`: structured logging and runtime diagnostics
+- `nlohmann/json`: JSON output for diagnostics and tooling
 
 ### System Snapshot
 
-![Architecture Overview][architecture-diagram]
+The client sends gameplay intent, predicts local movement for responsiveness, and consumes authoritative updates from the server.  
 
-The client collects local input, predicts local movement, and communicates with an authoritative server over ENet. The server owns the match state, processes accepted input on fixed simulation ticks, and sends snapshots and corrections back to clients. Diagnostics and test tooling are used to inspect transport behavior, gameplay replication, and failure cases under controlled conditions.
+The server owns shared match state, processes accepted input on fixed ticks, and replicates snapshots, corrections, and reliable gameplay events back to connected clients.
 
-### Responsibilities
+> Placeholder: add one architecture or message-flow SVG here.
 
-| Area                    | My work                                                                         |
-|-------------------------|---------------------------------------------------------------------------------|
-| Networking              | Protocol design, packet flow, ENet integration, client/server session lifecycle |
-| Client netcode          | Input batching, prediction, replay, recovery, presentation synchronization      |
-| Server authority        | Lobby flow, bootstrap, simulation ownership, snapshots, corrections             |
-| Diagnostics and testing | Runtime diagnostics, log capture, test matrix, test methodology                 |
-| Documentation           | Architecture writeups, networking explanation, portfolio presentation           |
-
-### Why This Project Matters
-
-This project showcases the kind of engineering work relevant to gameplay programming and multiplayer/networking roles: real-time client/server flow, authority boundaries, packet design, debugging under latency and loss, and clear technical communication around a non-trivial system.
-
-### Documentation
+### Guided Reading
 
 - [Architecture](docs/architecture.md)
 - [Networking](docs/networking.md)
@@ -49,35 +61,69 @@ This project showcases the kind of engineering work relevant to gameplay program
 - [Decisions And Limits](docs/project-notes.md)
 - [Devlog](docs/devlog-summary.md)
 
+The deeper Doxygen topic pages for the authoritative server, client netcode, and multiplayer scene integration are linked from the networking documentation and the generated sidebar.
+
+---
 ### Build And Run
 
+The repository includes CMake presets for Linux debug and release builds, plus Windows MinGW cross-build presets. All other dependencies are vendored in `third_party/`.
+
 ```bash
-[build-and-run-placeholder]
+# Linux debug configure
+cmake --preset linux-debug
+
+# Linux client
+cmake --build --preset linux-client-debug
+
+# Linux server
+cmake --build --preset linux-server-debug
+```
+
+```bash
+# Run from the configured build directory
+./build/linux-debug/Bomberman_Server
+./build/linux-debug/Bomberman
+```
+
+For Windows cross-builds, use the `windows-debug` or `windows-release` configure presets together with the matching client build preset:
+
+```bash
+cmake --preset windows-release
+cmake --build --preset windows-client-release
 ```
 
 ### Current Limitations
 
-- [limitation-placeholder-1]
-- [limitation-placeholder-2]
-- [limitation-placeholder-3]
+- no mid-match reconnect support
+- no runtime seat reordering once players are in the lobby
+- no server browser or larger matchmaking flow
 
-### Media And Links
+### Planned Improvements
 
-- Demo video: [demo-video-url]
-- GitHub: [repo-link]
-- Portfolio: [portfolio-link]
+- add final screenshots and a short demonstration clip to the landing page
+- tighten the testing summary with representative latency and packet-loss results
+- continue cleaning remaining non-networking documentation noise
 
-[hero-image]: [hero-image-placeholder]
-[demo-thumbnail]: [demo-thumbnail-placeholder]
-[demo-video-url]: [demo-video-placeholder]
-[architecture-diagram]: [architecture-diagram-placeholder]
-[repo-link]: [repo-link-placeholder]
-[portfolio-link]: [portfolio-link-placeholder]
+### Media
+
+- Placeholder: gameplay screenshot gallery
+- Placeholder: short demo video link
+- Placeholder: architecture overview SVG
+- Placeholder: prediction / correction diagram callout
+
+### Repository
+
+The main networking work is concentrated in `Net/`, `Server/`, and `Scenes/MultiplayerLevelScene/`, with Doxygen topic pages used as a guided walkthrough of the architecture.
+
+- Placeholder: repository URL
+- Placeholder: personal website link
+- Placeholder: downloadable build or release link
+
 
 <div class="section_buttons">
 
-| | Next |
-|:--|--:|
-| | [Architecture](docs/architecture.md) |
+|   |                                 Next |
+|:--|-------------------------------------:|
+|   | [Architecture](docs/architecture.md) |
 
 </div>
