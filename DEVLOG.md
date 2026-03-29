@@ -11,3 +11,7 @@
 - Reorganized `MultiplayerLevelScene` into a dedicated subsystem folder, split its logic into authority, presentation, remote/world presentation, and telemetry files, and cleaned up the header/documentation surface.
 - Added a dedicated `docs/multiplayer-level-scene.md` page with structure/runtime diagrams, plus reusable light/dark SVG swapping support for future Doxygen charts.
 - Reduced third-party analysis noise by treating external includes as `SYSTEM` and adding a project-local `.clang-tidy` configuration.
+- Split `NetClient` into connection, runtime, and protocol implementation files under `Net/Client` to make the client multiplayer netcode easier to understand and explain.
+- Simplified client-side cached authority state with `std::optional`, cleaned up reset/disconnect naming, and tightened a few misleading `const` helper signatures.
+- Grouped `NetClient`, `ClientPrediction`, and `ClientDiagnostics` into a dedicated Doxygen topic with short portfolio-style presentation pages.
+- Added net-client subsystem diagrams, light/dark SVG variants, and a shared click-to-expand image viewer in the generated Doxygen output.

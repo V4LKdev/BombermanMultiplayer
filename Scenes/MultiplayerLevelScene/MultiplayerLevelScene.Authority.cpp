@@ -9,7 +9,7 @@
 
 #include "Entities/Text.h"
 #include "Game.h"
-#include "Net/NetClient.h"
+#include "Net/Client/NetClient.h"
 #include "Util/Log.h"
 
 namespace bomberman

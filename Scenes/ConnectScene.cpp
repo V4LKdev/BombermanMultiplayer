@@ -12,7 +12,7 @@
 
 #include "Game.h"
 #include "LobbyScene.h"
-#include "Net/NetClient.h"
+#include "Net/Client/NetClient.h"
 #include "Net/NetCommon.h"
 
 namespace

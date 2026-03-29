@@ -13,8 +13,8 @@
 
 #include "Game.h"
 #include "Net/ClientDiagnostics.h"
-#include "Net/NetClient.h"
-#include "Scenes/MultiplayerLevelScene.h"
+#include "Net/Client/NetClient.h"
+#include "Scenes/MultiplayerLevelScene/MultiplayerLevelScene.h"
 #include "Util/Log.h"
 #include "Util/PlayerColors.h"
 

@@ -36,6 +36,15 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
+    },
+    {
+      "name": "windows-debug",
+      "displayName": "Windows Debug (MinGW cross)",
+      "inherits": "base-ninja",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/mingw64.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
     }
   ],
   "buildPresets": [
@@ -67,6 +76,12 @@
       "name": "windows-client-release",
       "displayName": "Windows Client Release",
       "configurePreset": "windows-release",
+      "targets": ["Bomberman"]
+    },
+    {
+      "name": "windows-client-debug",
+      "displayName": "Windows Client Debug",
+      "configurePreset": "windows-debug",
       "targets": ["Bomberman"]
     }
   ]

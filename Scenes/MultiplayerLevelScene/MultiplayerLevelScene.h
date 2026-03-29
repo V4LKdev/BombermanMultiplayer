@@ -18,7 +18,7 @@
 
 #include "Entities/Sound.h"
 #include "Net/ClientPrediction.h"
-#include "Net/NetClient.h"
+#include "Net/Client/NetClient.h"
 #include "Net/NetCommon.h"
 #include "Scenes/LevelScene.h"
 

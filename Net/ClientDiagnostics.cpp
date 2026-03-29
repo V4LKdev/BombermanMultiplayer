@@ -1,6 +1,7 @@
 /**
  * @file ClientDiagnostics.cpp
  * @brief Client-side multiplayer diagnostics recorder and report writer.
+ * @ingroup net_client
  */
 
 #include "ClientDiagnostics.h"
@@ -11,7 +12,7 @@
 #include <sstream>
 #include <vector>
 
-#include "NetClient.h"
+#include "Client/NetClient.h"
 
 namespace bomberman::net
 {

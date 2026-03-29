@@ -23,6 +23,9 @@
  * 4. The affected serializers and deserializers
  */
 
+/**
+ * @brief Multiplayer networking protocol, transport-facing client/server helpers, and shared wire data model.
+ */
 namespace bomberman::net
 {
     // =================================================================================================================

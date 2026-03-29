@@ -18,6 +18,9 @@
 #include "Sim/Movement.h"
 #include "Sim/PowerupConfig.h"
 
+/**
+ * @brief Authoritative dedicated-server state, match flow, and fixed-tick simulation support.
+ */
 namespace bomberman::server
 {
     // ----- Server session constants -----

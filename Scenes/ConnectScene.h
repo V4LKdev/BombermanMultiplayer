@@ -13,7 +13,7 @@
 #include <string_view>
 
 #include "Entities/Text.h"
-#include "Net/NetClient.h"
+#include "Net/Client/NetClient.h"
 #include "Scenes/Scene.h"
 
 namespace bomberman

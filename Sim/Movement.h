@@ -14,6 +14,9 @@
  * One Q8 unit = 1/256 of a tile.
  */
 
+/**
+ * @brief Shared simulation primitives and constants used by both the client and the authoritative server.
+ */
 namespace bomberman::sim
 {
     /// Player movement speed in tile-Q8 units per simulation tick.

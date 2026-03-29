@@ -1,6 +1,7 @@
 /**
  * @file ClientPrediction.h
  * @brief Client-side local prediction history, correction replay, and recovery state.
+ * @ingroup net_client
  *
  * @details
  * The client keeps one contiguous local input timeline and a matching history of

@@ -20,6 +20,7 @@ INPUT                  = README.md \
                          server_main.cpp \
                          CMakeLists.txt \
                          docs/architecture.md \
+                         docs/net-client.md \
                          docs/multiplayer-level-scene.md \
                          docs/networking.md \
                          docs/testing.md \
@@ -78,7 +79,12 @@ HTML_EXTRA_STYLESHEET  = docs/theme/doxygen-awesome.css \
                          docs/theme/doxygen-awesome-sidebar-only-darkmode-toggle.css \
                          docs/theme/custom.css
 HTML_EXTRA_FILES       = docs/theme/doxygen-awesome-darkmode-toggle.js \
+                         docs/theme/image-modal.js \
                          docs/assets/diagrams/multiplayer-level-scene-structure-light.svg \
                          docs/assets/diagrams/multiplayer-level-scene-structure-dark.svg \
                          docs/assets/diagrams/multiplayer-level-scene-runtime-flow-light.svg \
-                         docs/assets/diagrams/multiplayer-level-scene-runtime-flow-dark.svg
+                         docs/assets/diagrams/multiplayer-level-scene-runtime-flow-dark.svg \
+                         docs/assets/diagrams/net-client-boundaries-light.svg \
+                         docs/assets/diagrams/net-client-boundaries-dark.svg \
+                         docs/assets/diagrams/net-client-structure-light.svg \
+                         docs/assets/diagrams/net-client-structure-dark.svg

@@ -8,7 +8,7 @@
 
 #include "Game.h"
 
-#include "Net/NetClient.h"
+#include "Net/Client/NetClient.h"
 #include "Scenes/LevelScene.h"
 #include "Scenes/MenuScene.h"
 #include "Sim/Movement.h"

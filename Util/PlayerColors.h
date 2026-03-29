@@ -5,6 +5,9 @@
 #include <cstddef>
 #include <cstdint>
 
+/**
+ * @brief Small shared utility helpers that do not belong to the networking, simulation, or scene subsystems.
+ */
 namespace bomberman::util
 {
     struct PlayerColor

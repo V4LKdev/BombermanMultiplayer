@@ -1,6 +1,7 @@
 /**
  * @file NetClient.h
  * @brief Client-side multiplayer connection lifecycle and packet endpoint.
+ * @ingroup net_client
  */
 
 #ifndef BOMBERMAN_NET_NETCLIENT_H
@@ -11,7 +12,7 @@
 #include <string>
 #include <string_view>
 
-#include "NetCommon.h"
+#include "Net/NetCommon.h"
 
 namespace bomberman::net
 {
@@ -176,7 +177,7 @@ namespace bomberman::net
          * client is not currently connected.
          */
         [[nodiscard]]
-        std::optional<uint32_t> sendInput(uint8_t buttons) const;
+        std::optional<uint32_t> sendInput(uint8_t buttons);
 
         /**
          * @brief Sends an authoritative lobby ready-state request for the local accepted seat.
@@ -187,7 +188,7 @@ namespace bomberman::net
          * @return `true` if the request was queued successfully.
          */
         [[nodiscard]]
-        bool sendLobbyReady(bool ready) const;
+        bool sendLobbyReady(bool ready);
 
         /**
          * @brief Acknowledges that the gameplay scene for `matchId` has been constructed locally.
@@ -198,7 +199,7 @@ namespace bomberman::net
          * @return `true` if the request was queued successfully.
          */
         [[nodiscard]]
-        bool sendMatchLoaded(uint32_t matchId) const;
+        bool sendMatchLoaded(uint32_t matchId);
 
         /** @brief Flushes any queued outgoing ENet packets immediately. */
         void flushOutgoing() const;
@@ -429,7 +430,7 @@ namespace bomberman::net
         bool initializeENet();
         void shutdownENet();
 
-        void finalizeDiagnosticsSession(EConnectState finalState, bool preserveRejectReason = true);
+        void finalizeDiagnosticsSession(EConnectState finalState);
 
         // ----- Disconnect helpers -----
 
@@ -441,10 +442,10 @@ namespace bomberman::net
         void startGracefulDisconnect();
 
         /** @brief Destroys ENet peer and host resources without changing logical state. */
-        void destroyTransport() const;
+        void destroyTransport();
 
         /** @brief Clears the local per-match input sequence/history used for gameplay batching. */
-        void resetLocalInputStream() const;
+        void resetLocalInputStream();
 
         /**
          * @brief Resets local client state that must restart from a fresh baseline on each new round start.
@@ -453,16 +454,14 @@ namespace bomberman::net
          */
         void resetLocalMatchBootstrapState();
 
-        /** @brief Clears match-scoped caches so a newer round start cannot inherit stale gameplay state. */
-        void clearActiveMatchRuntimeCaches() const;
         /** @brief Clears the current round-start/bootstrap session and local gameplay input state. */
-        void clearCurrentMatchSession() const;
+        void resetCurrentMatchSession();
 
         /**
          * @brief Clears per-attempt and per-session data without changing connection state.
          * @param clearRejectReason When false, preserves the current reject reason for UI/reporting.
          */
-        void clearSessionState(bool clearRejectReason = true);
+        void resetSessionState(bool clearRejectReason = true);
 
         /**
          * @brief Tears down transport, clears stale session data, and enters a failure state.
@@ -470,6 +469,9 @@ namespace bomberman::net
          * @param clearRejectReason When false, preserves the current reject reason for UI/reporting.
          */
         void failConnection(EConnectState failureState, bool clearRejectReason = true);
+
+        /** @brief Finalizes the current session as disconnected and releases transport resources. */
+        void transitionToDisconnected();
 
         /** @brief Resets per-session state shared by disconnect and failure paths. */
         void resetState();
@@ -479,15 +481,15 @@ namespace bomberman::net
         void handleWelcome(const uint8_t* payload, std::size_t payloadSize);
         void handleReject(const uint8_t* payload, std::size_t payloadSize);
         void handleLevelInfo(const uint8_t* payload, std::size_t payloadSize);
-        void handleLobbyState(const uint8_t* payload, std::size_t payloadSize) const;
+        void handleLobbyState(const uint8_t* payload, std::size_t payloadSize);
         void handleMatchStart(const uint8_t* payload, std::size_t payloadSize);
         void handleMatchCancelled(const uint8_t* payload, std::size_t payloadSize);
         void handleMatchResult(const uint8_t* payload, std::size_t payloadSize);
-        void handleSnapshot(const uint8_t* payload, std::size_t payloadSize) const;
-        void handleCorrection(const uint8_t* payload, std::size_t payloadSize) const;
-        void handleBombPlaced(const uint8_t* payload, std::size_t payloadSize) const;
-        void handleExplosionResolved(const uint8_t* payload, std::size_t payloadSize) const;
-        void enqueueGameplayEvent(const GameplayEvent& event) const;
+        void handleSnapshot(const uint8_t* payload, std::size_t payloadSize);
+        void handleCorrection(const uint8_t* payload, std::size_t payloadSize);
+        void handleBombPlaced(const uint8_t* payload, std::size_t payloadSize);
+        void handleExplosionResolved(const uint8_t* payload, std::size_t payloadSize);
+        void enqueueGameplayEvent(const GameplayEvent& event);
 
         // ----- pumpNetwork() helpers -----
 

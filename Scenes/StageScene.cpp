@@ -1,7 +1,7 @@
 #include <string>
 
 #include "Game.h"
-#include "Net/NetClient.h"
+#include "Net/Client/NetClient.h"
 #include "Scenes/LevelScene.h"
 #include "Scenes/LevelSceneFactory.h"
 #include "Scenes/MenuScene.h"

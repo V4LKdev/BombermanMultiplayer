@@ -9,7 +9,7 @@
 
 #include "Game.h"
 #include "Net/ClientDiagnostics.h"
-#include "Net/NetClient.h"
+#include "Net/Client/NetClient.h"
 #include "Scenes/LobbyScene.h"
 #include "Util/Log.h"
 

@@ -2,6 +2,8 @@
   --primary-color: #1e6bb8;
   --primary-dark-color: #174f88;
   --primary-light-color: #4d8fcd;
+  --image-modal-overlay: rgba(15, 23, 42, 0.82);
+  --image-modal-caption: #e5e7eb;
 }
 
 #projectname {
@@ -44,6 +46,12 @@ html:not(.dark-mode) .theme-image-swap .theme-image-dark {
   max-width: 100%;
   height: auto;
   display: block;
+  cursor: zoom-in;
+  pointer-events: auto !important;
+}
+
+.theme-image-swap p {
+  margin-top: 0.75rem;
 }
 
 .theme-image-swap--medium {
@@ -53,4 +61,59 @@ html:not(.dark-mode) .theme-image-swap .theme-image-dark {
 
 .theme-image-swap--medium img {
   width: min(640px, 100%);
+}
+
+.image-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: var(--image-modal-overlay);
+  backdrop-filter: blur(4px);
+}
+
+.image-modal.is-open {
+  display: flex;
+}
+
+body.image-modal-open {
+  overflow: hidden;
+}
+
+.image-modal__backdrop {
+  position: absolute;
+  inset: 0;
+}
+
+.image-modal__figure {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  width: min(96vw, 1600px);
+  max-height: 96vh;
+}
+
+.image-modal__image {
+  display: block;
+  width: 100%;
+  max-height: calc(96vh - 3rem);
+  height: auto;
+  object-fit: contain;
+  background: transparent;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.35);
+  cursor: zoom-out;
+}
+
+.image-modal__caption {
+  margin-top: 0.75rem;
+  color: var(--image-modal-caption);
+  text-align: center;
+  font-size: 0.95rem;
+}
+
+.image-modal__caption:empty {
+  display: none;
 }

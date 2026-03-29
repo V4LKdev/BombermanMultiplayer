@@ -1,6 +1,12 @@
 #ifndef BOMBERMAN_NET_CLIENTDIAGNOSTICS_H
 #define BOMBERMAN_NET_CLIENTDIAGNOSTICS_H
 
+/**
+ * @file ClientDiagnostics.h
+ * @brief Client-side multiplayer diagnostics data model and recorder.
+ * @ingroup net_client
+ */
+
 #include <array>
 #include <cstddef>
 #include <cstdint>

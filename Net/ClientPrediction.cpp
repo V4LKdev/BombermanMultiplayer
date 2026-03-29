@@ -1,6 +1,7 @@
 /**
  * @file ClientPrediction.cpp
  * @brief Implementation of client-side local prediction, replay, and recovery helpers.
+ * @ingroup net_client
  */
 
 #include "ClientPrediction.h"
