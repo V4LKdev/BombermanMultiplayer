@@ -1,9 +1,9 @@
-/**
- * @file MultiplayerLevelScene.Authority.cpp
- * @brief MultiplayerLevelScene authority, prediction, and merge logic.
+/** @file MultiplayerLevelScene.Authority.cpp
+ *  @brief Authoritative state merge and local prediction logic.
+ *  @ingroup multiplayer_level_scene
  */
 
-#include "Scenes/MultiplayerLevelSceneInternal.h"
+#include "Scenes/MultiplayerLevelScene/MultiplayerLevelSceneInternal.h"
 
 #include <limits>
 
@@ -15,6 +15,10 @@
 namespace bomberman
 {
     using namespace multiplayer_level_scene_internal;
+
+    // =============================================================================================================
+    // ===== Authority Merge ========================================================================================
+    // =============================================================================================================
 
     void MultiplayerLevelScene::consumeAuthoritativeNetState(net::NetClient& netClient)
     {
@@ -107,18 +111,17 @@ namespace bomberman
         }
     }
 
+    // =============================================================================================================
+    // ===== Local Input and Prediction =============================================================================
+    // =============================================================================================================
+
     void MultiplayerLevelScene::onNetInputQueued(const uint32_t inputSeq, const uint8_t buttons)
     {
         const bool bombHeldNow = (buttons & net::kInputBomb) != 0;
         const bool bombPressedNow = bombHeldNow && !localBombHeldOnLastQueuedInput_;
         localBombHeldOnLastQueuedInput_ = bombHeldNow;
 
-        if (!matchStarted_ ||
-            !gameplayUnlocked_ ||
-            !localPlayerAlive_ ||
-            localPlayerInputLocked_ ||
-            currentMatchResult_.has_value() ||
-            returningToMenu_)
+        if (!allowsLocalGameplayInput())
         {
             return;
         }
@@ -144,13 +147,16 @@ namespace bomberman
 
         if (!localPrediction_.isInitialized())
         {
-            // Keep local presentation responsive until owner corrections establish a baseline.
             updateLocalPresentationFromInputButtons(buttons);
             return;
         }
 
         syncLocalPresentationFromOwnedState(localPrediction_.currentState());
     }
+
+    // =============================================================================================================
+    // ===== Snapshot and Correction Application ====================================================================
+    // =============================================================================================================
 
     void MultiplayerLevelScene::applySnapshot(const net::MsgSnapshot& snapshot)
     {
@@ -160,8 +166,6 @@ namespace bomberman
         if (snapshot.serverTick <= lastAppliedSnapshotTick_)
             return;
 
-        // A late snapshot at the same tick as an already-applied reliable gameplay event is stale because the event may
-        // carry same-tick presentation deltas that snapshots do not preserve.
         if (snapshot.serverTick <= lastAppliedGameplayEventTick_)
         {
             LOG_NET_SNAPSHOT_DEBUG(
@@ -188,7 +192,6 @@ namespace bomberman
     bool MultiplayerLevelScene::shouldApplyGameplayEvent(const uint32_t gameplayEventTick,
                                                          const char* const gameplayEventName) const
     {
-        // Only drop true duplicates or regressions behind the newest applied gameplay event.
         if (gameplayEventTick <= lastAppliedGameplayEventTick_)
         {
             LOG_NET_SNAPSHOT_DEBUG(
@@ -244,7 +247,9 @@ namespace bomberman
         }
 
         const auto replayResult = localPrediction_.reconcileAndReplay(correction, tiles);
-        // Correction flags refresh owner-local effect/loadout state only; death/input-lock presentation still comes from snapshot/event authority.
+
+        // Correction flags refresh owner-local effect/loadout state only;
+        // death/input-lock presentation still comes from snapshot/event authority.
         localPlayerEffectFlags_ = correction.playerFlags;
         if (replayResult.ignoredStaleCorrection)
         {
@@ -324,135 +329,9 @@ namespace bomberman
         livePredictionTelemetry_.recoveryCatchUpSeq = replayResult.recoveryCatchUpSeq;
     }
 
-    void MultiplayerLevelScene::logLivePredictionTelemetry(const unsigned int delta)
-    {
-        const auto& stats = localPrediction_.stats();
-        if (game->isPredictionEnabled())
-        {
-            updateMaxPendingInputDepth();
-        }
-
-        if (auto* netClient = game->getNetClient(); netClient != nullptr)
-        {
-            netClient->updateLivePredictionStats(
-                game->isPredictionEnabled() &&
-                    shouldProcessOwnerPrediction() &&
-                    localPrediction_.isInitialized() &&
-                    !livePredictionTelemetry_.recoveryActive,
-                livePredictionTelemetry_.recoveryActive,
-                stats.correctionsApplied,
-                stats.correctionsMismatched,
-                livePredictionTelemetry_.lastCorrectionDeltaQ,
-                livePredictionTelemetry_.maxPendingInputDepth);
-        }
-
-        if (!game->isPredictionEnabled() || !shouldProcessOwnerPrediction())
-            return;
-
-        if (stats.localInputsApplied == 0 &&
-            stats.localInputsDeferred == 0 &&
-            stats.rejectedLocalInputs == 0 &&
-            stats.correctionsApplied == 0)
-        {
-            return;
-        }
-
-        livePredictionLogAccumulatorMs_ += delta;
-        if (livePredictionLogAccumulatorMs_ < kLivePredictionLogIntervalMs)
-            return;
-
-        livePredictionLogAccumulatorMs_ = 0;
-
-        auto* logger = bomberman::log::netInput();
-        if (logger == nullptr || !logger->should_log(spdlog::level::debug))
-            return;
-
-        const uint32_t pendingDepth = pendingInputDepth();
-        logger->log(
-            spdlog::level::debug,
-            "Prediction live ackSeq={} corrTick={} pendingDepth={} pendingAgeMs={} lastDeltaQ={} lastReplay={} "
-            "lastMissingInputs={} remainingDeferredInputs={} recoveryActive={} recoveryCatchUpSeq={} maxPendingDepth={}",
-            livePredictionTelemetry_.lastAckedInputSeq,
-            livePredictionTelemetry_.lastCorrectionServerTick,
-            pendingDepth,
-            pendingDepth * kSimulationTickMs,
-            livePredictionTelemetry_.lastCorrectionDeltaQ,
-            livePredictionTelemetry_.lastReplayCount,
-            livePredictionTelemetry_.lastMissingInputs,
-            livePredictionTelemetry_.lastRemainingDeferredInputs,
-            livePredictionTelemetry_.recoveryActive ? "yes" : "no",
-            livePredictionTelemetry_.recoveryCatchUpSeq,
-            livePredictionTelemetry_.maxPendingInputDepth);
-    }
-
-    void MultiplayerLevelScene::updateMaxPendingInputDepth()
-    {
-        livePredictionTelemetry_.maxPendingInputDepth =
-            std::max(livePredictionTelemetry_.maxPendingInputDepth, pendingInputDepth());
-    }
-
-    uint32_t MultiplayerLevelScene::pendingInputDepth() const
-    {
-        const uint32_t lastRecorded = localPrediction_.lastRecordedInputSeq();
-        if (lastRecorded <= livePredictionTelemetry_.lastAckedInputSeq)
-            return 0;
-
-        return lastRecorded - livePredictionTelemetry_.lastAckedInputSeq;
-    }
-
-    void MultiplayerLevelScene::logPredictionSummary() const
-    {
-        if (!game->isPredictionEnabled())
-            return;
-
-        const auto& stats = localPrediction_.stats();
-        if (stats.localInputsApplied == 0 &&
-            stats.localInputsDeferred == 0 &&
-            stats.rejectedLocalInputs == 0 &&
-            stats.correctionsApplied == 0)
-        {
-            return;
-        }
-
-        auto* logger = bomberman::log::netInput();
-        if (logger == nullptr || !logger->should_log(spdlog::level::debug))
-            return;
-
-        const double avgCorrectionDeltaQ =
-            (stats.correctionsWithRetainedPredictedState > 0)
-                ? static_cast<double>(stats.totalCorrectionDeltaQ) /
-                    static_cast<double>(stats.correctionsWithRetainedPredictedState)
-                : 0.0;
-
-        logger->log(
-            spdlog::level::debug,
-            "Prediction summary localInputs={} deferredInputs={} rejectedInputs={} corrections={} mismatches={} "
-            "avgDeltaQ={:.2f} maxDeltaQ={} replayedInputs={} maxReplay={} truncations={} recoveries={} "
-            "recoveryResolutions={} maxMissingInputs={} maxPendingDepth={}",
-            stats.localInputsApplied,
-            stats.localInputsDeferred,
-            stats.rejectedLocalInputs,
-            stats.correctionsApplied,
-            stats.correctionsMismatched,
-            avgCorrectionDeltaQ,
-            stats.maxCorrectionDeltaQ,
-            stats.totalReplayedInputs,
-            stats.maxReplayedInputs,
-            stats.replayTruncations,
-            stats.recoveryActivations,
-            stats.recoveryResolutions,
-            stats.maxMissingInputHistory,
-            livePredictionTelemetry_.maxPendingInputDepth);
-    }
-
     bool MultiplayerLevelScene::shouldProcessOwnerPrediction() const
     {
-        return matchStarted_ &&
-               gameplayUnlocked_ &&
-               localPlayerAlive_ &&
-               !localPlayerInputLocked_ &&
-               !currentMatchResult_.has_value() &&
-               !returningToMenu_;
+        return allowsLocalGameplayInput();
     }
 
     bool MultiplayerLevelScene::shouldOwnLocalStateFromPrediction() const
@@ -515,6 +394,17 @@ namespace bomberman
     uint32_t MultiplayerLevelScene::currentAuthoritativeGameplayTick(const net::NetClient& netClient) const
     {
         return std::max(netClient.lastSnapshotTick(), netClient.lastCorrectionTick());
+    }
+
+    bool MultiplayerLevelScene::allowsLocalGameplayInput() const
+    {
+        // Gameplay is locked during the pre-match lobby, after a match result until returning to menu, and on local death.
+        return matchStarted_ &&
+               gameplayUnlocked_ &&
+               localPlayerAlive_ &&
+               !localPlayerInputLocked_ &&
+               !currentMatchResult_.has_value() &&
+               !returningToMenu_;
     }
 
     void MultiplayerLevelScene::applyAuthoritativeLocalSnapshot(const net::MsgSnapshot::PlayerEntry& entry)

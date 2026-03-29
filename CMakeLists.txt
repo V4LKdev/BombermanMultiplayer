@@ -44,7 +44,7 @@ set_target_properties(enet PROPERTIES FOLDER "ThirdParty")
 
 # spdlog – header-only interface from third_party/spdlog
 add_library(spdlog_interface INTERFACE)
-target_include_directories(spdlog_interface INTERFACE
+target_include_directories(spdlog_interface SYSTEM INTERFACE
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party/spdlog/include)
 
 # nlohmann/json – single-header from third_party/json
@@ -67,9 +67,12 @@ if(BOMBERMAN_BUILD_CLIENT)
     ${CMAKE_CURRENT_SOURCE_DIR}/Scenes/LevelScene.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Scenes/LevelSceneFactory.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Scenes/SingleplayerLevelScene.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/Scenes/MultiplayerLevelScene.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/Scenes/MultiplayerLevelScene.Authority.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/Scenes/MultiplayerLevelScene.Presentation.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Scenes/MultiplayerLevelScene/MultiplayerLevelScene.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Scenes/MultiplayerLevelScene/MultiplayerLevelScene.Authority.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Scenes/MultiplayerLevelScene/MultiplayerLevelScene.Presentation.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Scenes/MultiplayerLevelScene/MultiplayerLevelScene.RemotePresentation.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Scenes/MultiplayerLevelScene/MultiplayerLevelScene.Telemetry.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Scenes/MultiplayerLevelScene/MultiplayerLevelScene.WorldPresentation.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Scenes/GameOverScene.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Scenes/StageScene.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Managers/SceneManager.cpp
@@ -138,6 +141,8 @@ set(_enet_include "${CMAKE_CURRENT_SOURCE_DIR}/third_party/enet/include")
 foreach(_t IN LISTS _targets)
   target_include_directories(${_t} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
+  )
+  target_include_directories(${_t} SYSTEM PRIVATE
     ${NLOHMANN_INCLUDE_DIR}
     ${_enet_include}
   )

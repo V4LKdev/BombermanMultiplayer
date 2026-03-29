@@ -1,9 +1,9 @@
-/**
- * @file MultiplayerLevelScene.cpp
- * @brief Multiplayer gameplay scene orchestration and lifecycle hooks.
+/** @file MultiplayerLevelScene.cpp
+ *  @brief Multiplayer scene lifecycle and frame flow.
+ *  @ingroup multiplayer_level_scene
  */
 
-#include "Scenes/MultiplayerLevelSceneInternal.h"
+#include "Scenes/MultiplayerLevelScene/MultiplayerLevelSceneInternal.h"
 
 #include <SDL.h>
 
@@ -16,6 +16,10 @@
 namespace bomberman
 {
     using namespace multiplayer_level_scene_internal;
+
+    // =============================================================================================================
+    // ===== Construction ===========================================================================================
+    // =============================================================================================================
 
     MultiplayerLevelScene::MultiplayerLevelScene(Game* game,
                                                  const unsigned int stage,
@@ -42,14 +46,13 @@ namespace bomberman
         matchLoadedAckSent_ = false;
     }
 
+    // =============================================================================================================
+    // ===== Scene Activity =========================================================================================
+    // =============================================================================================================
+
     bool MultiplayerLevelScene::wantsNetworkInputPolling() const
     {
-        if (exited_ ||
-            !matchStarted_ ||
-            !gameplayUnlocked_ ||
-            !localPlayerAlive_ ||
-            localPlayerInputLocked_ ||
-            returningToMenu_)
+        if (exited_ || !allowsLocalGameplayInput())
         {
             return false;
         }
@@ -63,6 +66,10 @@ namespace bomberman
         net::MsgLobbyState lobbyState{};
         return !netClient->tryGetLatestLobbyState(lobbyState);
     }
+
+    // =============================================================================================================
+    // ===== Frame Update ===========================================================================================
+    // =============================================================================================================
 
     void MultiplayerLevelScene::updateLevel(const unsigned int delta)
     {
@@ -81,19 +88,11 @@ namespace bomberman
 
         if (netClient->hasBrokenGameplayEventStream())
         {
-            LOG_NET_SNAPSHOT_ERROR("Reliable gameplay event stream became unusable during matchId={} - leaving match",
-                                   matchId_);
+            LOG_NET_SNAPSHOT_ERROR("Reliable gameplay event stream became unusable during matchId={} - leaving match", matchId_);
             returnToMenu(true, "GameplayEventStreamBroken");
             return;
         }
 
-        /*
-         * Runtime order:
-         * 1) consume any newer owner correction first so local prediction owns local presentation.
-         * 2) merge the newest snapshot with queued reliable gameplay events in monotonic authoritative tick order.
-         * 3) for equal ticks, apply snapshot state first, then queued reliable events in receive order.
-         * 4) tick scene objects after state application, then finish tag/camera/diagnostic updates.
-         */
         consumeAuthoritativeNetState(*netClient);
         updateMatchStartFlow(*netClient);
         updateMatchResultFlow(*netClient);
@@ -104,6 +103,10 @@ namespace bomberman
         }
         finalizeFrameUpdate(delta);
     }
+
+    // =============================================================================================================
+    // ===== Match Flow =============================================================================================
+    // =============================================================================================================
 
     net::NetClient* MultiplayerLevelScene::requireConnectedNetClient()
     {
@@ -242,7 +245,7 @@ namespace bomberman
 
         if (currentMatchResult_->result == net::MsgMatchResult::EResult::Draw)
         {
-            showCenterBanner("DRAW!", SDL_Color{0xFF, 0xD1, 0x66, 0xFF});
+            showCenterBanner("DRAW!", SDL_Color{0xFF, 0xD1, 0x66, 0xFF}); // Gold
             return;
         }
 
@@ -256,11 +259,27 @@ namespace bomberman
         if (localPlayerAlive_ || currentMatchResult_.has_value())
             return;
 
-        showCenterBanner("DEAD", SDL_Color{0xE8, 0x6A, 0x6A, 0xFF});
+        showCenterBanner("DEAD", SDL_Color{0xE8, 0x6A, 0x6A, 0xFF}); // Red
     }
+
+    // =============================================================================================================
+    // ===== Finalization and Exit ==================================================================================
+    // =============================================================================================================
 
     void MultiplayerLevelScene::finalizeFrameUpdate(const unsigned int delta)
     {
+        /*
+         * Flow:
+         *  1) updateSceneObjects to tick all presentations and world objects with the new authoritative state.
+         *  2) update pending bomb placements to spawn bomb presentations at the right time and remove them if expired.
+         *  3) update bomb and explosion presentations to match the latest authoritative state and remove them when expired.
+         *  4) update remote player presentations to advance interpolation and update tags.
+         *  5) update powerup effect presentations to match the latest authoritative state and remove them when expired.
+         *  6) update the local player tag position to follow the local player sprite.
+         *  7) update the camera to follow the local player.
+         *  8) log live prediction telemetry for diagnostics and tuning.
+         *  9) update the debug HUD with current multiplayer stats if enabled.
+         */
         updateSceneObjects(delta);
         updatePendingLocalBombPlacements(delta);
         updateLocalBombSparkPresentations(delta);
@@ -273,9 +292,14 @@ namespace bomberman
         updateDebugHud(delta);
     }
 
+    // =============================================================================================================
+    // ===== Scene Transitions ======================================================================================
+    // =============================================================================================================
+
     void MultiplayerLevelScene::onExit()
     {
         exited_ = true;
+        // Log final prediction stats before cleaning up remote player presentations.
         if (auto* netClient = game ? game->getNetClient() : nullptr; netClient != nullptr)
         {
             const auto& stats = localPrediction_.stats();
@@ -283,12 +307,14 @@ namespace bomberman
                 stats,
                 localPrediction_.isInitialized() || stats.correctionsApplied > 0,
                 stats.recoveryActivations > 0);
+
             netClient->updateLivePredictionStats(false, false, 0, 0, 0, 0);
         }
         logPredictionSummary();
         removeAllRemotePlayers();
         removeAllSnapshotBombs();
         removeAllSnapshotPowerups();
+
         localPrediction_.reset();
         lastAppliedSnapshotTick_ = 0;
         lastAppliedCorrectionTick_ = 0;

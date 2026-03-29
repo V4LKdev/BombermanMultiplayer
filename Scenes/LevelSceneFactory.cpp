@@ -1,6 +1,6 @@
 #include "Scenes/LevelSceneFactory.h"
 
-#include "Scenes/MultiplayerLevelScene.h"
+#include "Scenes/MultiplayerLevelScene/MultiplayerLevelScene.h"
 #include "Scenes/SingleplayerLevelScene.h"
 
 namespace bomberman
@@ -19,4 +19,3 @@ namespace bomberman
         }
     }
 } // namespace bomberman
-
