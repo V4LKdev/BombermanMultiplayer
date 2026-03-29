@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="220" viewBox="0 0 720 220" role="img" aria-labelledby="title desc">
+  <title id="title">Documentation Diagram Placeholder</title>
+  <desc id="desc">A simple placeholder diagram used to test SVG rendering in GitHub and Doxygen.</desc>
+  <rect width="720" height="220" fill="#f5f7fa"/>
+  <rect x="30" y="60" width="180" height="90" rx="12" fill="#1e6bb8"/>
+  <rect x="270" y="60" width="180" height="90" rx="12" fill="#4d8fcd"/>
+  <rect x="510" y="60" width="180" height="90" rx="12" fill="#174f88"/>
+  <path d="M210 105 L270 105" stroke="#2d3a4a" stroke-width="6" fill="none"/>
+  <path d="M450 105 L510 105" stroke="#2d3a4a" stroke-width="6" fill="none"/>
+  <polygon points="265,98 265,112 278,105" fill="#2d3a4a"/>
+  <polygon points="505,98 505,112 518,105" fill="#2d3a4a"/>
+  <text x="120" y="100" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#ffffff">Client</text>
+  <text x="120" y="126" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#ffffff">Input / UI</text>
+  <text x="360" y="100" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#ffffff">Server</text>
+  <text x="360" y="126" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#ffffff">Authority</text>
+  <text x="600" y="100" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#ffffff">Docs</text>
+  <text x="600" y="126" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#ffffff">Presentation</text>
+  <text x="360" y="195" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" fill="#2d3a4a">Temporary SVG used to validate image rendering in the documentation theme</text>
+</svg>

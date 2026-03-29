@@ -1,0 +1,15 @@
+:root {
+  --primary-color: #1e6bb8;
+  --primary-dark-color: #174f88;
+  --primary-light-color: #4d8fcd;
+}
+
+#projectname {
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+#projectbrief {
+  font-size: 0.82rem;
+  line-height: 1.35;
+}

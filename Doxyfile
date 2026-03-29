@@ -1,0 +1,78 @@
+PROJECT_NAME           = "Bomberman Multiplayer"
+PROJECT_BRIEF          = "Authoritative multiplayer networking layer for Bomberman."
+OUTPUT_DIRECTORY       = build/docs-doxygen
+OUTPUT_LANGUAGE        = English
+USE_MDFILE_AS_MAINPAGE = README.md
+
+INPUT                  = README.md \
+                         Core \
+                         Entities \
+                         Managers \
+                         Net \
+                         Scenes \
+                         Server \
+                         Sim \
+                         Util \
+                         Game.h \
+                         Game.cpp \
+                         Const.h \
+                         main.cpp \
+                         server_main.cpp \
+                         CMakeLists.txt \
+                         docs/architecture.md \
+                         docs/networking.md \
+                         docs/testing.md \
+                         docs/reference.md \
+                         docs/project-notes.md \
+                         docs/devlog-summary.md
+FILE_PATTERNS          = *.h *.cpp *.md
+RECURSIVE              = YES
+EXCLUDE                = build \
+                         third_party \
+                         _temp_docs_archive
+EXCLUDE_PATTERNS       = */build/* \
+                         */third_party/* \
+                         */_temp_docs_archive/*
+
+EXTRACT_ALL            = NO
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = NO
+HIDE_UNDOC_MEMBERS     = NO
+HIDE_UNDOC_CLASSES     = NO
+
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+HTML_OUTPUT            = html
+HTML_COLORSTYLE        = LIGHT
+HTML_DYNAMIC_MENUS     = YES
+DISABLE_INDEX          = NO
+FULL_SIDEBAR           = NO
+TREEVIEW_WIDTH         = 260
+HTML_HEADER            = docs/theme/header.html
+
+MARKDOWN_SUPPORT       = YES
+TOC_INCLUDE_HEADINGS   = 0
+AUTOLINK_SUPPORT       = YES
+
+QUIET                  = NO
+WARN_IF_UNDOCUMENTED   = NO
+WARN_IF_DOC_ERROR      = YES
+
+GENERATE_TREEVIEW      = YES
+SEARCHENGINE           = YES
+
+HAVE_DOT               = YES
+CLASS_GRAPH            = YES
+COLLABORATION_GRAPH    = NO
+GROUP_GRAPHS           = NO
+INCLUDE_GRAPH          = NO
+INCLUDED_BY_GRAPH      = NO
+CALL_GRAPH             = NO
+CALLER_GRAPH           = NO
+DIRECTORY_GRAPH        = NO
+
+HTML_EXTRA_STYLESHEET  = docs/theme/doxygen-awesome.css \
+                         docs/theme/doxygen-awesome-sidebar-only.css \
+                         docs/theme/doxygen-awesome-sidebar-only-darkmode-toggle.css \
+                         docs/theme/custom.css
+HTML_EXTRA_FILES       = docs/theme/doxygen-awesome-darkmode-toggle.js
