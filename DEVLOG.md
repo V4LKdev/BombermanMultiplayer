@@ -19,3 +19,5 @@
 - Refined the shared landing page structure so the README keeps a cleaner portfolio shape while staying usable as the Doxygen main page.
 - Reworked the networking overview page into the first fully finished portfolio-quality subsystem page, covering authority, channel layout, message catalogue, bootstrap/runtime flow, diagnostics, and concrete protocol examples.
 - Added dedicated networking diagrams for bootstrap flow and correction packet structure, with light/dark variants integrated into the generated site.
+- Tightened `NetCommon.h` comments so the shared protocol file reads more clearly as the single client/server wire contract.
+- Reorganized and clarified `ServerState.h` comments and sectioning so the authoritative server state model is easier to review before the server-flow documentation pass.

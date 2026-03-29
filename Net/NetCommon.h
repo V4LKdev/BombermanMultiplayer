@@ -12,19 +12,23 @@
 
 /**
  * @file NetCommon.h
- * @brief Shared protocol constants, message types, and wire helpers.
+ * @brief Shared client/server wire contract for the multiplayer protocol.
+ *
+ * This file is the single source of truth for message ids, channels, fixed
+ * payload sizes, wire structs, serializers, and packet builders used by both
+ * client and server.
  *
  * The protocol requires a strict version match during handshake.
  *
  * @note When changing wire layout, update:
- * 1. @ref kProtocolVersion
- * 2. Wire size constants and `static_assert` checks
- * 3. @ref expectedPayloadSize
+ * 1. `kProtocolVersion`
+ * 2. The affected wire size constants and `static_assert` checks
+ * 3. `expectedPayloadSize(...)`
  * 4. The affected serializers and deserializers
  */
 
 /**
- * @brief Multiplayer networking protocol, transport-facing client/server helpers, and shared wire data model.
+ * @brief Shared multiplayer protocol types and transport-facing wire helpers.
  */
 namespace bomberman::net
 {
@@ -125,6 +129,10 @@ namespace bomberman::net
     }
 
     // ----- Wire Size Constants -----
+    //
+    // All current protocol payloads are fixed-size on the wire. That keeps
+    // packet validation cheap and lets both sides reject malformed packets
+    // immediately using only the message type and payload size.
 
     constexpr std::size_t kPacketHeaderSize =
         sizeof(uint8_t) +  // type
@@ -306,23 +314,23 @@ namespace bomberman::net
     /** @brief Message type identifiers used in packet headers. */
     enum class EMsgType : uint8_t
     {
-        Invalid    = 0x00,
-        Hello      = 0x01,
-        Welcome    = 0x02,
-        Reject     = 0x03,
-        LevelInfo  = 0x04,
-        LobbyState = 0x05,
-        LobbyReady = 0x06,
-        MatchLoaded = 0x07,
-        MatchStart = 0x08,
-        MatchCancelled = 0x09,
-        MatchResult = 0x0A,
+        Invalid    = 0x00,      ///<    Invalid or uninitialized message type.
+        Hello      = 0x01,      ///<    Client-initiated handshake message.
+        Welcome    = 0x02,      ///<    Server handshake acceptance message.
+        Reject     = 0x03,      ///<    Server handshake rejection message.
+        LevelInfo  = 0x04,      ///<    Server message containing map seed and match id for an upcoming round.
+        LobbyState = 0x05,      ///<    Server message containing current lobby state.
+        LobbyReady = 0x06,      ///<    Client message indicating the local player's ready status for the next round.
+        MatchLoaded = 0x07,     ///<    Server message indicating that all players have loaded the level and the match is ready to start.
+        MatchStart = 0x08,      ///<    Server message indicating the authoritative server tick for round start and the unlock tick for early inputs.
+        MatchCancelled = 0x09,  ///<    Server message indicating that the current match has been cancelled due to a player disconnect.
+        MatchResult = 0x0A,     ///<    Server message containing the result of a completed match.
 
-        Input      = 0x10,
-        Snapshot   = 0x11,
-        Correction = 0x12,
-        BombPlaced = 0x13,
-        ExplosionResolved = 0x14
+        Input      = 0x10,      ///<    Client message containing a batch of input bitmasks and their base sequence number.
+        Snapshot   = 0x11,      ///<    Server message containing the authoritative game state for a single tick.
+        Correction = 0x12,      ///<    Server message containing an authoritative correction to the local player's state.
+        BombPlaced = 0x13,      ///<    Server message indicating that a bomb has been placed by a player.
+        ExplosionResolved = 0x14 ///<   Server message containing the authoritative result of a bomb explosion.
     };
 
     /** @brief Checks whether a raw byte value corresponds to a valid @ref EMsgType. */
@@ -445,7 +453,9 @@ namespace bomberman::net
     /**
      * @brief Returns the exact expected payload size for a message type.
      *
-     * All current messages use fixed-size payloads. Returns 0 for unknown types.
+     * All current messages use fixed-size payloads. This is part of the first
+     * validation pass performed before payload deserialization. Returns 0 for
+     * unknown types.
      */
     constexpr std::size_t expectedPayloadSize(EMsgType type)
     {
@@ -473,6 +483,9 @@ namespace bomberman::net
     // =================================================================================================================
     // ===== Wire Payload Types ========================================================================================
     // =================================================================================================================
+    //
+    // These are protocol payload models, not gameplay-domain classes. Their
+    // field layout intentionally mirrors the fixed wire format defined above.
 
     /** @brief Packet metadata prefix present on every wire message. */
     struct PacketHeader
@@ -729,7 +742,7 @@ namespace bomberman::net
         int16_t xQ = 0;                     ///< Corrected X position in tile-space Q8.
         int16_t yQ = 0;                     ///< Corrected Y position in tile-space Q8.
         uint8_t playerFlags = 0;            ///< Owner-local copy of the current replicated player flags.
-        uint8_t reserved[3]{};              ///< Currently unused wire padding. If reused later, keep it owner-only (for example local pickup/bomb state) rather than treating it as general world-state data.
+        uint8_t reserved[3]{};              ///< Currently unused wire padding.
     };
 
     /**
