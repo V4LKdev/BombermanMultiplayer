@@ -17,3 +17,5 @@
 - Added net-client subsystem diagrams, light/dark SVG variants, and a shared click-to-expand image viewer in the generated Doxygen output.
 - Switched the Doxygen site fully onto the doxygen-awesome Interactive TOC layout, aligned the sidebar width with the theme, and added page-to-page navigation buttons so the docs read like a guided portfolio walkthrough.
 - Refined the shared landing page structure so the README keeps a cleaner portfolio shape while staying usable as the Doxygen main page.
+- Reworked the networking overview page into the first fully finished portfolio-quality subsystem page, covering authority, channel layout, message catalogue, bootstrap/runtime flow, diagnostics, and concrete protocol examples.
+- Added dedicated networking diagrams for bootstrap flow and correction packet structure, with light/dark variants integrated into the generated site.
