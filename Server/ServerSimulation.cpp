@@ -17,20 +17,14 @@
 #include "Sim/SimConfig.h"
 #include "Util/Log.h"
 
-using namespace bomberman::net;
-
 namespace bomberman::server
 {
-    // =================================================================================================================
-    // ===== Internal Helpers ==========================================================================================
-    // =================================================================================================================
-
     namespace
     {
         [[nodiscard]]
-        MsgCorrection buildCorrection(const ServerState& state, const MatchPlayerState& matchPlayer)
+        net::MsgCorrection buildCorrection(const ServerState& state, const MatchPlayerState& matchPlayer)
         {
-            MsgCorrection corr{};
+            net::MsgCorrection corr{};
             corr.matchId = state.currentMatchId;
             corr.serverTick = state.serverTick;
             corr.lastProcessedInputSeq = matchPlayer.lastProcessedInputSeq;
@@ -101,7 +95,7 @@ namespace bomberman::server
                                            matchPlayer.lastAppliedButtons,
                                            state.serverTick);
 
-            if (matchPlayer.consecutiveInputGaps >= kRepeatedInputWarnThreshold
+            if (matchPlayer.consecutiveInputGaps >= net::kRepeatedInputWarnThreshold
                 && state.serverTick >= matchPlayer.nextGapWarnTick)
             {
                 LOG_NET_INPUT_WARN(
@@ -112,7 +106,7 @@ namespace bomberman::server
                     matchPlayer.lastAppliedButtons,
                     matchPlayer.lastReceivedInputSeq, matchPlayer.lastProcessedInputSeq);
 
-                matchPlayer.nextGapWarnTick = state.serverTick + kRepeatedInputWarnCooldownTicks;
+                matchPlayer.nextGapWarnTick = state.serverTick + net::kRepeatedInputWarnCooldownTicks;
             }
         }
 
@@ -123,21 +117,21 @@ namespace bomberman::server
                 session != nullptr && session->peer != nullptr)
             {
                 const auto correction = buildCorrection(state, matchPlayer);
-                const auto correctionBytes = makeCorrectionPacket(correction);
-                correctionQueued = queueUnreliableCorrection(session->peer, correctionBytes);
+                const auto correctionBytes = net::makeCorrectionPacket(correction);
+                correctionQueued = net::queueUnreliableCorrection(session->peer, correctionBytes);
             }
 
-            state.diag.recordPacketSent(EMsgType::Correction,
+            state.diag.recordPacketSent(net::EMsgType::Correction,
                                         matchPlayer.playerId,
-                                        static_cast<uint8_t>(EChannel::CorrectionUnreliable),
-                                        kPacketHeaderSize + kMsgCorrectionSize,
-                                        correctionQueued ? NetPacketResult::Ok : NetPacketResult::Dropped);
+                                        static_cast<uint8_t>(net::EChannel::CorrectionUnreliable),
+                                        net::kPacketHeaderSize + net::kMsgCorrectionSize,
+                                        correctionQueued ? net::NetPacketResult::Ok : net::NetPacketResult::Dropped);
         }
 
         void samplePeerTransport(ServerState& state, const MatchPlayerState& matchPlayer)
         {
             const auto* session = findPeerSessionByPlayerId(state, matchPlayer.playerId);
-            if (state.serverTick % kPeerTransportSampleTicks != 0 || session == nullptr || session->peer == nullptr)
+            if (state.serverTick % net::kPeerTransportSampleTicks != 0 || session == nullptr || session->peer == nullptr)
             {
                 return;
             }
@@ -195,8 +189,8 @@ namespace bomberman::server
 
             tryPlaceBomb(state, matchPlayer);
 
-            const int8_t moveX = buttonsToMoveX(matchPlayer.appliedButtons);
-            const int8_t moveY = buttonsToMoveY(matchPlayer.appliedButtons);
+            const int8_t moveX = net::buttonsToMoveX(matchPlayer.appliedButtons);
+            const int8_t moveY = net::buttonsToMoveY(matchPlayer.appliedButtons);
             matchPlayer.pos = sim::stepMovementWithCollision(
                 matchPlayer.pos,
                 moveX,
@@ -215,8 +209,8 @@ namespace bomberman::server
             }
 
             const auto snapshot = buildSnapshot(state);
-            const auto snapshotBytes = makeSnapshotPacket(snapshot);
-            if (state.serverTick % kServerSnapshotLogIntervalTicks == 0)
+            const auto snapshotBytes = net::makeSnapshotPacket(snapshot);
+            if (state.serverTick % net::kServerSnapshotLogIntervalTicks == 0)
             {
                 LOG_NET_SNAPSHOT_DEBUG("Snapshot tick={} playerCount={}", snapshot.serverTick, snapshot.playerCount);
             }
@@ -232,15 +226,15 @@ namespace bomberman::server
                 if (session == nullptr || session->peer == nullptr)
                     continue;
 
-                const bool queued = queueUnreliableSnapshot(session->peer, snapshotBytes);
-                state.diag.recordPacketSent(EMsgType::Snapshot,
+                const bool queued = net::queueUnreliableSnapshot(session->peer, snapshotBytes);
+                state.diag.recordPacketSent(net::EMsgType::Snapshot,
                                             slot->playerId,
-                                            static_cast<uint8_t>(EChannel::SnapshotUnreliable),
-                                            kPacketHeaderSize + kMsgSnapshotSize,
-                                            queued ? NetPacketResult::Ok : NetPacketResult::Dropped);
+                                            static_cast<uint8_t>(net::EChannel::SnapshotUnreliable),
+                                            net::kPacketHeaderSize + net::kMsgSnapshotSize,
+                                            queued ? net::NetPacketResult::Ok : net::NetPacketResult::Dropped);
             }
 
-            flush(state.host);
+            net::flush(state.host);
         }
 
         void evaluateRoundEnd(ServerState& state)
@@ -275,10 +269,6 @@ namespace bomberman::server
                             alivePlayerCount);
         }
     } // namespace
-
-    // =================================================================================================================
-    // ===== Fixed-Tick Simulation =====================================================================================
-    // =================================================================================================================
 
     void simulateServerTick(ServerState& state)
     {

@@ -34,6 +34,9 @@ At a high level, the system is split into a small number of clear responsibiliti
 It contains the packet header, protocol version gate, message identifiers, channel assignments, payload sizes, 
 and the helpers used to serialize and validate network messages.
 
+`Net/PacketDispatch.h` and `Net/NetSend.h` sit beside that contract as small shared infrastructure:
+one keeps receive-path parsing and typed dispatch consistent, and the other keeps channel-specific ENet sends explicit.
+
 On the client side, `Net/Client/NetClient.h` owns the transport endpoint, handshake flow, and cached authoritative state.
 `Net/Client/ClientPrediction.h` exists to keep the owning player responsive under latency by predicting local movement and reconciling once authoritative correction arrives.
 
@@ -64,6 +67,8 @@ It defines:
 
 This is intentionally dense code.
 For protocol work, explicitness is a strength: wire layout, validation rules, and packet construction stay close together.
+The same idea carries into the adjacent infrastructure helpers: `Net/PacketDispatch.h` keeps packet parsing and typed dispatch narrow,
+while `Net/NetSend.h` keeps channel selection visible instead of hiding it behind broader gameplay abstractions.
 
 ### Channel Model
 
@@ -215,8 +220,8 @@ Including the shared `PacketHeader`, the full packet is `23 B` on the wire:
 
 <div class="section_buttons">
 
-| Previous                        |                                                             Next |
-|:--------------------------------|-----------------------------------------------------------------:|
-| [Architecture](architecture.md) | <a href="group__net__client.html">Client Multiplayer Netcode</a> |
+| Previous                        |                                                                 Next |
+|:--------------------------------|---------------------------------------------------------------------:|
+| [Architecture](architecture.md) | <a href="group__authoritative__server.html">Authoritative Server</a> |
 
 </div>

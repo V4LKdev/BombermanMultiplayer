@@ -11,19 +11,13 @@
 
 namespace bomberman::server
 {
-    // ----- Snapshot Broadcast -----
-
     struct ServerState;
 
     /** @brief Returns `true` when the current tick should broadcast a snapshot. */
     [[nodiscard]]
     bool shouldBroadcastSnapshot(const ServerState& state);
 
-    /**
-     * @brief Builds a `MsgSnapshot` from the current round state.
-     *
-     * Packs active `matchPlayers`, bombs, and revealed powerups into the payload.
-     */
+    /** @brief Builds a `MsgSnapshot` from the current round state. */
     [[nodiscard]]
     net::MsgSnapshot buildSnapshot(const ServerState& state);
 } // namespace bomberman::server

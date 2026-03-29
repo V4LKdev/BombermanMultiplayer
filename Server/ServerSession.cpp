@@ -6,6 +6,7 @@
 
 #include "ServerState.h"
 
+#include <numeric>
 #include <random>
 
 #include "ServerFlow.h"
@@ -20,12 +21,7 @@ namespace bomberman::server
     {
         static_assert(sim::kDefaultSpawnSlots.size() > 0, "Spawn slot table must not be empty");
 
-        /**
-         * @brief Maps an ENet incoming peer id to the stable peer-session storage slot.
-         *
-         * The server provisions @ref kServerPeerSessionCapacity live session
-         * slots up front, indexed by `ENetPeer::incomingPeerID`.
-         */
+        /** @brief Maps one ENet peer id to the stable peer-session storage slot. */
         [[nodiscard]]
         std::optional<std::size_t> peerSessionIndex(const ENetPeer& peer)
         {
@@ -65,10 +61,6 @@ namespace bomberman::server
 
     } // namespace
 
-    // =================================================================================================================
-    // ===== Session Lifecycle =========================================================================================
-    // =================================================================================================================
-
     void initServerState(ServerState& state,
                          ENetHost* host,
                          const bool diagEnabled,
@@ -99,10 +91,7 @@ namespace bomberman::server
                 state.host->peers[i].data = nullptr;
         }
 
-        // Initialize player ID pool.
-        for (uint8_t i = 0; i < net::kMaxPlayers; ++i)
-            state.playerIdPool[i] = i;
-
+        std::iota(state.playerIdPool.begin(), state.playerIdPool.end(), uint8_t{0});
         state.playerIdPoolSize = net::kMaxPlayers;
 
         LOG_SERVER_INFO("ServerState initialized");
@@ -141,10 +130,6 @@ namespace bomberman::server
 
         state.mapSeed = std::random_device{}();
     }
-
-    // =================================================================================================================
-    // ===== Player Id Allocation ======================================================================================
-    // =================================================================================================================
 
     std::optional<uint8_t> acquirePlayerId(ServerState& state)
     {
@@ -196,10 +181,6 @@ namespace bomberman::server
         state.playerIdPool[insertIndex] = playerId;
         ++state.playerIdPoolSize;
     }
-
-    // =================================================================================================================
-    // ===== Peer Session Binding and Lookup ===========================================================================
-    // =================================================================================================================
 
     PeerSession* bindPeerSession(ServerState& state, ENetPeer& peer)
     {
@@ -260,10 +241,6 @@ namespace bomberman::server
         return nullptr;
     }
 
-    // =================================================================================================================
-    // ===== Peer Session Acceptance and Release =======================================================================
-    // =================================================================================================================
-
     void acceptPeerSession(ServerState& state,
                            PeerSession& session,
                            const uint8_t playerId,
@@ -320,10 +297,6 @@ namespace bomberman::server
 
         return releasedPlayerId;
     }
-
-    // =================================================================================================================
-    // ===== Match Player State Lifecycle ==============================================================================
-    // =================================================================================================================
 
     void createMatchPlayerState(ServerState& state, const uint8_t playerId)
     {

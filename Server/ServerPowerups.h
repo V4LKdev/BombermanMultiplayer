@@ -13,19 +13,19 @@
 
 namespace bomberman::server
 {
-    /** @brief Returns true while invincibility is active. */
+    /** @brief Returns true if invincibility is active. */
     [[nodiscard]]
     bool hasInvincibility(const MatchPlayerState& matchPlayer, uint32_t serverTick);
 
-    /** @brief Returns true while speed boost is active. */
+    /** @brief Returns true if speed boost is active. */
     [[nodiscard]]
     bool hasSpeedBoost(const MatchPlayerState& matchPlayer, uint32_t serverTick);
 
-    /** @brief Returns true while bomb-range boost is active. */
+    /** @brief Returns true if bomb-range boost is active. */
     [[nodiscard]]
     bool hasBombRangeBoost(const MatchPlayerState& matchPlayer, uint32_t serverTick);
 
-    /** @brief Returns true while max-bombs boost is active. */
+    /** @brief Returns true if max-bombs boost is active. */
     [[nodiscard]]
     bool hasMaxBombsBoost(const MatchPlayerState& matchPlayer, uint32_t serverTick);
 

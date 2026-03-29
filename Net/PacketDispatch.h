@@ -1,6 +1,7 @@
 #ifndef BOMBERMAN_NET_PACKETDISPATCH_H
 #define BOMBERMAN_NET_PACKETDISPATCH_H
 
+#include <array>
 #include <cstddef>
 
 #include "NetCommon.h"
@@ -12,8 +13,6 @@
 
 namespace bomberman::net
 {
-    // ----- Shared Receive Helper -----
-
     /**
      * @brief Validates and parses a raw packet into header and payload view.
      *
@@ -43,7 +42,6 @@ namespace bomberman::net
         outPayloadSize = outHeader.payloadSize;
         return true;
     }
-    // ----- Type-Safe Packet Dispatcher -----
 
     /**
      * @brief Function signature for a typed message handler.
@@ -65,8 +63,8 @@ namespace bomberman::net
     template<typename TContext>
     struct PacketDispatcher
     {
-        static constexpr std::size_t kTableSize = 256; // Full uint8_t range.
-        PacketHandlerFn<TContext> table[kTableSize] {};
+        static constexpr std::size_t kTableSize = 256;
+        std::array<PacketHandlerFn<TContext>, kTableSize> table{};
 
         /** @brief Registers a handler for a message type. Overwrites existing binding. */
         void bind(EMsgType type, PacketHandlerFn<TContext> fn)

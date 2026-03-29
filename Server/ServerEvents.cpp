@@ -13,25 +13,21 @@
 #include "ServerState.h"
 #include "Util/Log.h"
 
-using namespace bomberman::net;
-
 namespace bomberman::server
 {
     namespace
     {
-        /** @brief Records one transport lifecycle event for server diagnostics. */
         void recordServerDiagLifecycle(ServerState& state,
-                                       const NetPeerLifecycleType type,
+                                       const net::NetPeerLifecycleType type,
                                        const std::optional<uint8_t> playerId = std::nullopt,
                                        const uint32_t transportPeerId = 0)
         {
             state.diag.recordPeerLifecycle(type, playerId.value_or(0xFF), transportPeerId);
         }
 
-        /** @brief Applies transport defaults and records the lifecycle event for a newly connected peer. */
         void handleConnectEvent(ServerState& state, ENetPeer& peer)
         {
-            applyDefaultPeerTransportConfig(&peer);
+            net::applyDefaultPeerTransportConfig(&peer);
             if (bindPeerSession(state, peer) == nullptr)
             {
                 LOG_SERVER_ERROR("Failed to bind live peer session for enetId={} (capacity={})",
@@ -42,17 +38,18 @@ namespace bomberman::server
             }
 
             LOG_SERVER_DEBUG("Peer connected (id={})", peer.incomingPeerID);
-            recordServerDiagLifecycle(state, NetPeerLifecycleType::TransportConnected, std::nullopt, peer.incomingPeerID);
+            recordServerDiagLifecycle(state,
+                                      net::NetPeerLifecycleType::TransportConnected,
+                                      std::nullopt,
+                                      peer.incomingPeerID);
         }
 
-        /** @brief Dispatches one received packet through the authoritative server receive path. */
         void handleReceiveNetworkEvent(ServerState& state, ENetEvent& event)
         {
             handleReceiveEvent(event, state);
             enet_packet_destroy(event.packet);
         }
 
-        /** @brief Releases accepted state for a disconnecting peer and records the correct lifecycle event. */
         void handleDisconnectEvent(ServerState& state, ENetPeer& peer)
         {
             if (const auto releasedPlayerId = releasePeerSession(state, peer); releasedPlayerId.has_value())
@@ -70,19 +67,21 @@ namespace bomberman::server
                     LOG_SERVER_INFO("Peer disconnected (playerId={})", playerId);
                 }
 
-                recordServerDiagLifecycle(state, NetPeerLifecycleType::PeerDisconnected, playerId, peer.incomingPeerID);
+                recordServerDiagLifecycle(state,
+                                          net::NetPeerLifecycleType::PeerDisconnected,
+                                          playerId,
+                                          peer.incomingPeerID);
                 return;
             }
 
             LOG_SERVER_DEBUG("Peer disconnected before handshake completed (enetId={})", peer.incomingPeerID);
             recordServerDiagLifecycle(state,
-                                      NetPeerLifecycleType::TransportDisconnectedBeforeHandshake,
+                                      net::NetPeerLifecycleType::TransportDisconnectedBeforeHandshake,
                                       std::nullopt,
                                       peer.incomingPeerID);
             peer.data = nullptr;
         }
 
-        /** @brief Routes one ENet event to the authoritative server module that owns its semantics. */
         void handleServerEvent(ServerState& state, ENetEvent& event)
         {
             switch (event.type)
