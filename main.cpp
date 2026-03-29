@@ -178,7 +178,7 @@ int main(int argc, char** argv)
                   cli.multiplayerConfig.predictionEnabled ? "on" : "off",
                   cli.multiplayerConfig.remoteSmoothingEnabled ? "on" : "off");
 
-    // Initiate async connection to server.
+    // Create the multiplayer client endpoint and runtime diagnostics config.
     bomberman::net::NetClient client;
     client.setDiagnosticsConfig(cli.diagnostics.netDiagEnabled,
                                 cli.multiplayerConfig.predictionEnabled,

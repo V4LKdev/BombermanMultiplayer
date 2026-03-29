@@ -22,8 +22,6 @@
 #include "Util/Log.h"
 #include "Sim/SimConfig.h"
 
-using namespace bomberman::net;
-
 namespace
 {
     enum class ParseCliResult : uint8_t
@@ -85,7 +83,7 @@ namespace
     {
         bomberman::cli::LoggingCliOptions logging;
         bomberman::cli::DiagnosticsCliOptions diagnostics;
-        uint16_t port = kDefaultServerPort;
+        uint16_t port = bomberman::net::kDefaultServerPort;
         uint32_t seed = 0;
         uint32_t inputLeadTicks = static_cast<uint32_t>(bomberman::sim::kDefaultServerInputLeadTicks);
         uint32_t snapshotIntervalTicks = static_cast<uint32_t>(bomberman::sim::kDefaultServerSnapshotIntervalTicks);
@@ -307,7 +305,11 @@ int main(int argc, char** argv)
     address.host = ENET_HOST_ANY;
     address.port = cli.port;
 
-    ENetHost* server = enet_host_create(&address, bomberman::server::kServerPeerSessionCapacity, kChannelCount, 0, 0);
+    ENetHost* server = enet_host_create(&address,
+                                        bomberman::server::kServerPeerSessionCapacity,
+                                        bomberman::net::kChannelCount,
+                                        0,
+                                        0);
     if (server == nullptr)
     {
         LOG_SERVER_ERROR("Failed to create ENet host on port {}", cli.port);
@@ -317,7 +319,10 @@ int main(int argc, char** argv)
 
     LOG_SERVER_INFO("==== BOMBERMAN DEDICATED SERVER ===================================================================");
     LOG_SERVER_INFO("Server diagnostics {}", cli.diagnostics.netDiagEnabled ? "enabled" : "disabled");
-    LOG_SERVER_INFO("Listening on port {} with max {} peers ({} gameplay slots)", cli.port, bomberman::server::kServerPeerSessionCapacity, kMaxPlayers);
+    LOG_SERVER_INFO("Listening on port {} with max {} peers ({} gameplay slots)",
+                    cli.port,
+                    bomberman::server::kServerPeerSessionCapacity,
+                    bomberman::net::kMaxPlayers);
     LOG_SERVER_INFO("Server input lead={} tick(s)", cli.inputLeadTicks);
     LOG_SERVER_INFO("Server snapshot interval={} tick(s)", cli.snapshotIntervalTicks);
     LOG_SERVER_INFO("Round powerups {}", cli.powersEnabled ? "enabled" : "disabled");

@@ -29,6 +29,9 @@ namespace bomberman
          * @param windowWidth Initial window width.
          * @param windowHeight Initial window height.
          * @param inNetClient Optional multiplayer client (not owned).
+         * @param serverPort Server port from CLI or default config.
+         * @param mute Starts the client with all audio output silenced when true.
+         * @param multiplayerConfig Startup config for client-side netcode behavior.
          */
         Game(const std::string& windowName, int windowWidth, int windowHeight,
              net::NetClient* inNetClient = nullptr, uint16_t serverPort = net::kDefaultServerPort, bool mute = false,

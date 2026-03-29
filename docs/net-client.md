@@ -57,6 +57,6 @@ Relevant code:
 
 | Previous                    |                                                                        Next |
 |:----------------------------|----------------------------------------------------------------------------:|
-| [Networking](networking.md) | <a href="group__multiplayer__level__scene.html">Multiplayer Level Scene</a> |
+| <a href="group__authoritative__server.html">Authoritative Server</a> | <a href="group__multiplayer__level__scene.html">Multiplayer Level Scene</a> |
 
 </div>

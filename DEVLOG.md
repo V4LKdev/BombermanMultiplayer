@@ -25,3 +25,12 @@
 - Added the new `server.md` topic page plus server-state / server-flow diagrams to complete the authoritative-server side of the documentation story.
 - Polished the Doxygen presentation with light/dark logo swapping and title-area sizing tweaks so the site header fits the wider sidebar layout cleanly.
 - Finished the shared `README.md` landing page as a portfolio-first project overview, with contribution framing, goals, technical highlights, stack summary, guided reading, build instructions, limitations, and media/link placeholders that stay compatible with both GitHub and Doxygen.
+
+## 2026-03-30
+
+- Tightened the remaining shared networking support helpers so packet parsing, typed dispatch, and ENet channel sends read more clearly without changing the protocol model.
+- Finished the server-side cleanup pass across session, receive/dispatch, simulation, snapshots, and powerup helpers to reduce comment noise, remove broad namespace imports, and keep the authoritative runtime easier to review.
+- Folded the shared packet infrastructure (`PacketDispatch` and `NetSend`) back into the networking overview page so they remain visible as support infrastructure without becoming separate portfolio topics.
+- Polished the remaining entry-point and runtime-surface files (`Game.h`, `main.cpp`, `server_main.cpp`) to improve parameter docs, comments, and explicit namespace usage.
+- Tightened the topic-page reading order so `networking -> server -> net-client -> multiplayer-level-scene` now flows more naturally through the generated docs.
+- Finalized the shared `README.md` landing page for both GitHub and Doxygen with clearer goals, contribution framing, third-party library summary, guided reading links, platform-aware build instructions, and placeholders for final media and external links.
