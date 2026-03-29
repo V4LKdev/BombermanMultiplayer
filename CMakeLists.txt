@@ -90,7 +90,7 @@ if(BOMBERMAN_BUILD_CLIENT)
     ${CMAKE_CURRENT_SOURCE_DIR}/Util/Log.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Net/NetDiagnostics.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Net/ClientDiagnostics.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/Net/ClientPrediction.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Net/Client/ClientPrediction.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Net/Client/NetClient.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Net/Client/NetClient.Connection.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Net/Client/NetClient.Runtime.cpp

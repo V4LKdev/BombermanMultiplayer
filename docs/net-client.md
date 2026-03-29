@@ -39,5 +39,5 @@ The scene reads authoritative state from `NetClient`, while prediction and diagn
 
 Relevant code:
 - [Net/Client](/home/valk/Projects/University/Bomberman/Net/Client)
-- [Net/ClientPrediction.h](/home/valk/Projects/University/Bomberman/Net/ClientPrediction.h)
+- [Net/Client/ClientPrediction.h](/home/valk/Projects/University/Bomberman/Net/Client/ClientPrediction.h)
 - [Net/ClientDiagnostics.h](/home/valk/Projects/University/Bomberman/Net/ClientDiagnostics.h)
