@@ -20,6 +20,7 @@ INPUT                  = README.md \
                          server_main.cpp \
                          CMakeLists.txt \
                          docs/architecture.md \
+                         docs/multiplayer-level-scene.md \
                          docs/networking.md \
                          docs/testing.md \
                          docs/reference.md \
@@ -53,6 +54,7 @@ HTML_HEADER            = docs/theme/header.html
 MARKDOWN_SUPPORT       = YES
 TOC_INCLUDE_HEADINGS   = 0
 AUTOLINK_SUPPORT       = YES
+IMAGE_PATH             = docs/assets
 
 QUIET                  = NO
 WARN_IF_UNDOCUMENTED   = NO
@@ -75,4 +77,8 @@ HTML_EXTRA_STYLESHEET  = docs/theme/doxygen-awesome.css \
                          docs/theme/doxygen-awesome-sidebar-only.css \
                          docs/theme/doxygen-awesome-sidebar-only-darkmode-toggle.css \
                          docs/theme/custom.css
-HTML_EXTRA_FILES       = docs/theme/doxygen-awesome-darkmode-toggle.js
+HTML_EXTRA_FILES       = docs/theme/doxygen-awesome-darkmode-toggle.js \
+                         docs/assets/diagrams/multiplayer-level-scene-structure-light.svg \
+                         docs/assets/diagrams/multiplayer-level-scene-structure-dark.svg \
+                         docs/assets/diagrams/multiplayer-level-scene-runtime-flow-light.svg \
+                         docs/assets/diagrams/multiplayer-level-scene-runtime-flow-dark.svg
