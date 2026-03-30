@@ -96,11 +96,6 @@ cmake --build --preset windows-client-release
 - no runtime seat reordering once players are in the lobby
 - no server browser or larger matchmaking flow
 
-### Planned Improvements
-
-- add final screenshots and a short demonstration clip to the landing page
-- continue cleaning remaining non-networking documentation noise
-
 ### Media
 
 ![Four-player match start gameplay](docs/assets/images/readme-gallery-4players-match-go.png)
