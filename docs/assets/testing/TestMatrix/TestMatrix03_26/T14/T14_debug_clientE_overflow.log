@@ -1,0 +1,10 @@
+[2026-03-27 21:12:27.827] [game] [debug] Client multiplayer config: prediction=on, remoteSmoothing=on
+[2026-03-27 21:12:27.873] [game] [debug] Renderer pacing: manual-cap
+[2026-03-27 21:12:58.947] [net.conn] [debug] Async connect initiated to 127.0.0.1:46014
+[2026-03-27 21:12:58.954] [net.conn] [debug] ENet connect event received, sending Hello
+[2026-03-27 21:12:58.962] [net.conn] [warning] Server rejected: server is full
+[2026-03-27 21:12:58.963] [net.diag] [info] Client diagnostics JSON report written to logs/diag_client_u_211258.json
+[2026-03-27 21:13:07.609] [net.conn] [debug] Async connect initiated to 127.0.0.1:46014
+[2026-03-27 21:13:07.616] [net.conn] [debug] ENet connect event received, sending Hello
+[2026-03-27 21:13:07.623] [net.conn] [warning] Server rejected: server is full
+[2026-03-27 21:13:07.625] [net.diag] [info] Client diagnostics JSON report written to logs/diag_client_u_211307.json

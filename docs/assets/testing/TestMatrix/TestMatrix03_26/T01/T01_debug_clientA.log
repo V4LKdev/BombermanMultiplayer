@@ -1,0 +1,67 @@
+[2026-03-27 17:08:30.367] [game] [debug] Client multiplayer config: prediction=on, remoteSmoothing=on
+[2026-03-27 17:08:30.419] [game] [debug] Renderer pacing: manual-cap
+[2026-03-27 17:08:50.997] [net.conn] [debug] Async connect initiated to 127.0.0.1:46001
+[2026-03-27 17:08:51.004] [net.conn] [debug] ENet connect event received, sending Hello
+[2026-03-27 17:08:51.012] [net.conn] [info] Welcome: playerId=0, tickRate=60 - session connected, waiting for lobby or next round start
+[2026-03-27 17:08:52.501] [net.conn] [info] Leaving lobby and disconnecting: LocalLeaveLobby
+[2026-03-27 17:08:52.501] [net.conn] [info] Queued graceful disconnect
+[2026-03-27 17:08:52.501] [net.conn] [info] Graceful disconnect completed
+[2026-03-27 17:08:52.503] [net.diag] [info] Client diagnostics JSON report written to logs/diag_client_p1_170852.json
+[2026-03-27 17:08:56.805] [net.conn] [debug] Async connect initiated to 127.0.0.1:46001
+[2026-03-27 17:08:56.812] [net.conn] [debug] ENet connect event received, sending Hello
+[2026-03-27 17:08:56.819] [net.conn] [info] Welcome: playerId=0, tickRate=60 - session connected, waiting for lobby or next round start
+[2026-03-27 17:09:13.526] [net.conn] [debug] Queued LobbyReady desiredReady=true
+[2026-03-27 17:09:16.522] [net.conn] [info] Received LevelInfo matchId=1 seed=1824766196
+[2026-03-27 17:09:16.522] [net.conn] [info] Lobby received match bootstrap matchId=1 seed=1824766196 - entering multiplayer level
+[2026-03-27 17:09:16.538] [net.conn] [debug] Queued MatchLoaded matchId=1
+[2026-03-27 17:09:16.538] [net.conn] [debug] Acknowledged match bootstrap loaded matchId=1
+[2026-03-27 17:09:16.554] [net.conn] [info] Received MatchStart matchId=1 goTick=3315 unlockTick=3315
+[2026-03-27 17:09:16.554] [net.conn] [info] Match start confirmed locally matchId=1
+[2026-03-27 17:09:17.559] [net.input] [debug] Local prediction armed from authoritative state tick=3316 lastProcessed=0 pos=(384, 384)
+[2026-03-27 17:09:18.037] [net.input] [debug] Sent Input seq=30 batch=[15..30] buttons=0x08
+[2026-03-27 17:09:18.540] [net.input] [debug] Sent Input seq=60 batch=[45..60] buttons=0x08
+[2026-03-27 17:09:18.592] [net.input] [debug] Prediction live ackSeq=62 corrTick=3378 pendingDepth=1 pendingAgeMs=16 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-27 17:09:19.042] [net.input] [debug] Sent Input seq=90 batch=[75..90] buttons=0x08
+[2026-03-27 17:09:19.542] [net.input] [debug] Sent Input seq=120 batch=[105..120] buttons=0x00
+[2026-03-27 17:09:19.643] [net.input] [debug] Prediction live ackSeq=125 corrTick=3441 pendingDepth=1 pendingAgeMs=16 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-27 17:09:20.043] [net.input] [debug] Sent Input seq=150 batch=[135..150] buttons=0x04
+[2026-03-27 17:09:20.538] [net.input] [debug] Sent Input seq=180 batch=[165..180] buttons=0x04
+[2026-03-27 17:09:20.690] [net.input] [debug] Prediction live ackSeq=188 corrTick=3504 pendingDepth=1 pendingAgeMs=16 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-27 17:09:21.036] [net.input] [debug] Sent Input seq=210 batch=[195..210] buttons=0x04
+[2026-03-27 17:09:21.538] [net.input] [debug] Sent Input seq=240 batch=[225..240] buttons=0x00
+[2026-03-27 17:09:21.740] [net.input] [debug] Prediction live ackSeq=251 corrTick=3567 pendingDepth=1 pendingAgeMs=16 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-27 17:09:22.036] [net.input] [debug] Sent Input seq=270 batch=[255..270] buttons=0x00
+[2026-03-27 17:09:22.540] [net.input] [debug] Sent Input seq=300 batch=[285..300] buttons=0x00
+[2026-03-27 17:09:22.788] [net.input] [debug] Prediction live ackSeq=314 corrTick=3630 pendingDepth=1 pendingAgeMs=16 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-27 17:09:23.040] [net.input] [debug] Sent Input seq=330 batch=[315..330] buttons=0x00
+[2026-03-27 17:09:23.538] [net.input] [debug] Sent Input seq=360 batch=[345..360] buttons=0x00
+[2026-03-27 17:09:23.842] [net.input] [debug] Prediction live ackSeq=377 corrTick=3693 pendingDepth=1 pendingAgeMs=16 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-27 17:09:24.037] [net.input] [debug] Sent Input seq=390 batch=[375..390] buttons=0x00
+[2026-03-27 17:09:24.538] [net.input] [debug] Sent Input seq=420 batch=[405..420] buttons=0x00
+[2026-03-27 17:09:24.890] [net.input] [debug] Prediction live ackSeq=440 corrTick=3756 pendingDepth=1 pendingAgeMs=16 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-27 17:09:25.043] [net.input] [debug] Sent Input seq=450 batch=[435..450] buttons=0x00
+[2026-03-27 17:09:25.542] [net.input] [debug] Sent Input seq=480 batch=[465..480] buttons=0x00
+[2026-03-27 17:09:25.938] [net.input] [debug] Prediction live ackSeq=503 corrTick=3819 pendingDepth=1 pendingAgeMs=16 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-27 17:09:26.041] [net.input] [debug] Sent Input seq=510 batch=[495..510] buttons=0x00
+[2026-03-27 17:09:26.538] [net.input] [debug] Sent Input seq=540 batch=[525..540] buttons=0x00
+[2026-03-27 17:09:26.992] [net.input] [debug] Prediction live ackSeq=566 corrTick=3882 pendingDepth=1 pendingAgeMs=16 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-27 17:09:27.036] [net.input] [debug] Sent Input seq=570 batch=[555..570] buttons=0x00
+[2026-03-27 17:09:27.539] [net.input] [debug] Sent Input seq=600 batch=[585..600] buttons=0x00
+[2026-03-27 17:09:28.040] [net.input] [debug] Sent Input seq=630 batch=[615..630] buttons=0x00
+[2026-03-27 17:09:28.040] [net.input] [debug] Prediction live ackSeq=629 corrTick=3945 pendingDepth=1 pendingAgeMs=16 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-27 17:09:28.540] [net.input] [debug] Sent Input seq=660 batch=[645..660] buttons=0x00
+[2026-03-27 17:09:29.039] [net.input] [debug] Sent Input seq=690 batch=[675..690] buttons=0x08
+[2026-03-27 17:09:29.092] [net.input] [debug] Prediction live ackSeq=692 corrTick=4008 pendingDepth=1 pendingAgeMs=16 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-27 17:09:29.536] [net.input] [debug] Sent Input seq=720 batch=[705..720] buttons=0x08
+[2026-03-27 17:09:30.038] [net.input] [debug] Sent Input seq=750 batch=[735..750] buttons=0x08
+[2026-03-27 17:09:30.136] [net.input] [debug] Prediction live ackSeq=755 corrTick=4071 pendingDepth=1 pendingAgeMs=16 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-27 17:09:30.542] [net.input] [debug] Sent Input seq=780 batch=[765..780] buttons=0x08
+[2026-03-27 17:09:30.876] [net.conn] [info] Received MatchResult matchId=1 result=win
+[2026-03-27 17:09:33.875] [net.conn] [info] Leaving multiplayer match back to lobby (ReturnedToLobby)
+[2026-03-27 17:09:33.892] [net.input] [debug] Prediction summary localInputs=799 deferredInputs=1 rejectedInputs=0 corrections=791 mismatches=0 avgDeltaQ=0.00 maxDeltaQ=0 replayedInputs=791 maxReplay=1 truncations=0 recoveries=0 recoveryResolutions=0 maxMissingInputs=0 maxPendingDepth=3
+[2026-03-27 17:09:42.008] [net.conn] [info] Leaving lobby and disconnecting: LocalLeaveLobby
+[2026-03-27 17:09:42.008] [net.conn] [info] Queued graceful disconnect
+[2026-03-27 17:09:42.008] [net.conn] [info] Graceful disconnect completed
+[2026-03-27 17:09:42.008] [net.diag] [info] Client diagnostics JSON report written to logs/diag_client_p1_170942.json
+[2026-03-27 18:01:45.272] [game] [debug] Client multiplayer config: prediction=on, remoteSmoothing=on
+[2026-03-27 18:01:45.314] [game] [debug] Renderer pacing: manual-cap

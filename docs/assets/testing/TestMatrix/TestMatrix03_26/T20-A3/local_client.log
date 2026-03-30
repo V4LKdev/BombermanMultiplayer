@@ -1,0 +1,191 @@
+[2026-03-28 22:02:26.900] [game] [debug] Client multiplayer config: prediction=on, remoteSmoothing=on
+[2026-03-28 22:02:26.934] [game] [debug] Renderer pacing: manual-cap
+[2026-03-28 22:02:37.128] [net.conn] [debug] Async connect initiated to 192.168.1.51:12345
+[2026-03-28 22:02:37.135] [net.conn] [debug] ENet connect event received, sending Hello
+[2026-03-28 22:02:37.142] [net.conn] [info] Welcome: playerId=0, tickRate=60 - session connected, waiting for lobby or next round start
+[2026-03-28 22:03:26.569] [net.conn] [debug] Queued LobbyReady desiredReady=true
+[2026-03-28 22:03:30.973] [net.conn] [info] Received LevelInfo matchId=1 seed=34644147
+[2026-03-28 22:03:30.973] [net.conn] [info] Lobby received match bootstrap matchId=1 seed=34644147 - entering multiplayer level
+[2026-03-28 22:03:30.988] [net.conn] [debug] Queued MatchLoaded matchId=1
+[2026-03-28 22:03:30.988] [net.conn] [debug] Acknowledged match bootstrap loaded matchId=1
+[2026-03-28 22:03:31.074] [net.conn] [info] Received MatchStart matchId=1 goTick=4380 unlockTick=4380
+[2026-03-28 22:03:31.074] [net.conn] [info] Match start confirmed locally matchId=1
+[2026-03-28 22:03:32.090] [net.input] [debug] Local prediction armed from authoritative state tick=4382 lastProcessed=0 pos=(384, 384)
+[2026-03-28 22:03:32.569] [net.input] [debug] Sent Input seq=30 batch=[15..30] buttons=0x08
+[2026-03-28 22:03:33.071] [net.input] [debug] Sent Input seq=60 batch=[45..60] buttons=0x04
+[2026-03-28 22:03:33.122] [net.input] [debug] Prediction live ackSeq=61 corrTick=4443 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:03:33.568] [net.input] [debug] Sent Input seq=90 batch=[75..90] buttons=0x04
+[2026-03-28 22:03:34.068] [net.input] [debug] Sent Input seq=120 batch=[105..120] buttons=0x09
+[2026-03-28 22:03:34.170] [net.input] [debug] Prediction live ackSeq=124 corrTick=4506 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:03:34.568] [net.input] [debug] Sent Input seq=150 batch=[135..150] buttons=0x00
+[2026-03-28 22:03:35.068] [net.input] [debug] Sent Input seq=180 batch=[165..180] buttons=0x00
+[2026-03-28 22:03:35.220] [net.input] [debug] Prediction live ackSeq=187 corrTick=4569 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:03:35.568] [net.input] [debug] Sent Input seq=210 batch=[195..210] buttons=0x08
+[2026-03-28 22:03:36.068] [net.input] [debug] Sent Input seq=240 batch=[225..240] buttons=0x08
+[2026-03-28 22:03:36.271] [net.input] [debug] Prediction live ackSeq=250 corrTick=4632 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:03:36.568] [net.input] [debug] Sent Input seq=270 batch=[255..270] buttons=0x05
+[2026-03-28 22:03:37.074] [net.input] [debug] Sent Input seq=300 batch=[285..300] buttons=0x08
+[2026-03-28 22:03:37.320] [net.input] [debug] Prediction live ackSeq=313 corrTick=4695 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:03:37.574] [net.input] [debug] Sent Input seq=330 batch=[315..330] buttons=0x08
+[2026-03-28 22:03:38.073] [net.input] [debug] Sent Input seq=360 batch=[345..360] buttons=0x06
+[2026-03-28 22:03:38.371] [net.input] [debug] Prediction live ackSeq=376 corrTick=4758 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:03:38.567] [net.input] [debug] Sent Input seq=390 batch=[375..390] buttons=0x06
+[2026-03-28 22:03:39.068] [net.input] [debug] Sent Input seq=420 batch=[405..420] buttons=0x09
+[2026-03-28 22:03:39.423] [net.input] [debug] Prediction live ackSeq=440 corrTick=4822 pendingDepth=1 pendingAgeMs=16 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:03:39.568] [net.input] [debug] Sent Input seq=450 batch=[435..450] buttons=0x08
+[2026-03-28 22:03:40.069] [net.input] [debug] Sent Input seq=480 batch=[465..480] buttons=0x08
+[2026-03-28 22:03:40.474] [net.input] [debug] Prediction live ackSeq=503 corrTick=4885 pendingDepth=1 pendingAgeMs=16 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:03:40.568] [net.input] [debug] Sent Input seq=510 batch=[495..510] buttons=0x00
+[2026-03-28 22:03:41.068] [net.input] [debug] Sent Input seq=540 batch=[525..540] buttons=0x00
+[2026-03-28 22:03:41.518] [net.input] [debug] Prediction live ackSeq=565 corrTick=4947 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=2 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:03:41.568] [net.input] [debug] Sent Input seq=570 batch=[555..570] buttons=0x04
+[2026-03-28 22:03:42.068] [net.input] [debug] Sent Input seq=600 batch=[585..600] buttons=0x04
+[2026-03-28 22:03:42.568] [net.input] [debug] Sent Input seq=630 batch=[615..630] buttons=0x00
+[2026-03-28 22:03:42.568] [net.input] [debug] Prediction live ackSeq=628 corrTick=5010 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=2 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:03:43.068] [net.input] [debug] Sent Input seq=660 batch=[645..660] buttons=0x00
+[2026-03-28 22:03:43.568] [net.input] [debug] Sent Input seq=690 batch=[675..690] buttons=0x00
+[2026-03-28 22:03:43.619] [net.input] [debug] Prediction live ackSeq=691 corrTick=5073 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=2 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:03:44.070] [net.input] [debug] Sent Input seq=720 batch=[705..720] buttons=0x00
+[2026-03-28 22:03:44.572] [net.input] [debug] Sent Input seq=750 batch=[735..750] buttons=0x00
+[2026-03-28 22:03:44.674] [net.input] [debug] Prediction live ackSeq=755 corrTick=5137 pendingDepth=1 pendingAgeMs=16 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:03:45.069] [net.input] [debug] Sent Input seq=780 batch=[765..780] buttons=0x00
+[2026-03-28 22:03:45.569] [net.input] [debug] Sent Input seq=810 batch=[795..810] buttons=0x00
+[2026-03-28 22:03:45.722] [net.input] [debug] Prediction live ackSeq=817 corrTick=5199 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:03:46.071] [net.input] [debug] Sent Input seq=840 batch=[825..840] buttons=0x00
+[2026-03-28 22:03:46.573] [net.input] [debug] Sent Input seq=870 batch=[855..870] buttons=0x00
+[2026-03-28 22:03:46.770] [net.input] [debug] Prediction live ackSeq=880 corrTick=5262 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=2 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:03:47.073] [net.input] [debug] Sent Input seq=900 batch=[885..900] buttons=0x00
+[2026-03-28 22:03:47.573] [net.input] [debug] Sent Input seq=930 batch=[915..930] buttons=0x00
+[2026-03-28 22:03:47.819] [net.input] [debug] Prediction live ackSeq=943 corrTick=5325 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=2 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:03:48.073] [net.input] [debug] Sent Input seq=960 batch=[945..960] buttons=0x00
+[2026-03-28 22:03:48.573] [net.input] [debug] Sent Input seq=990 batch=[975..990] buttons=0x00
+[2026-03-28 22:03:48.871] [net.input] [debug] Prediction live ackSeq=1006 corrTick=5388 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:03:49.073] [net.input] [debug] Sent Input seq=1020 batch=[1005..1020] buttons=0x00
+[2026-03-28 22:03:49.574] [net.input] [debug] Sent Input seq=1050 batch=[1035..1050] buttons=0x00
+[2026-03-28 22:03:49.921] [net.input] [debug] Prediction live ackSeq=1069 corrTick=5451 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:03:50.073] [net.input] [debug] Sent Input seq=1080 batch=[1065..1080] buttons=0x00
+[2026-03-28 22:03:50.573] [net.input] [debug] Sent Input seq=1110 batch=[1095..1110] buttons=0x00
+[2026-03-28 22:03:50.968] [net.input] [debug] Prediction live ackSeq=1132 corrTick=5514 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=2 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:03:51.072] [net.input] [debug] Sent Input seq=1140 batch=[1125..1140] buttons=0x00
+[2026-03-28 22:03:51.570] [net.input] [debug] Sent Input seq=1170 batch=[1155..1170] buttons=0x00
+[2026-03-28 22:03:52.023] [net.input] [debug] Prediction live ackSeq=1196 corrTick=5578 pendingDepth=1 pendingAgeMs=16 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:03:52.074] [net.input] [debug] Sent Input seq=1200 batch=[1185..1200] buttons=0x00
+[2026-03-28 22:03:52.570] [net.input] [debug] Sent Input seq=1230 batch=[1215..1230] buttons=0x00
+[2026-03-28 22:03:53.074] [net.input] [debug] Sent Input seq=1260 batch=[1245..1260] buttons=0x00
+[2026-03-28 22:03:53.074] [net.input] [debug] Prediction live ackSeq=1259 corrTick=5641 pendingDepth=1 pendingAgeMs=16 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:03:53.568] [net.input] [debug] Sent Input seq=1290 batch=[1275..1290] buttons=0x00
+[2026-03-28 22:03:54.070] [net.input] [debug] Sent Input seq=1320 batch=[1305..1320] buttons=0x00
+[2026-03-28 22:03:54.121] [net.input] [debug] Prediction live ackSeq=1321 corrTick=5703 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:03:54.571] [net.input] [debug] Sent Input seq=1350 batch=[1335..1350] buttons=0x00
+[2026-03-28 22:03:55.072] [net.input] [debug] Sent Input seq=1380 batch=[1365..1380] buttons=0x00
+[2026-03-28 22:03:55.174] [net.input] [debug] Prediction live ackSeq=1385 corrTick=5767 pendingDepth=1 pendingAgeMs=16 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:03:55.572] [net.input] [debug] Sent Input seq=1410 batch=[1395..1410] buttons=0x00
+[2026-03-28 22:03:56.074] [net.input] [debug] Sent Input seq=1440 batch=[1425..1440] buttons=0x00
+[2026-03-28 22:03:56.221] [net.input] [debug] Prediction live ackSeq=1447 corrTick=5829 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:03:56.571] [net.input] [debug] Sent Input seq=1470 batch=[1455..1470] buttons=0x00
+[2026-03-28 22:03:57.072] [net.input] [debug] Sent Input seq=1500 batch=[1485..1500] buttons=0x00
+[2026-03-28 22:03:57.268] [net.input] [debug] Prediction live ackSeq=1510 corrTick=5892 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=2 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:03:57.572] [net.input] [debug] Sent Input seq=1530 batch=[1515..1530] buttons=0x00
+[2026-03-28 22:03:58.068] [net.input] [debug] Sent Input seq=1560 batch=[1545..1560] buttons=0x00
+[2026-03-28 22:03:58.323] [net.input] [debug] Prediction live ackSeq=1574 corrTick=5956 pendingDepth=1 pendingAgeMs=16 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:03:58.570] [net.input] [debug] Sent Input seq=1590 batch=[1575..1590] buttons=0x00
+[2026-03-28 22:03:59.071] [net.input] [debug] Sent Input seq=1620 batch=[1605..1620] buttons=0x00
+[2026-03-28 22:03:59.369] [net.input] [debug] Prediction live ackSeq=1636 corrTick=6018 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:03:59.572] [net.input] [debug] Sent Input seq=1650 batch=[1635..1650] buttons=0x00
+[2026-03-28 22:04:00.068] [net.input] [debug] Sent Input seq=1680 batch=[1665..1680] buttons=0x00
+[2026-03-28 22:04:00.420] [net.input] [debug] Prediction live ackSeq=1699 corrTick=6081 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=2 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:04:00.573] [net.input] [debug] Sent Input seq=1710 batch=[1695..1710] buttons=0x00
+[2026-03-28 22:04:01.068] [net.input] [debug] Sent Input seq=1740 batch=[1725..1740] buttons=0x00
+[2026-03-28 22:04:01.475] [net.input] [debug] Prediction live ackSeq=1763 corrTick=6145 pendingDepth=1 pendingAgeMs=16 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:04:01.569] [net.input] [debug] Sent Input seq=1770 batch=[1755..1770] buttons=0x00
+[2026-03-28 22:04:02.074] [net.input] [debug] Sent Input seq=1800 batch=[1785..1800] buttons=0x00
+[2026-03-28 22:04:02.524] [net.input] [debug] Prediction live ackSeq=1826 corrTick=6208 pendingDepth=1 pendingAgeMs=16 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:04:02.568] [net.input] [debug] Sent Input seq=1830 batch=[1815..1830] buttons=0x00
+[2026-03-28 22:04:03.068] [net.input] [debug] Sent Input seq=1860 batch=[1845..1860] buttons=0x00
+[2026-03-28 22:04:03.570] [net.input] [debug] Sent Input seq=1890 batch=[1875..1890] buttons=0x00
+[2026-03-28 22:04:03.570] [net.input] [debug] Prediction live ackSeq=1888 corrTick=6270 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:04:04.070] [net.input] [debug] Sent Input seq=1920 batch=[1905..1920] buttons=0x00
+[2026-03-28 22:04:04.569] [net.input] [debug] Sent Input seq=1950 batch=[1935..1950] buttons=0x00
+[2026-03-28 22:04:04.620] [net.input] [debug] Prediction live ackSeq=1951 corrTick=6333 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=2 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:04:05.068] [net.input] [debug] Sent Input seq=1980 batch=[1965..1980] buttons=0x00
+[2026-03-28 22:04:05.570] [net.input] [debug] Sent Input seq=2010 batch=[1995..2010] buttons=0x00
+[2026-03-28 22:04:05.672] [net.input] [debug] Prediction live ackSeq=2014 corrTick=6396 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:04:06.070] [net.input] [debug] Sent Input seq=2040 batch=[2025..2040] buttons=0x00
+[2026-03-28 22:04:06.571] [net.input] [debug] Sent Input seq=2070 batch=[2055..2070] buttons=0x00
+[2026-03-28 22:04:06.723] [net.input] [debug] Prediction live ackSeq=2078 corrTick=6460 pendingDepth=1 pendingAgeMs=16 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:04:07.073] [net.input] [debug] Sent Input seq=2100 batch=[2085..2100] buttons=0x00
+[2026-03-28 22:04:07.572] [net.input] [debug] Sent Input seq=2130 batch=[2115..2130] buttons=0x00
+[2026-03-28 22:04:07.768] [net.input] [debug] Prediction live ackSeq=2140 corrTick=6522 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=2 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:04:08.072] [net.input] [debug] Sent Input seq=2160 batch=[2145..2160] buttons=0x00
+[2026-03-28 22:04:08.573] [net.input] [debug] Sent Input seq=2190 batch=[2175..2190] buttons=0x00
+[2026-03-28 22:04:08.819] [net.input] [debug] Prediction live ackSeq=2203 corrTick=6585 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=2 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:04:09.072] [net.input] [debug] Sent Input seq=2220 batch=[2205..2220] buttons=0x00
+[2026-03-28 22:04:09.572] [net.input] [debug] Sent Input seq=2250 batch=[2235..2250] buttons=0x00
+[2026-03-28 22:04:09.869] [net.input] [debug] Prediction live ackSeq=2266 corrTick=6648 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=2 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:04:10.072] [net.input] [debug] Sent Input seq=2280 batch=[2265..2280] buttons=0x00
+[2026-03-28 22:04:10.571] [net.input] [debug] Sent Input seq=2310 batch=[2295..2310] buttons=0x00
+[2026-03-28 22:04:10.919] [net.input] [debug] Prediction live ackSeq=2329 corrTick=6711 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=2 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:04:11.071] [net.input] [debug] Sent Input seq=2340 batch=[2325..2340] buttons=0x00
+[2026-03-28 22:04:11.571] [net.input] [debug] Sent Input seq=2370 batch=[2355..2370] buttons=0x00
+[2026-03-28 22:04:11.969] [net.input] [debug] Prediction live ackSeq=2392 corrTick=6774 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:04:12.071] [net.input] [debug] Sent Input seq=2400 batch=[2385..2400] buttons=0x00
+[2026-03-28 22:04:12.574] [net.input] [debug] Sent Input seq=2430 batch=[2415..2430] buttons=0x00
+[2026-03-28 22:04:13.020] [net.input] [debug] Prediction live ackSeq=2455 corrTick=6837 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:04:13.071] [net.input] [debug] Sent Input seq=2460 batch=[2445..2460] buttons=0x00
+[2026-03-28 22:04:13.570] [net.input] [debug] Sent Input seq=2490 batch=[2475..2490] buttons=0x00
+[2026-03-28 22:04:14.071] [net.input] [debug] Sent Input seq=2520 batch=[2505..2520] buttons=0x00
+[2026-03-28 22:04:14.071] [net.input] [debug] Prediction live ackSeq=2518 corrTick=6900 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:04:14.573] [net.input] [debug] Sent Input seq=2550 batch=[2535..2550] buttons=0x00
+[2026-03-28 22:04:15.074] [net.input] [debug] Sent Input seq=2580 batch=[2565..2580] buttons=0x00
+[2026-03-28 22:04:15.118] [net.input] [debug] Prediction live ackSeq=2581 corrTick=6963 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=2 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:04:15.569] [net.input] [debug] Sent Input seq=2610 batch=[2595..2610] buttons=0x00
+[2026-03-28 22:04:16.070] [net.input] [debug] Sent Input seq=2640 batch=[2625..2640] buttons=0x00
+[2026-03-28 22:04:16.172] [net.input] [debug] Prediction live ackSeq=2645 corrTick=7027 pendingDepth=1 pendingAgeMs=16 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:04:16.571] [net.input] [debug] Sent Input seq=2670 batch=[2655..2670] buttons=0x00
+[2026-03-28 22:04:17.071] [net.input] [debug] Sent Input seq=2700 batch=[2685..2700] buttons=0x00
+[2026-03-28 22:04:17.224] [net.input] [debug] Prediction live ackSeq=2708 corrTick=7090 pendingDepth=1 pendingAgeMs=16 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:04:17.573] [net.input] [debug] Sent Input seq=2730 batch=[2715..2730] buttons=0x05
+[2026-03-28 22:04:18.072] [net.input] [debug] Sent Input seq=2760 batch=[2745..2760] buttons=0x08
+[2026-03-28 22:04:18.270] [net.input] [debug] Prediction live ackSeq=2770 corrTick=7152 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:04:18.574] [net.input] [debug] Sent Input seq=2790 batch=[2775..2790] buttons=0x04
+[2026-03-28 22:04:19.074] [net.input] [debug] Sent Input seq=2820 batch=[2805..2820] buttons=0x00
+[2026-03-28 22:04:19.322] [net.input] [debug] Prediction live ackSeq=2833 corrTick=7215 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:04:19.568] [net.input] [debug] Sent Input seq=2850 batch=[2835..2850] buttons=0x04
+[2026-03-28 22:04:20.068] [net.input] [debug] Sent Input seq=2880 batch=[2865..2880] buttons=0x04
+[2026-03-28 22:04:20.372] [net.input] [debug] Prediction live ackSeq=2897 corrTick=7279 pendingDepth=1 pendingAgeMs=16 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:04:20.568] [net.input] [debug] Sent Input seq=2910 batch=[2895..2910] buttons=0x08
+[2026-03-28 22:04:21.068] [net.input] [debug] Sent Input seq=2940 batch=[2925..2940] buttons=0x04
+[2026-03-28 22:04:21.424] [net.input] [debug] Prediction live ackSeq=2960 corrTick=7342 pendingDepth=1 pendingAgeMs=16 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:04:21.569] [net.input] [debug] Sent Input seq=2970 batch=[2955..2970] buttons=0x00
+[2026-03-28 22:04:22.068] [net.input] [debug] Sent Input seq=3000 batch=[2985..3000] buttons=0x00
+[2026-03-28 22:04:22.469] [net.input] [debug] Prediction live ackSeq=3022 corrTick=7404 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=2 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:04:22.570] [net.input] [debug] Sent Input seq=3030 batch=[3015..3030] buttons=0x04
+[2026-03-28 22:04:23.069] [net.input] [debug] Sent Input seq=3060 batch=[3045..3060] buttons=0x09
+[2026-03-28 22:04:23.519] [net.input] [debug] Prediction live ackSeq=3085 corrTick=7467 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:04:23.570] [net.input] [debug] Sent Input seq=3090 batch=[3075..3090] buttons=0x08
+[2026-03-28 22:04:24.069] [net.input] [debug] Sent Input seq=3120 batch=[3105..3120] buttons=0x04
+[2026-03-28 22:04:24.569] [net.input] [debug] Sent Input seq=3150 batch=[3135..3150] buttons=0x08
+[2026-03-28 22:04:24.569] [net.input] [debug] Prediction live ackSeq=3148 corrTick=7530 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=2 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:04:25.069] [net.input] [debug] Sent Input seq=3180 batch=[3165..3180] buttons=0x08
+[2026-03-28 22:04:25.574] [net.input] [debug] Sent Input seq=3210 batch=[3195..3210] buttons=0x08
+[2026-03-28 22:04:25.624] [net.input] [debug] Prediction live ackSeq=3212 corrTick=7594 pendingDepth=1 pendingAgeMs=16 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:04:26.074] [net.input] [debug] Sent Input seq=3240 batch=[3225..3240] buttons=0x04
+[2026-03-28 22:04:26.571] [net.input] [debug] Sent Input seq=3270 batch=[3255..3270] buttons=0x04
+[2026-03-28 22:04:26.672] [net.input] [debug] Prediction live ackSeq=3275 corrTick=7657 pendingDepth=1 pendingAgeMs=16 lastDeltaQ=0 lastReplay=1 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:04:27.071] [net.input] [debug] Sent Input seq=3300 batch=[3285..3300] buttons=0x09
+[2026-03-28 22:04:27.572] [net.input] [debug] Sent Input seq=3330 batch=[3315..3330] buttons=0x04
+[2026-03-28 22:04:27.717] [net.input] [debug] Prediction live ackSeq=3337 corrTick=7719 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=2 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:04:28.073] [net.input] [debug] Sent Input seq=3360 batch=[3345..3360] buttons=0x04
+[2026-03-28 22:04:28.573] [net.input] [debug] Sent Input seq=3390 batch=[3375..3390] buttons=0x00
+[2026-03-28 22:04:28.769] [net.input] [debug] Prediction live ackSeq=3400 corrTick=7782 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=2 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:04:29.073] [net.input] [debug] Sent Input seq=3420 batch=[3405..3420] buttons=0x00
+[2026-03-28 22:04:29.572] [net.input] [debug] Sent Input seq=3450 batch=[3435..3450] buttons=0x00
+[2026-03-28 22:04:29.819] [net.input] [debug] Prediction live ackSeq=3463 corrTick=7845 pendingDepth=2 pendingAgeMs=32 lastDeltaQ=0 lastReplay=2 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=3
+[2026-03-28 22:04:30.072] [net.input] [debug] Sent Input seq=3480 batch=[3465..3480] buttons=0x00
+[2026-03-28 22:04:30.442] [net.conn] [info] Received MatchResult matchId=1 result=draw
+[2026-03-28 22:04:33.441] [net.conn] [info] Leaving multiplayer match back to lobby (ReturnedToLobby)
+[2026-03-28 22:04:33.444] [net.input] [debug] Prediction summary localInputs=3502 deferredInputs=1 rejectedInputs=0 corrections=2471 mismatches=0 avgDeltaQ=0.00 maxDeltaQ=0 replayedInputs=3629 maxReplay=2 truncations=0 recoveries=0 recoveryResolutions=0 maxMissingInputs=0 maxPendingDepth=3
+[2026-03-28 22:04:39.151] [net.conn] [info] Leaving lobby and disconnecting: LocalLeaveLobby
+[2026-03-28 22:04:39.151] [net.conn] [info] Queued graceful disconnect
+[2026-03-28 22:04:39.151] [net.conn] [info] Graceful disconnect completed
+[2026-03-28 22:04:39.154] [net.diag] [info] Client diagnostics JSON report written to logs/diag_client_p1_220439.json

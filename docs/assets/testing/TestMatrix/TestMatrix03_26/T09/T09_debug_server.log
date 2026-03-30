@@ -1,0 +1,152 @@
+[2026-03-27 20:56:36.889] [server] [info] ==== BOMBERMAN DEDICATED SERVER ===================================================================
+[2026-03-27 20:56:36.889] [server] [info] Server diagnostics enabled
+[2026-03-27 20:56:36.889] [server] [info] Listening on port 46009 with max 8 peers (4 gameplay slots)
+[2026-03-27 20:56:36.889] [server] [info] Server input lead=1 tick(s)
+[2026-03-27 20:56:36.889] [server] [info] Server snapshot interval=1 tick(s)
+[2026-03-27 20:56:36.889] [server] [info] Round powerups enabled
+[2026-03-27 20:56:36.889] [server] [debug] ENet peer liveness ping=500ms timeoutLimit=8 timeoutRange=[5000..10000]ms
+[2026-03-27 20:56:36.889] [server] [info] ServerState initialized
+[2026-03-27 20:56:36.889] [server] [info] Map generated with random seed=3920959037
+[2026-03-27 20:57:04.117] [server] [debug] Peer connected (id=0)
+[2026-03-27 20:57:04.157] [net.conn] [debug] Hello from "T09A" (peer 0)
+[2026-03-27 20:57:04.157] [net.conn] [debug] Queued Welcome to playerId=0
+[2026-03-27 20:57:04.157] [server] [info] Lobby participant set changed (a participant joined); ready state reset
+[2026-03-27 20:57:04.157] [net.conn] [info] Accepted playerId=0 into the lobby
+[2026-03-27 20:57:08.681] [server] [debug] Peer connected (id=1)
+[2026-03-27 20:57:08.681] [net.conn] [debug] Hello from "T09B" (peer 1)
+[2026-03-27 20:57:08.681] [net.conn] [debug] Queued Welcome to playerId=1
+[2026-03-27 20:57:08.681] [server] [info] Lobby participant set changed (a participant joined); ready state reset
+[2026-03-27 20:57:08.681] [net.conn] [info] Accepted playerId=1 into the lobby
+[2026-03-27 20:57:12.646] [net.conn] [debug] Lobby ready updated playerId=1 name="T09B" ready=true
+[2026-03-27 20:57:13.749] [net.conn] [debug] Lobby ready updated playerId=0 name="T09A" ready=true
+[2026-03-27 20:57:13.749] [server] [info] Lobby countdown started players=2 seconds=3
+[2026-03-27 20:57:14.339] [net.conn] [debug] Lobby ready updated playerId=0 name="T09A" ready=false
+[2026-03-27 20:57:14.339] [server] [info] Lobby countdown cancelled (a participant unreadied before countdown completion)
+[2026-03-27 20:57:15.222] [net.conn] [debug] Lobby ready updated playerId=0 name="T09A" ready=true
+[2026-03-27 20:57:15.222] [server] [info] Lobby countdown started players=2 seconds=3
+[2026-03-27 20:57:16.708] [net.conn] [debug] Lobby ready updated playerId=0 name="T09A" ready=false
+[2026-03-27 20:57:16.708] [server] [info] Lobby countdown cancelled (a participant unreadied before countdown completion)
+[2026-03-27 20:57:18.092] [net.conn] [debug] Lobby ready updated playerId=0 name="T09A" ready=true
+[2026-03-27 20:57:18.093] [server] [info] Lobby countdown started players=2 seconds=3
+[2026-03-27 20:57:21.091] [server] [info] Prepared hidden round powerups matchId=1 count=4
+[2026-03-27 20:57:21.091] [server] [info] Starting match bootstrap matchId=1 players=2 seed=3920959037
+[2026-03-27 20:57:21.341] [net.conn] [debug] Match loaded acknowledged playerId=1 matchId=1 loaded=1/2
+[2026-03-27 20:57:21.345] [net.conn] [debug] Match loaded acknowledged playerId=0 matchId=1 loaded=2/2
+[2026-03-27 20:57:21.345] [server] [info] Match start committed matchId=1 players=2 goTick=2727 unlockTick=2727
+[2026-03-27 20:57:22.341] [server] [info] Gameplay unlocked matchId=1 tick=2727
+[2026-03-27 20:57:22.891] [net.input] [warning] Repeated input gaps playerId=0 streak=6 expectedSeq=19 slotValid=0 slotSeq=0 using lastAppliedButtons=0x00 lastRecv=13 lastProcessed=19
+[2026-03-27 20:57:23.691] [net.input] [warning] Repeated input gaps playerId=1 streak=6 expectedSeq=67 slotValid=0 slotSeq=0 using lastAppliedButtons=0x00 lastRecv=61 lastProcessed=67
+[2026-03-27 20:57:24.541] [net.input] [debug] Input playerId=1 batch=[105..120] lastRecv=120 lastProcessed=118
+[2026-03-27 20:57:25.124] [net.input] [warning] Repeated input gaps playerId=0 streak=6 expectedSeq=153 slotValid=0 slotSeq=121 using lastAppliedButtons=0x08 lastRecv=147 lastProcessed=153
+[2026-03-27 20:57:25.975] [net.input] [warning] Repeated input gaps playerId=1 streak=6 expectedSeq=204 slotValid=0 slotSeq=0 using lastAppliedButtons=0x00 lastRecv=198 lastProcessed=204
+[2026-03-27 20:57:26.563] [net.input] [debug] Input playerId=0 batch=[225..240] lastRecv=240 lastProcessed=239
+[2026-03-27 20:57:28.175] [net.input] [warning] Repeated input gaps playerId=0 streak=6 expectedSeq=336 slotValid=0 slotSeq=304 using lastAppliedButtons=0x00 lastRecv=330 lastProcessed=336
+[2026-03-27 20:57:28.191] [net.input] [warning] Repeated input gaps playerId=1 streak=6 expectedSeq=337 slotValid=0 slotSeq=305 using lastAppliedButtons=0x00 lastRecv=331 lastProcessed=337
+[2026-03-27 20:57:28.551] [net.input] [debug] Input playerId=0 batch=[345..360] lastRecv=360 lastProcessed=358
+[2026-03-27 20:57:28.563] [net.input] [debug] Input playerId=1 batch=[345..360] lastRecv=360 lastProcessed=359
+[2026-03-27 20:57:30.357] [net.input] [warning] Repeated input gaps playerId=0 streak=6 expectedSeq=467 slotValid=0 slotSeq=435 using lastAppliedButtons=0x00 lastRecv=461 lastProcessed=467
+[2026-03-27 20:57:30.530] [net.input] [debug] Input playerId=0 batch=[465..480] lastRecv=480 lastProcessed=477
+[2026-03-27 20:57:30.571] [net.input] [debug] Input playerId=1 batch=[465..480] lastRecv=480 lastProcessed=479
+[2026-03-27 20:57:32.407] [net.input] [warning] Repeated input gaps playerId=1 streak=6 expectedSeq=590 slotValid=0 slotSeq=558 using lastAppliedButtons=0x00 lastRecv=584 lastProcessed=590
+[2026-03-27 20:57:32.524] [net.input] [warning] Repeated input gaps playerId=0 streak=6 expectedSeq=597 slotValid=0 slotSeq=533 using lastAppliedButtons=0x08 lastRecv=591 lastProcessed=597
+[2026-03-27 20:57:34.564] [net.input] [debug] Input playerId=1 batch=[705..720] lastRecv=720 lastProcessed=719
+[2026-03-27 20:57:34.707] [net.input] [warning] Repeated input gaps playerId=0 streak=6 expectedSeq=728 slotValid=0 slotSeq=632 using lastAppliedButtons=0x00 lastRecv=722 lastProcessed=728
+[2026-03-27 20:57:34.857] [net.input] [info] Bomb placed playerId=0 tick=3478 cell=(5, 1) radius=1 activeBombs=1/1 explodeTick=3568
+[2026-03-27 20:57:36.358] [server] [info] Powerup revealed type=MaxBombsBoost tick=3568 cell=(6, 1)
+[2026-03-27 20:57:36.358] [server] [info] Bomb exploded ownerId=0 tick=3568 origin=(5, 1) radius=1 blastCells=4 destroyedBricks=1 killedPlayers=0
+[2026-03-27 20:57:36.570] [net.input] [debug] Input playerId=1 batch=[825..840] lastRecv=840 lastProcessed=839
+[2026-03-27 20:57:36.757] [net.input] [warning] Repeated input gaps playerId=1 streak=6 expectedSeq=851 slotValid=0 slotSeq=819 using lastAppliedButtons=0x00 lastRecv=845 lastProcessed=851
+[2026-03-27 20:57:36.957] [net.input] [warning] Repeated input gaps playerId=0 streak=6 expectedSeq=863 slotValid=0 slotSeq=799 using lastAppliedButtons=0x00 lastRecv=857 lastProcessed=863
+[2026-03-27 20:57:38.571] [net.input] [debug] Input playerId=0 batch=[945..960] lastRecv=960 lastProcessed=959
+[2026-03-27 20:57:38.957] [net.input] [warning] Repeated input gaps playerId=0 streak=8 expectedSeq=983 slotValid=0 slotSeq=919 using lastAppliedButtons=0x08 lastRecv=975 lastProcessed=983
+[2026-03-27 20:57:39.208] [server] [info] Powerup collected playerId=0 type=MaxBombsBoost tick=3739 cell=(6, 1) untilTick=4339
+[2026-03-27 20:57:40.458] [net.input] [info] Bomb placed playerId=0 tick=3814 cell=(7, 1) radius=1 activeBombs=1/2 explodeTick=3904
+[2026-03-27 20:57:41.307] [net.input] [warning] Repeated input gaps playerId=0 streak=6 expectedSeq=1124 slotValid=0 slotSeq=1028 using lastAppliedButtons=0x04 lastRecv=1118 lastProcessed=1124
+[2026-03-27 20:57:41.425] [net.input] [warning] Repeated input gaps playerId=1 streak=6 expectedSeq=1131 slotValid=0 slotSeq=1099 using lastAppliedButtons=0x00 lastRecv=1125 lastProcessed=1131
+[2026-03-27 20:57:41.591] [net.input] [info] Bomb placed playerId=0 tick=3882 cell=(3, 1) radius=1 activeBombs=2/2 explodeTick=3972
+[2026-03-27 20:57:41.958] [server] [info] Bomb exploded ownerId=0 tick=3904 origin=(7, 1) radius=1 blastCells=4 destroyedBricks=2 killedPlayers=0
+[2026-03-27 20:57:42.562] [net.input] [debug] Input playerId=1 batch=[1185..1200] lastRecv=1200 lastProcessed=1199
+[2026-03-27 20:57:42.562] [net.input] [debug] Input playerId=0 batch=[1185..1200] lastRecv=1200 lastProcessed=1199
+[2026-03-27 20:57:43.091] [server] [info] Bomb exploded ownerId=0 tick=3972 origin=(3, 1) radius=1 blastCells=4 destroyedBricks=0 killedPlayers=0
+[2026-03-27 20:57:43.408] [net.input] [warning] Repeated input gaps playerId=0 streak=6 expectedSeq=1250 slotValid=0 slotSeq=1058 using lastAppliedButtons=0x08 lastRecv=1244 lastProcessed=1250
+[2026-03-27 20:57:43.924] [net.input] [warning] Repeated input gaps playerId=1 streak=6 expectedSeq=1281 slotValid=0 slotSeq=1153 using lastAppliedButtons=0x00 lastRecv=1275 lastProcessed=1281
+[2026-03-27 20:57:44.559] [net.input] [debug] Input playerId=0 batch=[1305..1320] lastRecv=1320 lastProcessed=1319
+[2026-03-27 20:57:45.224] [net.input] [info] Bomb placed playerId=0 tick=4100 cell=(3, 3) radius=1 activeBombs=1/2 explodeTick=4190
+[2026-03-27 20:57:45.591] [net.input] [warning] Repeated input gaps playerId=0 streak=6 expectedSeq=1381 slotValid=0 slotSeq=1349 using lastAppliedButtons=0x02 lastRecv=1375 lastProcessed=1381
+[2026-03-27 20:57:46.571] [net.input] [debug] Input playerId=0 batch=[1425..1440] lastRecv=1440 lastProcessed=1439
+[2026-03-27 20:57:46.573] [net.input] [debug] Input playerId=1 batch=[1425..1440] lastRecv=1440 lastProcessed=1439
+[2026-03-27 20:57:46.724] [server] [info] Powerup revealed type=SpeedBoost tick=4190 cell=(4, 3)
+[2026-03-27 20:57:46.724] [server] [info] Bomb exploded ownerId=0 tick=4190 origin=(3, 3) radius=1 blastCells=5 destroyedBricks=1 killedPlayers=0
+[2026-03-27 20:57:47.674] [net.input] [warning] Repeated input gaps playerId=0 streak=6 expectedSeq=1506 slotValid=0 slotSeq=1474 using lastAppliedButtons=0x02 lastRecv=1500 lastProcessed=1506
+[2026-03-27 20:57:47.858] [net.input] [warning] Repeated input gaps playerId=1 streak=6 expectedSeq=1517 slotValid=0 slotSeq=1485 using lastAppliedButtons=0x00 lastRecv=1511 lastProcessed=1517
+[2026-03-27 20:57:48.571] [net.input] [debug] Input playerId=1 batch=[1545..1560] lastRecv=1560 lastProcessed=1559
+[2026-03-27 20:57:49.507] [server] [info] Powerup collected playerId=0 type=SpeedBoost tick=4357 cell=(4, 3) untilTick=4957
+[2026-03-27 20:57:50.057] [net.input] [warning] Repeated input gaps playerId=0 streak=6 expectedSeq=1649 slotValid=0 slotSeq=1425 using lastAppliedButtons=0x04 lastRecv=1643 lastProcessed=1649
+[2026-03-27 20:57:51.741] [net.input] [warning] Repeated input gaps playerId=1 streak=6 expectedSeq=1750 slotValid=0 slotSeq=1718 using lastAppliedButtons=0x00 lastRecv=1744 lastProcessed=1750
+[2026-03-27 20:57:52.240] [net.input] [warning] Repeated input gaps playerId=0 streak=6 expectedSeq=1780 slotValid=0 slotSeq=1684 using lastAppliedButtons=0x05 lastRecv=1774 lastProcessed=1780
+[2026-03-27 20:57:52.807] [net.input] [info] Bomb placed playerId=0 tick=4555 cell=(7, 1) radius=1 activeBombs=1/1 explodeTick=4645
+[2026-03-27 20:57:54.208] [net.input] [debug] Rejected bomb placement playerId=0 tick=4639 because activeBombCount=1 maxBombs=1
+[2026-03-27 20:57:54.308] [server] [info] Bomb exploded ownerId=0 tick=4645 origin=(7, 1) radius=1 blastCells=4 destroyedBricks=0 killedPlayers=0
+[2026-03-27 20:57:54.424] [net.input] [warning] Repeated input gaps playerId=0 streak=6 expectedSeq=1911 slotValid=0 slotSeq=1815 using lastAppliedButtons=0x04 lastRecv=1905 lastProcessed=1911
+[2026-03-27 20:57:54.544] [net.input] [debug] Input playerId=1 batch=[1905..1920] lastRecv=1920 lastProcessed=1918
+[2026-03-27 20:57:55.491] [net.input] [warning] Repeated input gaps playerId=1 streak=6 expectedSeq=1975 slotValid=0 slotSeq=1911 using lastAppliedButtons=0x00 lastRecv=1969 lastProcessed=1975
+[2026-03-27 20:57:55.791] [net.input] [info] Bomb placed playerId=0 tick=4734 cell=(14, 1) radius=1 activeBombs=1/1 explodeTick=4824
+[2026-03-27 20:57:56.874] [net.input] [warning] Repeated input gaps playerId=0 streak=6 expectedSeq=2058 slotValid=0 slotSeq=1994 using lastAppliedButtons=0x08 lastRecv=2052 lastProcessed=2058
+[2026-03-27 20:57:57.291] [server] [info] Bomb exploded ownerId=0 tick=4824 origin=(14, 1) radius=1 blastCells=3 destroyedBricks=1 killedPlayers=0
+[2026-03-27 20:57:58.174] [net.input] [warning] Repeated input gaps playerId=1 streak=6 expectedSeq=2136 slotValid=0 slotSeq=2104 using lastAppliedButtons=0x00 lastRecv=2130 lastProcessed=2136
+[2026-03-27 20:57:58.890] [net.input] [warning] Repeated input gaps playerId=0 streak=6 expectedSeq=2179 slotValid=0 slotSeq=2083 using lastAppliedButtons=0x08 lastRecv=2173 lastProcessed=2179
+[2026-03-27 20:58:00.391] [net.input] [warning] Repeated input gaps playerId=1 streak=6 expectedSeq=2269 slotValid=0 slotSeq=2205 using lastAppliedButtons=0x00 lastRecv=2263 lastProcessed=2269
+[2026-03-27 20:58:00.569] [net.input] [debug] Input playerId=1 batch=[2265..2280] lastRecv=2280 lastProcessed=2279
+[2026-03-27 20:58:00.891] [net.input] [warning] Repeated input gaps playerId=0 streak=10 expectedSeq=2299 slotValid=0 slotSeq=2267 using lastAppliedButtons=0x08 lastRecv=2289 lastProcessed=2299
+[2026-03-27 20:58:02.491] [net.input] [warning] Repeated input gaps playerId=1 streak=6 expectedSeq=2395 slotValid=0 slotSeq=2363 using lastAppliedButtons=0x08 lastRecv=2389 lastProcessed=2395
+[2026-03-27 20:58:03.307] [net.input] [warning] Repeated input gaps playerId=0 streak=6 expectedSeq=2444 slotValid=0 slotSeq=2316 using lastAppliedButtons=0x00 lastRecv=2438 lastProcessed=2444
+[2026-03-27 20:58:04.108] [net.input] [info] Bomb placed playerId=1 tick=5233 cell=(9, 9) radius=1 activeBombs=1/1 explodeTick=5323
+[2026-03-27 20:58:04.564] [net.input] [debug] Input playerId=1 batch=[2505..2520] lastRecv=2520 lastProcessed=2519
+[2026-03-27 20:58:05.140] [net.input] [warning] Repeated input gaps playerId=1 streak=6 expectedSeq=2554 slotValid=0 slotSeq=2522 using lastAppliedButtons=0x00 lastRecv=2548 lastProcessed=2554
+[2026-03-27 20:58:05.608] [server] [info] Powerup revealed type=Invincibility tick=5323 cell=(9, 8)
+[2026-03-27 20:58:05.608] [server] [info] Bomb exploded ownerId=1 tick=5323 origin=(9, 9) radius=1 blastCells=4 destroyedBricks=1 killedPlayers=0
+[2026-03-27 20:58:06.041] [net.input] [warning] Repeated input gaps playerId=0 streak=6 expectedSeq=2608 slotValid=0 slotSeq=2512 using lastAppliedButtons=0x00 lastRecv=2602 lastProcessed=2608
+[2026-03-27 20:58:06.568] [net.input] [debug] Input playerId=1 batch=[2625..2640] lastRecv=2640 lastProcessed=2639
+[2026-03-27 20:58:07.307] [net.input] [warning] Repeated input gaps playerId=1 streak=6 expectedSeq=2684 slotValid=0 slotSeq=2556 using lastAppliedButtons=0x04 lastRecv=2678 lastProcessed=2684
+[2026-03-27 20:58:08.057] [net.input] [warning] Repeated input gaps playerId=0 streak=6 expectedSeq=2729 slotValid=0 slotSeq=2601 using lastAppliedButtons=0x00 lastRecv=2723 lastProcessed=2729
+[2026-03-27 20:58:08.568] [net.input] [debug] Input playerId=1 batch=[2745..2760] lastRecv=2760 lastProcessed=2759
+[2026-03-27 20:58:09.424] [net.input] [warning] Repeated input gaps playerId=1 streak=6 expectedSeq=2811 slotValid=0 slotSeq=2619 using lastAppliedButtons=0x00 lastRecv=2805 lastProcessed=2811
+[2026-03-27 20:58:10.407] [net.input] [warning] Repeated input gaps playerId=0 streak=6 expectedSeq=2870 slotValid=0 slotSeq=2742 using lastAppliedButtons=0x00 lastRecv=2864 lastProcessed=2870
+[2026-03-27 20:58:10.567] [net.input] [debug] Input playerId=1 batch=[2865..2880] lastRecv=2880 lastProcessed=2879
+[2026-03-27 20:58:11.274] [server] [info] Powerup collected playerId=1 type=Invincibility tick=5663 cell=(9, 8) untilTick=6263
+[2026-03-27 20:58:12.541] [net.input] [info] Bomb placed playerId=1 tick=5739 cell=(10, 7) radius=1 activeBombs=1/1 explodeTick=5829
+[2026-03-27 20:58:13.475] [net.input] [warning] Repeated input gaps playerId=0 streak=6 expectedSeq=3054 slotValid=0 slotSeq=2894 using lastAppliedButtons=0x00 lastRecv=3048 lastProcessed=3054
+[2026-03-27 20:58:14.041] [server] [info] Bomb exploded ownerId=1 tick=5829 origin=(10, 7) radius=1 blastCells=3 destroyedBricks=1 killedPlayers=0
+[2026-03-27 20:58:14.057] [net.input] [info] Bomb placed playerId=1 tick=5830 cell=(7, 4) radius=1 activeBombs=1/1 explodeTick=5920
+[2026-03-27 20:58:14.358] [net.input] [warning] Repeated input gaps playerId=1 streak=6 expectedSeq=3107 slotValid=0 slotSeq=3043 using lastAppliedButtons=0x01 lastRecv=3101 lastProcessed=3107
+[2026-03-27 20:58:14.548] [net.input] [debug] Input playerId=1 batch=[3105..3120] lastRecv=3120 lastProcessed=3118
+[2026-03-27 20:58:15.491] [net.input] [warning] Repeated input gaps playerId=0 streak=6 expectedSeq=3175 slotValid=0 slotSeq=3111 using lastAppliedButtons=0x00 lastRecv=3169 lastProcessed=3175
+[2026-03-27 20:58:15.541] [net.input] [debug] Rejected bomb placement playerId=1 tick=5919 because activeBombCount=1 maxBombs=1
+[2026-03-27 20:58:15.558] [server] [info] Bomb exploded ownerId=1 tick=5920 origin=(7, 4) radius=1 blastCells=3 destroyedBricks=0 killedPlayers=0
+[2026-03-27 20:58:16.641] [net.input] [info] Bomb placed playerId=1 tick=5985 cell=(1, 2) radius=1 activeBombs=1/1 explodeTick=6075
+[2026-03-27 20:58:17.525] [net.input] [warning] Repeated input gaps playerId=0 streak=6 expectedSeq=3297 slotValid=0 slotSeq=3233 using lastAppliedButtons=0x00 lastRecv=3291 lastProcessed=3297
+[2026-03-27 20:58:17.707] [net.input] [debug] Rejected bomb placement playerId=1 tick=6049 because activeBombCount=1 maxBombs=1
+[2026-03-27 20:58:18.141] [server] [info] Bomb exploded ownerId=1 tick=6075 origin=(1, 2) radius=1 blastCells=3 destroyedBricks=0 killedPlayers=0
+[2026-03-27 20:58:18.557] [net.input] [info] Bomb placed playerId=1 tick=6100 cell=(1, 9) radius=1 activeBombs=1/1 explodeTick=6190
+[2026-03-27 20:58:19.841] [net.input] [warning] Repeated input gaps playerId=1 streak=6 expectedSeq=3436 slotValid=0 slotSeq=3308 using lastAppliedButtons=0x08 lastRecv=3430 lastProcessed=3436
+[2026-03-27 20:58:19.907] [net.input] [warning] Repeated input gaps playerId=0 streak=6 expectedSeq=3440 slotValid=0 slotSeq=3376 using lastAppliedButtons=0x00 lastRecv=3434 lastProcessed=3440
+[2026-03-27 20:58:20.058] [server] [info] Bomb exploded ownerId=1 tick=6190 origin=(1, 9) radius=1 blastCells=3 destroyedBricks=0 killedPlayers=0
+[2026-03-27 20:58:20.507] [net.input] [info] Bomb placed playerId=1 tick=6217 cell=(9, 9) radius=1 activeBombs=1/1 explodeTick=6307
+[2026-03-27 20:58:22.008] [server] [info] Bomb exploded ownerId=1 tick=6307 origin=(9, 9) radius=1 blastCells=4 destroyedBricks=0 killedPlayers=0
+[2026-03-27 20:58:22.341] [net.input] [warning] Repeated input gaps playerId=1 streak=6 expectedSeq=3586 slotValid=0 slotSeq=3554 using lastAppliedButtons=0x01 lastRecv=3580 lastProcessed=3586
+[2026-03-27 20:58:22.391] [net.input] [warning] Repeated input gaps playerId=0 streak=6 expectedSeq=3589 slotValid=0 slotSeq=3493 using lastAppliedButtons=0x00 lastRecv=3583 lastProcessed=3589
+[2026-03-27 20:58:24.541] [net.input] [warning] Repeated input gaps playerId=0 streak=6 expectedSeq=3718 slotValid=0 slotSeq=3334 using lastAppliedButtons=0x00 lastRecv=3712 lastProcessed=3718
+[2026-03-27 20:58:25.290] [net.input] [info] Bomb placed playerId=1 tick=6504 cell=(11, 1) radius=1 activeBombs=1/1 explodeTick=6594
+[2026-03-27 20:58:26.008] [net.input] [warning] Repeated input gaps playerId=1 streak=6 expectedSeq=3806 slotValid=0 slotSeq=3742 using lastAppliedButtons=0x00 lastRecv=3800 lastProcessed=3806
+[2026-03-27 20:58:26.558] [net.input] [warning] Repeated input gaps playerId=0 streak=6 expectedSeq=3839 slotValid=0 slotSeq=3647 using lastAppliedButtons=0x00 lastRecv=3833 lastProcessed=3839
+[2026-03-27 20:58:26.791] [server] [info] Player killed playerId=0 by bombOwnerId=1 tick=6594 blastOrigin=(11, 1)
+[2026-03-27 20:58:26.791] [server] [info] Player killed playerId=1 by bombOwnerId=1 tick=6594 blastOrigin=(11, 1)
+[2026-03-27 20:58:26.791] [server] [info] Bomb exploded ownerId=1 tick=6594 origin=(11, 1) radius=1 blastCells=4 destroyedBricks=0 killedPlayers=2
+[2026-03-27 20:58:26.791] [server] [info] Round ended tick=6594 result=draw activePlayers=2 alivePlayers=0
+[2026-03-27 20:58:29.791] [server] [info] Returned to lobby after end-of-match cooldown
+[2026-03-27 20:58:32.656] [server] [info] Lobby participant set changed (a participant disconnected); ready state reset
+[2026-03-27 20:58:32.656] [server] [info] Peer disconnected (playerId=1, name="T09B")
+[2026-03-27 20:58:33.880] [server] [info] Lobby participant set changed (a participant disconnected); ready state reset
+[2026-03-27 20:58:33.880] [server] [info] Peer disconnected (playerId=0, name="T09A")
+[2026-03-27 20:58:39.544] [server] [info] Diagnostics JSON report written to logs/diag_server_205839.json
+[2026-03-27 20:58:39.544] [server] [info] Shutdown complete

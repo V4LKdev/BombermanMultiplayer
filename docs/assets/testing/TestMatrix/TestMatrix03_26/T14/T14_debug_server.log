@@ -1,0 +1,52 @@
+[2026-03-27 21:11:51.869] [server] [info] ==== BOMBERMAN DEDICATED SERVER ===================================================================
+[2026-03-27 21:11:51.869] [server] [info] Server diagnostics enabled
+[2026-03-27 21:11:51.869] [server] [info] Listening on port 46014 with max 8 peers (4 gameplay slots)
+[2026-03-27 21:11:51.869] [server] [info] Server input lead=1 tick(s)
+[2026-03-27 21:11:51.870] [server] [info] Server snapshot interval=1 tick(s)
+[2026-03-27 21:11:51.870] [server] [info] Round powerups enabled
+[2026-03-27 21:11:51.870] [server] [debug] ENet peer liveness ping=500ms timeoutLimit=8 timeoutRange=[5000..10000]ms
+[2026-03-27 21:11:51.870] [server] [info] ServerState initialized
+[2026-03-27 21:11:51.870] [server] [info] Map generated with random seed=2481521406
+[2026-03-27 21:12:35.984] [server] [debug] Peer connected (id=0)
+[2026-03-27 21:12:35.984] [net.conn] [debug] Hello from "T14A" (peer 0)
+[2026-03-27 21:12:35.984] [net.conn] [debug] Queued Welcome to playerId=0
+[2026-03-27 21:12:35.984] [server] [info] Lobby participant set changed (a participant joined); ready state reset
+[2026-03-27 21:12:35.984] [net.conn] [info] Accepted playerId=0 into the lobby
+[2026-03-27 21:12:40.388] [server] [debug] Peer connected (id=1)
+[2026-03-27 21:12:40.388] [net.conn] [debug] Hello from "T14B" (peer 1)
+[2026-03-27 21:12:40.388] [net.conn] [debug] Queued Welcome to playerId=1
+[2026-03-27 21:12:40.388] [server] [info] Lobby participant set changed (a participant joined); ready state reset
+[2026-03-27 21:12:40.388] [net.conn] [info] Accepted playerId=1 into the lobby
+[2026-03-27 21:12:45.389] [server] [debug] Peer connected (id=2)
+[2026-03-27 21:12:45.389] [net.conn] [debug] Hello from "T14C" (peer 2)
+[2026-03-27 21:12:45.389] [net.conn] [debug] Queued Welcome to playerId=2
+[2026-03-27 21:12:45.389] [server] [info] Lobby participant set changed (a participant joined); ready state reset
+[2026-03-27 21:12:45.389] [net.conn] [info] Accepted playerId=2 into the lobby
+[2026-03-27 21:12:49.582] [server] [debug] Peer connected (id=3)
+[2026-03-27 21:12:49.582] [net.conn] [debug] Hello from "T14D" (peer 3)
+[2026-03-27 21:12:49.582] [net.conn] [debug] Queued Welcome to playerId=3
+[2026-03-27 21:12:49.582] [server] [info] Lobby participant set changed (a participant joined); ready state reset
+[2026-03-27 21:12:49.582] [net.conn] [info] Accepted playerId=3 into the lobby
+[2026-03-27 21:12:58.954] [server] [debug] Peer connected (id=4)
+[2026-03-27 21:12:58.954] [net.conn] [debug] Hello from "T14E" (peer 4)
+[2026-03-27 21:12:58.954] [net.conn] [warning] Server full (4/4) - rejecting peer 4
+[2026-03-27 21:12:58.954] [net.conn] [debug] Sent Reject (reason=2) to peer 4
+[2026-03-27 21:13:04.609] [net.conn] [debug] Lobby ready updated playerId=3 name="T14D" ready=true
+[2026-03-27 21:13:05.197] [net.conn] [debug] Lobby ready updated playerId=2 name="T14C" ready=true
+[2026-03-27 21:13:05.944] [net.conn] [debug] Lobby ready updated playerId=1 name="T14B" ready=true
+[2026-03-27 21:13:07.616] [server] [debug] Peer connected (id=5)
+[2026-03-27 21:13:07.616] [net.conn] [debug] Hello from "T14E" (peer 5)
+[2026-03-27 21:13:07.616] [net.conn] [warning] Server full (4/4) - rejecting peer 5
+[2026-03-27 21:13:07.616] [net.conn] [debug] Sent Reject (reason=2) to peer 5
+[2026-03-27 21:13:08.672] [server] [debug] Peer disconnected before handshake completed (enetId=4)
+[2026-03-27 21:13:14.175] [server] [info] Lobby participant set changed (a participant disconnected); ready state reset
+[2026-03-27 21:13:14.175] [server] [info] Peer disconnected (playerId=3, name="T14D")
+[2026-03-27 21:13:15.809] [server] [info] Lobby participant set changed (a participant disconnected); ready state reset
+[2026-03-27 21:13:15.809] [server] [info] Peer disconnected (playerId=2, name="T14C")
+[2026-03-27 21:13:17.056] [server] [info] Lobby participant set changed (a participant disconnected); ready state reset
+[2026-03-27 21:13:17.056] [server] [info] Peer disconnected (playerId=1, name="T14B")
+[2026-03-27 21:13:17.332] [server] [debug] Peer disconnected before handshake completed (enetId=5)
+[2026-03-27 21:13:18.310] [server] [info] Lobby participant set changed (a participant disconnected); ready state reset
+[2026-03-27 21:13:18.310] [server] [info] Peer disconnected (playerId=0, name="T14A")
+[2026-03-27 21:13:22.024] [server] [info] Diagnostics JSON report written to logs/diag_server_211322.json
+[2026-03-27 21:13:22.024] [server] [info] Shutdown complete

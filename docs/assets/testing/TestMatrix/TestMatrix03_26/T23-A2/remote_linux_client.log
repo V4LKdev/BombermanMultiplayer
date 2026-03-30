@@ -1,0 +1,759 @@
+[2026-03-28 22:57:30.576] [game] [debug] Client multiplayer config: prediction=on, remoteSmoothing=on
+[2026-03-28 22:57:30.649] [game] [debug] Renderer pacing: manual-cap
+[2026-03-28 22:57:56.789] [net.conn] [debug] Async connect initiated to 192.168.1.51:12345
+[2026-03-28 22:57:56.848] [net.conn] [debug] ENet connect event received, sending Hello
+[2026-03-28 22:57:56.916] [net.conn] [info] Welcome: playerId=1, tickRate=60 - session connected, waiting for lobby or next round start
+[2026-03-28 22:58:24.246] [net.conn] [debug] Queued LobbyReady desiredReady=true
+[2026-03-28 22:58:27.296] [net.conn] [info] Received LevelInfo matchId=1 seed=2951995407
+[2026-03-28 22:58:27.303] [net.conn] [info] Lobby received match bootstrap matchId=1 seed=2951995407 - entering multiplayer level
+[2026-03-28 22:58:27.318] [net.conn] [debug] Queued MatchLoaded matchId=1
+[2026-03-28 22:58:27.318] [net.conn] [debug] Acknowledged match bootstrap loaded matchId=1
+[2026-03-28 22:58:27.672] [net.conn] [info] Received MatchStart matchId=1 goTick=3957 unlockTick=3957
+[2026-03-28 22:58:27.672] [net.conn] [info] Match start confirmed locally matchId=1
+[2026-03-28 22:58:27.709] [net.snapshot] [debug] Received Correction tick=3900 lastProcessed=0 pos=(384, 2432)
+[2026-03-28 22:58:27.709] [net.snapshot] [debug] Received Snapshot tick=3900 playerCount=3 bombCount=0
+[2026-03-28 22:58:28.212] [net.snapshot] [debug] Received Correction tick=3930 lastProcessed=0 pos=(384, 2432)
+[2026-03-28 22:58:28.212] [net.snapshot] [debug] Received Snapshot tick=3930 playerCount=3 bombCount=0
+[2026-03-28 22:58:28.703] [net.input] [debug] Local prediction armed from authoritative state tick=3959 lastProcessed=0 pos=(384, 2432)
+[2026-03-28 22:58:28.711] [net.snapshot] [debug] Received Correction tick=3960 lastProcessed=0 pos=(384, 2432)
+[2026-03-28 22:58:28.711] [net.snapshot] [debug] Received Snapshot tick=3960 playerCount=3 bombCount=0
+[2026-03-28 22:58:28.718] [net.input] [debug] Ignored stale local correction tick=3960 lastProcessed=0 lastAppliedTick=3959
+[2026-03-28 22:58:28.733] [net.input] [debug] Ignored stale local correction tick=3961 lastProcessed=0 lastAppliedTick=3960
+[2026-03-28 22:58:28.756] [net.input] [debug] Ignored stale local correction tick=3962 lastProcessed=0 lastAppliedTick=3961
+[2026-03-28 22:58:28.771] [net.input] [debug] Ignored stale local correction tick=3963 lastProcessed=0 lastAppliedTick=3962
+[2026-03-28 22:58:29.184] [net.input] [debug] Sent Input seq=30 batch=[15..30] buttons=0x00
+[2026-03-28 22:58:29.213] [net.snapshot] [debug] Received Correction tick=3990 lastProcessed=27 pos=(384, 2432)
+[2026-03-28 22:58:29.213] [net.snapshot] [debug] Received Snapshot tick=3990 playerCount=3 bombCount=0
+[2026-03-28 22:58:29.683] [net.input] [debug] Sent Input seq=60 batch=[45..60] buttons=0x00
+[2026-03-28 22:58:29.707] [net.snapshot] [debug] Received Correction tick=4020 lastProcessed=57 pos=(384, 2432)
+[2026-03-28 22:58:29.707] [net.snapshot] [debug] Received Snapshot tick=4020 playerCount=3 bombCount=0
+[2026-03-28 22:58:29.737] [net.input] [debug] Prediction live ackSeq=58 corrTick=4021 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=6
+[2026-03-28 22:58:30.188] [net.input] [debug] Sent Input seq=90 batch=[75..90] buttons=0x00
+[2026-03-28 22:58:30.210] [net.snapshot] [debug] Received Correction tick=4050 lastProcessed=87 pos=(384, 2432)
+[2026-03-28 22:58:30.210] [net.snapshot] [debug] Received Snapshot tick=4050 playerCount=3 bombCount=0
+[2026-03-28 22:58:30.689] [net.input] [debug] Sent Input seq=120 batch=[105..120] buttons=0x00
+[2026-03-28 22:58:30.711] [net.snapshot] [debug] Received Correction tick=4080 lastProcessed=117 pos=(384, 2432)
+[2026-03-28 22:58:30.711] [net.snapshot] [debug] Received Snapshot tick=4080 playerCount=3 bombCount=0
+[2026-03-28 22:58:30.787] [net.input] [debug] Prediction live ackSeq=121 corrTick=4084 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=6
+[2026-03-28 22:58:31.144] [net.snapshot] [debug] Received BombPlaced tick=4106 ownerId=2 cell=(27, 1) radius=1 explodeTick=4196
+[2026-03-28 22:58:31.189] [net.input] [debug] Sent Input seq=150 batch=[135..150] buttons=0x00
+[2026-03-28 22:58:31.212] [net.snapshot] [debug] Received Correction tick=4110 lastProcessed=147 pos=(384, 2432)
+[2026-03-28 22:58:31.212] [net.snapshot] [debug] Received Snapshot tick=4110 playerCount=3 bombCount=1
+[2026-03-28 22:58:31.685] [net.input] [debug] Sent Input seq=180 batch=[165..180] buttons=0x00
+[2026-03-28 22:58:31.714] [net.snapshot] [debug] Received Correction tick=4140 lastProcessed=177 pos=(384, 2432)
+[2026-03-28 22:58:31.714] [net.snapshot] [debug] Received Snapshot tick=4140 playerCount=3 bombCount=1
+[2026-03-28 22:58:31.841] [net.input] [debug] Prediction live ackSeq=184 corrTick=4147 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=6
+[2026-03-28 22:58:32.190] [net.input] [debug] Sent Input seq=210 batch=[195..210] buttons=0x00
+[2026-03-28 22:58:32.211] [net.snapshot] [debug] Received Correction tick=4170 lastProcessed=207 pos=(384, 2432)
+[2026-03-28 22:58:32.212] [net.snapshot] [debug] Received Snapshot tick=4170 playerCount=3 bombCount=1
+[2026-03-28 22:58:32.643] [net.snapshot] [debug] Received ExplosionResolved tick=4196 ownerId=2 origin=(27, 1) blastCells=4 destroyedBricks=1 killedMask=0x00
+[2026-03-28 22:58:32.688] [net.input] [debug] Sent Input seq=240 batch=[225..240] buttons=0x00
+[2026-03-28 22:58:32.710] [net.snapshot] [debug] Received Correction tick=4200 lastProcessed=237 pos=(384, 2432)
+[2026-03-28 22:58:32.710] [net.snapshot] [debug] Received Snapshot tick=4200 playerCount=3 bombCount=0
+[2026-03-28 22:58:32.887] [net.input] [debug] Prediction live ackSeq=247 corrTick=4210 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=6
+[2026-03-28 22:58:33.186] [net.input] [debug] Sent Input seq=270 batch=[255..270] buttons=0x00
+[2026-03-28 22:58:33.216] [net.snapshot] [debug] Received Correction tick=4230 lastProcessed=267 pos=(384, 2432)
+[2026-03-28 22:58:33.216] [net.snapshot] [debug] Received Snapshot tick=4230 playerCount=3 bombCount=0
+[2026-03-28 22:58:33.685] [net.input] [debug] Sent Input seq=300 batch=[285..300] buttons=0x00
+[2026-03-28 22:58:33.715] [net.snapshot] [debug] Received Correction tick=4260 lastProcessed=297 pos=(384, 2432)
+[2026-03-28 22:58:33.715] [net.snapshot] [debug] Received Snapshot tick=4260 playerCount=3 bombCount=0
+[2026-03-28 22:58:33.939] [net.input] [debug] Prediction live ackSeq=310 corrTick=4273 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=6
+[2026-03-28 22:58:34.184] [net.input] [debug] Sent Input seq=330 batch=[315..330] buttons=0x00
+[2026-03-28 22:58:34.214] [net.snapshot] [debug] Received Correction tick=4290 lastProcessed=327 pos=(384, 2432)
+[2026-03-28 22:58:34.214] [net.snapshot] [debug] Received Snapshot tick=4290 playerCount=3 bombCount=0
+[2026-03-28 22:58:34.686] [net.input] [debug] Sent Input seq=360 batch=[345..360] buttons=0x00
+[2026-03-28 22:58:34.709] [net.snapshot] [debug] Received Correction tick=4320 lastProcessed=357 pos=(384, 2432)
+[2026-03-28 22:58:34.709] [net.snapshot] [debug] Received Snapshot tick=4320 playerCount=3 bombCount=0
+[2026-03-28 22:58:34.986] [net.input] [debug] Prediction live ackSeq=373 corrTick=4336 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=6
+[2026-03-28 22:58:35.184] [net.input] [debug] Sent Input seq=390 batch=[375..390] buttons=0x00
+[2026-03-28 22:58:35.213] [net.snapshot] [debug] Received Correction tick=4350 lastProcessed=387 pos=(384, 2432)
+[2026-03-28 22:58:35.214] [net.snapshot] [debug] Received BombPlaced tick=4350 ownerId=2 cell=(26, 1) radius=1 explodeTick=4440
+[2026-03-28 22:58:35.214] [net.snapshot] [debug] Received Snapshot tick=4350 playerCount=3 bombCount=1
+[2026-03-28 22:58:35.687] [net.input] [debug] Sent Input seq=420 batch=[405..420] buttons=0x00
+[2026-03-28 22:58:35.709] [net.snapshot] [debug] Received Correction tick=4380 lastProcessed=417 pos=(384, 2432)
+[2026-03-28 22:58:35.709] [net.snapshot] [debug] Received Snapshot tick=4380 playerCount=3 bombCount=1
+[2026-03-28 22:58:36.037] [net.input] [debug] Prediction live ackSeq=436 corrTick=4399 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=6
+[2026-03-28 22:58:36.184] [net.input] [debug] Sent Input seq=450 batch=[435..450] buttons=0x00
+[2026-03-28 22:58:36.214] [net.snapshot] [debug] Received Correction tick=4410 lastProcessed=447 pos=(384, 2432)
+[2026-03-28 22:58:36.214] [net.snapshot] [debug] Received Snapshot tick=4410 playerCount=3 bombCount=1
+[2026-03-28 22:58:36.688] [net.input] [debug] Sent Input seq=480 batch=[465..480] buttons=0x00
+[2026-03-28 22:58:36.710] [net.snapshot] [debug] Received Correction tick=4440 lastProcessed=477 pos=(384, 2432)
+[2026-03-28 22:58:36.710] [net.snapshot] [debug] Received ExplosionResolved tick=4440 ownerId=2 origin=(26, 1) blastCells=3 destroyedBricks=1 killedMask=0x00
+[2026-03-28 22:58:36.710] [net.snapshot] [debug] Received Snapshot tick=4440 playerCount=3 bombCount=0
+[2026-03-28 22:58:37.083] [net.input] [debug] Prediction live ackSeq=499 corrTick=4462 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=6
+[2026-03-28 22:58:37.186] [net.input] [debug] Sent Input seq=510 batch=[495..510] buttons=0x00
+[2026-03-28 22:58:37.215] [net.snapshot] [debug] Received Correction tick=4470 lastProcessed=507 pos=(384, 2432)
+[2026-03-28 22:58:37.215] [net.snapshot] [debug] Received Snapshot tick=4470 playerCount=3 bombCount=0
+[2026-03-28 22:58:37.689] [net.input] [debug] Sent Input seq=540 batch=[525..540] buttons=0x00
+[2026-03-28 22:58:37.711] [net.snapshot] [debug] Received Correction tick=4500 lastProcessed=537 pos=(384, 2432)
+[2026-03-28 22:58:37.711] [net.snapshot] [debug] Received Snapshot tick=4500 playerCount=3 bombCount=0
+[2026-03-28 22:58:38.136] [net.input] [debug] Prediction live ackSeq=562 corrTick=4525 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=6
+[2026-03-28 22:58:38.186] [net.input] [debug] Sent Input seq=570 batch=[555..570] buttons=0x00
+[2026-03-28 22:58:38.208] [net.snapshot] [debug] Received Correction tick=4530 lastProcessed=567 pos=(384, 2432)
+[2026-03-28 22:58:38.208] [net.snapshot] [debug] Received Snapshot tick=4530 playerCount=3 bombCount=0
+[2026-03-28 22:58:38.685] [net.input] [debug] Sent Input seq=600 batch=[585..600] buttons=0x00
+[2026-03-28 22:58:38.714] [net.snapshot] [debug] Received Correction tick=4560 lastProcessed=597 pos=(384, 2432)
+[2026-03-28 22:58:38.714] [net.snapshot] [debug] Received Snapshot tick=4560 playerCount=3 bombCount=0
+[2026-03-28 22:58:38.947] [net.snapshot] [debug] Received BombPlaced tick=4574 ownerId=2 cell=(27, 7) radius=1 explodeTick=4664
+[2026-03-28 22:58:39.188] [net.input] [debug] Sent Input seq=630 batch=[615..630] buttons=0x00
+[2026-03-28 22:58:39.188] [net.input] [debug] Prediction live ackSeq=625 corrTick=4588 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=6
+[2026-03-28 22:58:39.210] [net.snapshot] [debug] Received Correction tick=4590 lastProcessed=627 pos=(384, 2432)
+[2026-03-28 22:58:39.210] [net.snapshot] [debug] Received Snapshot tick=4590 playerCount=3 bombCount=1
+[2026-03-28 22:58:39.688] [net.input] [debug] Sent Input seq=660 batch=[645..660] buttons=0x00
+[2026-03-28 22:58:39.711] [net.snapshot] [debug] Received Correction tick=4620 lastProcessed=657 pos=(384, 2432)
+[2026-03-28 22:58:39.711] [net.snapshot] [debug] Received Snapshot tick=4620 playerCount=3 bombCount=1
+[2026-03-28 22:58:40.184] [net.input] [debug] Sent Input seq=690 batch=[675..690] buttons=0x00
+[2026-03-28 22:58:40.214] [net.snapshot] [debug] Received Correction tick=4650 lastProcessed=687 pos=(384, 2432)
+[2026-03-28 22:58:40.214] [net.snapshot] [debug] Received Snapshot tick=4650 playerCount=3 bombCount=1
+[2026-03-28 22:58:40.237] [net.input] [debug] Prediction live ackSeq=688 corrTick=4651 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=6
+[2026-03-28 22:58:40.444] [net.snapshot] [debug] Received ExplosionResolved tick=4664 ownerId=2 origin=(27, 7) blastCells=5 destroyedBricks=1 killedMask=0x00
+[2026-03-28 22:58:40.689] [net.input] [debug] Sent Input seq=720 batch=[705..720] buttons=0x00
+[2026-03-28 22:58:40.711] [net.snapshot] [debug] Received Correction tick=4680 lastProcessed=717 pos=(384, 2432)
+[2026-03-28 22:58:40.711] [net.snapshot] [debug] Received Snapshot tick=4680 playerCount=3 bombCount=0
+[2026-03-28 22:58:41.187] [net.input] [debug] Sent Input seq=750 batch=[735..750] buttons=0x00
+[2026-03-28 22:58:41.210] [net.snapshot] [debug] Received Correction tick=4710 lastProcessed=747 pos=(384, 2432)
+[2026-03-28 22:58:41.210] [net.snapshot] [debug] Received Snapshot tick=4710 playerCount=3 bombCount=0
+[2026-03-28 22:58:41.283] [net.input] [debug] Prediction live ackSeq=751 corrTick=4714 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=6
+[2026-03-28 22:58:41.687] [net.input] [debug] Sent Input seq=780 batch=[765..780] buttons=0x00
+[2026-03-28 22:58:41.709] [net.snapshot] [debug] Received Correction tick=4740 lastProcessed=777 pos=(384, 2432)
+[2026-03-28 22:58:41.709] [net.snapshot] [debug] Received Snapshot tick=4740 playerCount=3 bombCount=0
+[2026-03-28 22:58:42.187] [net.input] [debug] Sent Input seq=810 batch=[795..810] buttons=0x00
+[2026-03-28 22:58:42.209] [net.snapshot] [debug] Received Correction tick=4770 lastProcessed=807 pos=(384, 2432)
+[2026-03-28 22:58:42.209] [net.snapshot] [debug] Received Snapshot tick=4770 playerCount=3 bombCount=0
+[2026-03-28 22:58:42.260] [net.snapshot] [debug] Received BombPlaced tick=4773 ownerId=2 cell=(25, 5) radius=1 explodeTick=4863
+[2026-03-28 22:58:42.333] [net.input] [debug] Prediction live ackSeq=814 corrTick=4777 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=6
+[2026-03-28 22:58:42.686] [net.input] [debug] Sent Input seq=840 batch=[825..840] buttons=0x00
+[2026-03-28 22:58:42.709] [net.snapshot] [debug] Received Correction tick=4800 lastProcessed=837 pos=(384, 2432)
+[2026-03-28 22:58:42.709] [net.snapshot] [debug] Received Snapshot tick=4800 playerCount=3 bombCount=1
+[2026-03-28 22:58:43.187] [net.input] [debug] Sent Input seq=870 batch=[855..870] buttons=0x00
+[2026-03-28 22:58:43.210] [net.snapshot] [debug] Received Correction tick=4830 lastProcessed=867 pos=(384, 2432)
+[2026-03-28 22:58:43.210] [net.snapshot] [debug] Received Snapshot tick=4830 playerCount=3 bombCount=1
+[2026-03-28 22:58:43.387] [net.input] [debug] Prediction live ackSeq=877 corrTick=4840 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=6
+[2026-03-28 22:58:43.683] [net.input] [debug] Sent Input seq=900 batch=[885..900] buttons=0x00
+[2026-03-28 22:58:43.713] [net.snapshot] [debug] Received Correction tick=4860 lastProcessed=897 pos=(384, 2432)
+[2026-03-28 22:58:43.713] [net.snapshot] [debug] Received Snapshot tick=4860 playerCount=3 bombCount=1
+[2026-03-28 22:58:43.765] [net.snapshot] [debug] Received ExplosionResolved tick=4863 ownerId=2 origin=(25, 5) blastCells=5 destroyedBricks=1 killedMask=0x00
+[2026-03-28 22:58:44.183] [net.input] [debug] Sent Input seq=930 batch=[915..930] buttons=0x00
+[2026-03-28 22:58:44.213] [net.snapshot] [debug] Received Correction tick=4890 lastProcessed=927 pos=(384, 2432)
+[2026-03-28 22:58:44.213] [net.snapshot] [debug] Received Snapshot tick=4890 playerCount=3 bombCount=0
+[2026-03-28 22:58:44.439] [net.input] [debug] Prediction live ackSeq=940 corrTick=4903 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:58:44.687] [net.input] [debug] Sent Input seq=960 batch=[945..960] buttons=0x00
+[2026-03-28 22:58:44.708] [net.snapshot] [debug] Received Correction tick=4920 lastProcessed=957 pos=(384, 2432)
+[2026-03-28 22:58:44.708] [net.snapshot] [debug] Received Snapshot tick=4920 playerCount=3 bombCount=0
+[2026-03-28 22:58:45.127] [net.snapshot] [debug] Received BombPlaced tick=4945 ownerId=2 cell=(21, 5) radius=1 explodeTick=5035
+[2026-03-28 22:58:45.184] [net.input] [debug] Sent Input seq=990 batch=[975..990] buttons=0x00
+[2026-03-28 22:58:45.214] [net.snapshot] [debug] Received Correction tick=4950 lastProcessed=987 pos=(384, 2432)
+[2026-03-28 22:58:45.214] [net.snapshot] [debug] Received Snapshot tick=4950 playerCount=3 bombCount=1
+[2026-03-28 22:58:45.485] [net.input] [debug] Prediction live ackSeq=1003 corrTick=4966 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:58:45.689] [net.input] [debug] Sent Input seq=1020 batch=[1005..1020] buttons=0x00
+[2026-03-28 22:58:45.712] [net.snapshot] [debug] Received Correction tick=4980 lastProcessed=1017 pos=(384, 2432)
+[2026-03-28 22:58:45.712] [net.snapshot] [debug] Received Snapshot tick=4980 playerCount=3 bombCount=1
+[2026-03-28 22:58:46.189] [net.input] [debug] Sent Input seq=1050 batch=[1035..1050] buttons=0x00
+[2026-03-28 22:58:46.211] [net.snapshot] [debug] Received Correction tick=5010 lastProcessed=1047 pos=(384, 2432)
+[2026-03-28 22:58:46.211] [net.snapshot] [debug] Received Snapshot tick=5010 playerCount=3 bombCount=1
+[2026-03-28 22:58:46.534] [net.input] [debug] Prediction live ackSeq=1066 corrTick=5029 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:58:46.629] [net.snapshot] [debug] Received ExplosionResolved tick=5035 ownerId=2 origin=(21, 5) blastCells=5 destroyedBricks=1 killedMask=0x00
+[2026-03-28 22:58:46.687] [net.input] [debug] Sent Input seq=1080 batch=[1065..1080] buttons=0x00
+[2026-03-28 22:58:46.709] [net.snapshot] [debug] Received Correction tick=5040 lastProcessed=1077 pos=(384, 2432)
+[2026-03-28 22:58:46.709] [net.snapshot] [debug] Received Snapshot tick=5040 playerCount=3 bombCount=0
+[2026-03-28 22:58:47.184] [net.input] [debug] Sent Input seq=1110 batch=[1095..1110] buttons=0x00
+[2026-03-28 22:58:47.214] [net.snapshot] [debug] Received Correction tick=5070 lastProcessed=1107 pos=(384, 2432)
+[2026-03-28 22:58:47.214] [net.snapshot] [debug] Received Snapshot tick=5070 playerCount=3 bombCount=0
+[2026-03-28 22:58:47.587] [net.input] [debug] Prediction live ackSeq=1129 corrTick=5092 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:58:47.689] [net.input] [debug] Sent Input seq=1140 batch=[1125..1140] buttons=0x00
+[2026-03-28 22:58:47.710] [net.snapshot] [debug] Received Correction tick=5100 lastProcessed=1137 pos=(384, 2432)
+[2026-03-28 22:58:47.710] [net.snapshot] [debug] Received Snapshot tick=5100 playerCount=3 bombCount=0
+[2026-03-28 22:58:48.076] [net.snapshot] [debug] Received BombPlaced tick=5122 ownerId=2 cell=(19, 2) radius=1 explodeTick=5212
+[2026-03-28 22:58:48.188] [net.input] [debug] Sent Input seq=1170 batch=[1155..1170] buttons=0x00
+[2026-03-28 22:58:48.209] [net.snapshot] [debug] Received Correction tick=5130 lastProcessed=1167 pos=(384, 2432)
+[2026-03-28 22:58:48.209] [net.snapshot] [debug] Received Snapshot tick=5130 playerCount=3 bombCount=1
+[2026-03-28 22:58:48.635] [net.input] [debug] Prediction live ackSeq=1192 corrTick=5155 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:58:48.686] [net.input] [debug] Sent Input seq=1200 batch=[1185..1200] buttons=0x00
+[2026-03-28 22:58:48.708] [net.snapshot] [debug] Received Correction tick=5160 lastProcessed=1197 pos=(384, 2432)
+[2026-03-28 22:58:48.708] [net.snapshot] [debug] Received Snapshot tick=5160 playerCount=3 bombCount=1
+[2026-03-28 22:58:49.183] [net.input] [debug] Sent Input seq=1230 batch=[1215..1230] buttons=0x00
+[2026-03-28 22:58:49.212] [net.snapshot] [debug] Received Correction tick=5190 lastProcessed=1227 pos=(384, 2432)
+[2026-03-28 22:58:49.212] [net.snapshot] [debug] Received Snapshot tick=5190 playerCount=3 bombCount=1
+[2026-03-28 22:58:49.580] [net.snapshot] [debug] Received ExplosionResolved tick=5212 ownerId=2 origin=(19, 2) blastCells=3 destroyedBricks=1 killedMask=0x00
+[2026-03-28 22:58:49.683] [net.input] [debug] Sent Input seq=1260 batch=[1245..1260] buttons=0x00
+[2026-03-28 22:58:49.683] [net.input] [debug] Prediction live ackSeq=1255 corrTick=5218 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:58:49.712] [net.snapshot] [debug] Received Correction tick=5220 lastProcessed=1257 pos=(384, 2432)
+[2026-03-28 22:58:49.712] [net.snapshot] [debug] Received Snapshot tick=5220 playerCount=3 bombCount=0
+[2026-03-28 22:58:50.184] [net.input] [debug] Sent Input seq=1290 batch=[1275..1290] buttons=0x00
+[2026-03-28 22:58:50.213] [net.snapshot] [debug] Received Correction tick=5250 lastProcessed=1287 pos=(384, 2432)
+[2026-03-28 22:58:50.213] [net.snapshot] [debug] Received Snapshot tick=5250 playerCount=3 bombCount=0
+[2026-03-28 22:58:50.683] [net.input] [debug] Sent Input seq=1320 batch=[1305..1320] buttons=0x00
+[2026-03-28 22:58:50.714] [net.snapshot] [debug] Received Correction tick=5280 lastProcessed=1317 pos=(384, 2432)
+[2026-03-28 22:58:50.714] [net.snapshot] [debug] Received Snapshot tick=5280 playerCount=3 bombCount=0
+[2026-03-28 22:58:50.736] [net.input] [debug] Prediction live ackSeq=1318 corrTick=5281 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:58:51.185] [net.input] [debug] Sent Input seq=1350 batch=[1335..1350] buttons=0x00
+[2026-03-28 22:58:51.214] [net.snapshot] [debug] Received Correction tick=5310 lastProcessed=1347 pos=(384, 2432)
+[2026-03-28 22:58:51.214] [net.snapshot] [debug] Received Snapshot tick=5310 playerCount=3 bombCount=0
+[2026-03-28 22:58:51.683] [net.input] [debug] Sent Input seq=1380 batch=[1365..1380] buttons=0x00
+[2026-03-28 22:58:51.715] [net.snapshot] [debug] Received Correction tick=5340 lastProcessed=1377 pos=(384, 2432)
+[2026-03-28 22:58:51.715] [net.snapshot] [debug] Received Snapshot tick=5340 playerCount=3 bombCount=0
+[2026-03-28 22:58:51.788] [net.input] [debug] Prediction live ackSeq=1381 corrTick=5344 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:58:52.190] [net.input] [debug] Sent Input seq=1410 batch=[1395..1410] buttons=0x00
+[2026-03-28 22:58:52.212] [net.snapshot] [debug] Received Correction tick=5370 lastProcessed=1407 pos=(384, 2432)
+[2026-03-28 22:58:52.212] [net.snapshot] [debug] Received Snapshot tick=5370 playerCount=3 bombCount=0
+[2026-03-28 22:58:52.686] [net.input] [debug] Sent Input seq=1440 batch=[1425..1440] buttons=0x00
+[2026-03-28 22:58:52.708] [net.snapshot] [debug] Received Correction tick=5400 lastProcessed=1437 pos=(384, 2432)
+[2026-03-28 22:58:52.708] [net.snapshot] [debug] Received Snapshot tick=5400 playerCount=3 bombCount=0
+[2026-03-28 22:58:52.835] [net.input] [debug] Prediction live ackSeq=1444 corrTick=5407 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:58:53.186] [net.input] [debug] Sent Input seq=1470 batch=[1455..1470] buttons=0x00
+[2026-03-28 22:58:53.211] [net.snapshot] [debug] Received Correction tick=5430 lastProcessed=1467 pos=(384, 2432)
+[2026-03-28 22:58:53.211] [net.snapshot] [debug] Received Snapshot tick=5430 playerCount=3 bombCount=0
+[2026-03-28 22:58:53.686] [net.input] [debug] Sent Input seq=1500 batch=[1485..1500] buttons=0x00
+[2026-03-28 22:58:53.715] [net.snapshot] [debug] Received Correction tick=5460 lastProcessed=1497 pos=(384, 2432)
+[2026-03-28 22:58:53.715] [net.snapshot] [debug] Received Snapshot tick=5460 playerCount=3 bombCount=0
+[2026-03-28 22:58:53.890] [net.input] [debug] Prediction live ackSeq=1507 corrTick=5470 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:58:54.183] [net.input] [debug] Sent Input seq=1530 batch=[1515..1530] buttons=0x00
+[2026-03-28 22:58:54.212] [net.snapshot] [debug] Received Correction tick=5490 lastProcessed=1527 pos=(384, 2432)
+[2026-03-28 22:58:54.212] [net.snapshot] [debug] Received Snapshot tick=5490 playerCount=3 bombCount=0
+[2026-03-28 22:58:54.688] [net.input] [debug] Sent Input seq=1560 batch=[1545..1560] buttons=0x00
+[2026-03-28 22:58:54.710] [net.snapshot] [debug] Received Correction tick=5520 lastProcessed=1557 pos=(384, 2432)
+[2026-03-28 22:58:54.710] [net.snapshot] [debug] Received Snapshot tick=5520 playerCount=3 bombCount=0
+[2026-03-28 22:58:54.939] [net.input] [debug] Prediction live ackSeq=1570 corrTick=5533 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:58:55.190] [net.input] [debug] Sent Input seq=1590 batch=[1575..1590] buttons=0x00
+[2026-03-28 22:58:55.212] [net.snapshot] [debug] Received Correction tick=5550 lastProcessed=1587 pos=(384, 2432)
+[2026-03-28 22:58:55.212] [net.snapshot] [debug] Received Snapshot tick=5550 playerCount=3 bombCount=0
+[2026-03-28 22:58:55.687] [net.input] [debug] Sent Input seq=1620 batch=[1605..1620] buttons=0x00
+[2026-03-28 22:58:55.709] [net.snapshot] [debug] Received Correction tick=5580 lastProcessed=1617 pos=(384, 2432)
+[2026-03-28 22:58:55.709] [net.snapshot] [debug] Received Snapshot tick=5580 playerCount=3 bombCount=0
+[2026-03-28 22:58:55.985] [net.input] [debug] Prediction live ackSeq=1633 corrTick=5596 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:58:56.187] [net.input] [debug] Sent Input seq=1650 batch=[1635..1650] buttons=0x00
+[2026-03-28 22:58:56.210] [net.snapshot] [debug] Received Correction tick=5610 lastProcessed=1647 pos=(384, 2432)
+[2026-03-28 22:58:56.210] [net.snapshot] [debug] Received Snapshot tick=5610 playerCount=3 bombCount=0
+[2026-03-28 22:58:56.686] [net.input] [debug] Sent Input seq=1680 batch=[1665..1680] buttons=0x00
+[2026-03-28 22:58:56.716] [net.snapshot] [debug] Received Correction tick=5640 lastProcessed=1677 pos=(384, 2432)
+[2026-03-28 22:58:56.716] [net.snapshot] [debug] Received Snapshot tick=5640 playerCount=3 bombCount=0
+[2026-03-28 22:58:57.038] [net.input] [debug] Prediction live ackSeq=1696 corrTick=5659 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:58:57.185] [net.input] [debug] Sent Input seq=1710 batch=[1695..1710] buttons=0x00
+[2026-03-28 22:58:57.215] [net.snapshot] [debug] Received Correction tick=5670 lastProcessed=1707 pos=(384, 2432)
+[2026-03-28 22:58:57.215] [net.snapshot] [debug] Received Snapshot tick=5670 playerCount=3 bombCount=0
+[2026-03-28 22:58:57.686] [net.input] [debug] Sent Input seq=1740 batch=[1725..1740] buttons=0x00
+[2026-03-28 22:58:57.715] [net.snapshot] [debug] Received Correction tick=5700 lastProcessed=1737 pos=(384, 2432)
+[2026-03-28 22:58:57.715] [net.snapshot] [debug] Received Snapshot tick=5700 playerCount=3 bombCount=0
+[2026-03-28 22:58:58.085] [net.input] [debug] Prediction live ackSeq=1759 corrTick=5722 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:58:58.187] [net.input] [debug] Sent Input seq=1770 batch=[1755..1770] buttons=0x00
+[2026-03-28 22:58:58.210] [net.snapshot] [debug] Received Correction tick=5730 lastProcessed=1767 pos=(384, 2432)
+[2026-03-28 22:58:58.210] [net.snapshot] [debug] Received Snapshot tick=5730 playerCount=3 bombCount=0
+[2026-03-28 22:58:58.687] [net.input] [debug] Sent Input seq=1800 batch=[1785..1800] buttons=0x00
+[2026-03-28 22:58:58.709] [net.snapshot] [debug] Received Correction tick=5760 lastProcessed=1797 pos=(384, 2432)
+[2026-03-28 22:58:58.709] [net.snapshot] [debug] Received Snapshot tick=5760 playerCount=3 bombCount=0
+[2026-03-28 22:58:59.135] [net.input] [debug] Prediction live ackSeq=1822 corrTick=5785 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:58:59.186] [net.input] [debug] Sent Input seq=1830 batch=[1815..1830] buttons=0x00
+[2026-03-28 22:58:59.215] [net.snapshot] [debug] Received Correction tick=5790 lastProcessed=1827 pos=(384, 2432)
+[2026-03-28 22:58:59.215] [net.snapshot] [debug] Received Snapshot tick=5790 playerCount=3 bombCount=0
+[2026-03-28 22:58:59.685] [net.input] [debug] Sent Input seq=1860 batch=[1845..1860] buttons=0x08
+[2026-03-28 22:58:59.714] [net.snapshot] [debug] Received Correction tick=5820 lastProcessed=1857 pos=(792, 2432)
+[2026-03-28 22:58:59.714] [net.snapshot] [debug] Received Snapshot tick=5820 playerCount=3 bombCount=0
+[2026-03-28 22:59:00.188] [net.input] [debug] Sent Input seq=1890 batch=[1875..1890] buttons=0x04
+[2026-03-28 22:59:00.188] [net.input] [debug] Prediction live ackSeq=1885 corrTick=5848 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:00.210] [net.snapshot] [debug] Received Correction tick=5850 lastProcessed=1887 pos=(877, 2432)
+[2026-03-28 22:59:00.210] [net.snapshot] [debug] Received Snapshot tick=5850 playerCount=3 bombCount=0
+[2026-03-28 22:59:00.687] [net.input] [debug] Sent Input seq=1920 batch=[1905..1920] buttons=0x04
+[2026-03-28 22:59:00.709] [net.snapshot] [debug] Received Correction tick=5880 lastProcessed=1917 pos=(367, 2432)
+[2026-03-28 22:59:00.709] [net.snapshot] [debug] Received Snapshot tick=5880 playerCount=3 bombCount=0
+[2026-03-28 22:59:01.184] [net.input] [debug] Sent Input seq=1950 batch=[1935..1950] buttons=0x08
+[2026-03-28 22:59:01.215] [net.snapshot] [debug] Received Correction tick=5910 lastProcessed=1947 pos=(503, 2432)
+[2026-03-28 22:59:01.215] [net.snapshot] [debug] Received Snapshot tick=5910 playerCount=3 bombCount=0
+[2026-03-28 22:59:01.237] [net.input] [debug] Prediction live ackSeq=1948 corrTick=5911 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:01.686] [net.input] [debug] Sent Input seq=1980 batch=[1965..1980] buttons=0x00
+[2026-03-28 22:59:01.715] [net.snapshot] [debug] Received Correction tick=5940 lastProcessed=1977 pos=(945, 2432)
+[2026-03-28 22:59:01.715] [net.snapshot] [debug] Received Snapshot tick=5940 playerCount=3 bombCount=0
+[2026-03-28 22:59:02.183] [net.input] [debug] Sent Input seq=2010 batch=[1995..2010] buttons=0x00
+[2026-03-28 22:59:02.212] [net.snapshot] [debug] Received Correction tick=5970 lastProcessed=2007 pos=(945, 2432)
+[2026-03-28 22:59:02.212] [net.snapshot] [debug] Received Snapshot tick=5970 playerCount=3 bombCount=0
+[2026-03-28 22:59:02.287] [net.input] [debug] Prediction live ackSeq=2011 corrTick=5974 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:02.686] [net.input] [debug] Sent Input seq=2040 batch=[2025..2040] buttons=0x00
+[2026-03-28 22:59:02.715] [net.snapshot] [debug] Received Correction tick=6000 lastProcessed=2037 pos=(945, 2432)
+[2026-03-28 22:59:02.715] [net.snapshot] [debug] Received Snapshot tick=6000 playerCount=3 bombCount=0
+[2026-03-28 22:59:03.188] [net.input] [debug] Sent Input seq=2070 batch=[2055..2070] buttons=0x00
+[2026-03-28 22:59:03.209] [net.snapshot] [debug] Received Correction tick=6030 lastProcessed=2067 pos=(945, 2432)
+[2026-03-28 22:59:03.209] [net.snapshot] [debug] Received Snapshot tick=6030 playerCount=3 bombCount=0
+[2026-03-28 22:59:03.334] [net.input] [debug] Prediction live ackSeq=2074 corrTick=6037 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:03.683] [net.input] [debug] Sent Input seq=2100 batch=[2085..2100] buttons=0x00
+[2026-03-28 22:59:03.713] [net.snapshot] [debug] Received Correction tick=6060 lastProcessed=2097 pos=(945, 2432)
+[2026-03-28 22:59:03.713] [net.snapshot] [debug] Received Snapshot tick=6060 playerCount=3 bombCount=0
+[2026-03-28 22:59:04.185] [net.input] [debug] Sent Input seq=2130 batch=[2115..2130] buttons=0x00
+[2026-03-28 22:59:04.208] [net.snapshot] [debug] Received Correction tick=6090 lastProcessed=2127 pos=(945, 2432)
+[2026-03-28 22:59:04.208] [net.snapshot] [debug] Received Snapshot tick=6090 playerCount=3 bombCount=0
+[2026-03-28 22:59:04.363] [net.snapshot] [debug] Received BombPlaced tick=6099 ownerId=1 cell=(3, 9) radius=1 explodeTick=6189
+[2026-03-28 22:59:04.385] [net.input] [debug] Prediction live ackSeq=2137 corrTick=6100 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:04.687] [net.input] [debug] Sent Input seq=2160 batch=[2145..2160] buttons=0x04
+[2026-03-28 22:59:04.710] [net.snapshot] [debug] Received Correction tick=6120 lastProcessed=2157 pos=(775, 2432)
+[2026-03-28 22:59:04.710] [net.snapshot] [debug] Received Snapshot tick=6120 playerCount=3 bombCount=1
+[2026-03-28 22:59:05.190] [net.input] [debug] Sent Input seq=2190 batch=[2175..2190] buttons=0x04
+[2026-03-28 22:59:05.213] [net.snapshot] [debug] Received Correction tick=6150 lastProcessed=2187 pos=(333, 2432)
+[2026-03-28 22:59:05.213] [net.snapshot] [debug] Received Snapshot tick=6150 playerCount=3 bombCount=1
+[2026-03-28 22:59:05.434] [net.input] [debug] Prediction live ackSeq=2200 corrTick=6163 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:05.683] [net.input] [debug] Sent Input seq=2220 batch=[2205..2220] buttons=0x01
+[2026-03-28 22:59:05.712] [net.snapshot] [debug] Received Correction tick=6180 lastProcessed=2217 pos=(333, 2279)
+[2026-03-28 22:59:05.712] [net.snapshot] [debug] Received Snapshot tick=6180 playerCount=3 bombCount=1
+[2026-03-28 22:59:05.861] [net.snapshot] [debug] Received ExplosionResolved tick=6189 ownerId=1 origin=(3, 9) blastCells=4 destroyedBricks=1 killedMask=0x00
+[2026-03-28 22:59:06.183] [net.input] [debug] Sent Input seq=2250 batch=[2235..2250] buttons=0x01
+[2026-03-28 22:59:06.212] [net.snapshot] [debug] Received Correction tick=6210 lastProcessed=2247 pos=(333, 1769)
+[2026-03-28 22:59:06.212] [net.snapshot] [debug] Received Snapshot tick=6210 playerCount=3 bombCount=0
+[2026-03-28 22:59:06.486] [net.input] [debug] Prediction live ackSeq=2263 corrTick=6226 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:06.689] [net.input] [debug] Sent Input seq=2280 batch=[2265..2280] buttons=0x01
+[2026-03-28 22:59:06.711] [net.snapshot] [debug] Received Correction tick=6240 lastProcessed=2277 pos=(333, 1684)
+[2026-03-28 22:59:06.711] [net.snapshot] [debug] Received Snapshot tick=6240 playerCount=3 bombCount=0
+[2026-03-28 22:59:07.190] [net.input] [debug] Sent Input seq=2310 batch=[2295..2310] buttons=0x08
+[2026-03-28 22:59:07.212] [net.snapshot] [debug] Received Correction tick=6270 lastProcessed=2307 pos=(333, 1259)
+[2026-03-28 22:59:07.212] [net.snapshot] [debug] Received Snapshot tick=6270 playerCount=3 bombCount=0
+[2026-03-28 22:59:07.539] [net.input] [debug] Prediction live ackSeq=2326 corrTick=6289 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:07.688] [net.input] [debug] Sent Input seq=2340 batch=[2325..2340] buttons=0x00
+[2026-03-28 22:59:07.710] [net.snapshot] [debug] Received Correction tick=6300 lastProcessed=2337 pos=(435, 1259)
+[2026-03-28 22:59:07.710] [net.snapshot] [debug] Received Snapshot tick=6300 playerCount=3 bombCount=0
+[2026-03-28 22:59:08.190] [net.input] [debug] Sent Input seq=2370 batch=[2355..2370] buttons=0x00
+[2026-03-28 22:59:08.212] [net.snapshot] [debug] Received Correction tick=6330 lastProcessed=2367 pos=(435, 1327)
+[2026-03-28 22:59:08.212] [net.snapshot] [debug] Received Snapshot tick=6330 playerCount=3 bombCount=0
+[2026-03-28 22:59:08.589] [net.input] [debug] Prediction live ackSeq=2389 corrTick=6352 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:08.686] [net.input] [debug] Sent Input seq=2400 batch=[2385..2400] buttons=0x00
+[2026-03-28 22:59:08.716] [net.snapshot] [debug] Received Correction tick=6360 lastProcessed=2397 pos=(435, 1412)
+[2026-03-28 22:59:08.716] [net.snapshot] [debug] Received Snapshot tick=6360 playerCount=3 bombCount=0
+[2026-03-28 22:59:09.189] [net.input] [debug] Sent Input seq=2430 batch=[2415..2430] buttons=0x08
+[2026-03-28 22:59:09.212] [net.snapshot] [debug] Received Correction tick=6390 lastProcessed=2427 pos=(435, 1497)
+[2026-03-28 22:59:09.212] [net.snapshot] [debug] Received Snapshot tick=6390 playerCount=3 bombCount=0
+[2026-03-28 22:59:09.638] [net.input] [debug] Prediction live ackSeq=2452 corrTick=6415 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:09.684] [net.input] [debug] Sent Input seq=2460 batch=[2445..2460] buttons=0x08
+[2026-03-28 22:59:09.714] [net.snapshot] [debug] Received Correction tick=6420 lastProcessed=2457 pos=(435, 1497)
+[2026-03-28 22:59:09.714] [net.snapshot] [debug] Received Snapshot tick=6420 playerCount=3 bombCount=0
+[2026-03-28 22:59:10.187] [net.input] [debug] Sent Input seq=2490 batch=[2475..2490] buttons=0x08
+[2026-03-28 22:59:10.211] [net.snapshot] [debug] Received Correction tick=6450 lastProcessed=2487 pos=(792, 1395)
+[2026-03-28 22:59:10.211] [net.snapshot] [debug] Received Snapshot tick=6450 playerCount=3 bombCount=0
+[2026-03-28 22:59:10.685] [net.input] [debug] Sent Input seq=2520 batch=[2505..2520] buttons=0x00
+[2026-03-28 22:59:10.685] [net.input] [debug] Prediction live ackSeq=2515 corrTick=6478 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:10.715] [net.snapshot] [debug] Received Correction tick=6480 lastProcessed=2517 pos=(877, 1395)
+[2026-03-28 22:59:10.715] [net.snapshot] [debug] Received Snapshot tick=6480 playerCount=3 bombCount=0
+[2026-03-28 22:59:11.187] [net.input] [debug] Sent Input seq=2550 batch=[2535..2550] buttons=0x00
+[2026-03-28 22:59:11.210] [net.snapshot] [debug] Received Correction tick=6510 lastProcessed=2547 pos=(877, 1395)
+[2026-03-28 22:59:11.210] [net.snapshot] [debug] Received Snapshot tick=6510 playerCount=3 bombCount=0
+[2026-03-28 22:59:11.688] [net.input] [debug] Sent Input seq=2580 batch=[2565..2580] buttons=0x05
+[2026-03-28 22:59:11.710] [net.snapshot] [debug] Received Correction tick=6540 lastProcessed=2577 pos=(452, 1395)
+[2026-03-28 22:59:11.710] [net.snapshot] [debug] Received Snapshot tick=6540 playerCount=3 bombCount=0
+[2026-03-28 22:59:11.739] [net.input] [debug] Prediction live ackSeq=2578 corrTick=6541 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:12.184] [net.input] [debug] Sent Input seq=2610 batch=[2595..2610] buttons=0x08
+[2026-03-28 22:59:12.214] [net.snapshot] [debug] Received Correction tick=6570 lastProcessed=2607 pos=(401, 919)
+[2026-03-28 22:59:12.214] [net.snapshot] [debug] Received Snapshot tick=6570 playerCount=3 bombCount=0
+[2026-03-28 22:59:12.686] [net.input] [debug] Sent Input seq=2640 batch=[2625..2640] buttons=0x08
+[2026-03-28 22:59:12.714] [net.snapshot] [debug] Received Correction tick=6600 lastProcessed=2637 pos=(911, 919)
+[2026-03-28 22:59:12.714] [net.snapshot] [debug] Received Snapshot tick=6600 playerCount=3 bombCount=0
+[2026-03-28 22:59:12.787] [net.input] [debug] Prediction live ackSeq=2641 corrTick=6604 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:13.183] [net.input] [debug] Sent Input seq=2670 batch=[2655..2670] buttons=0x04
+[2026-03-28 22:59:13.214] [net.snapshot] [debug] Received Correction tick=6630 lastProcessed=2667 pos=(1149, 919)
+[2026-03-28 22:59:13.214] [net.snapshot] [debug] Received Snapshot tick=6630 playerCount=3 bombCount=0
+[2026-03-28 22:59:13.684] [net.input] [debug] Sent Input seq=2700 batch=[2685..2700] buttons=0x04
+[2026-03-28 22:59:13.714] [net.snapshot] [debug] Received Correction tick=6660 lastProcessed=2697 pos=(639, 919)
+[2026-03-28 22:59:13.714] [net.snapshot] [debug] Received Snapshot tick=6660 playerCount=3 bombCount=0
+[2026-03-28 22:59:13.836] [net.input] [debug] Prediction live ackSeq=2704 corrTick=6667 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:14.188] [net.input] [debug] Sent Input seq=2730 batch=[2715..2730] buttons=0x02
+[2026-03-28 22:59:14.211] [net.snapshot] [debug] Received Correction tick=6690 lastProcessed=2727 pos=(333, 1021)
+[2026-03-28 22:59:14.211] [net.snapshot] [debug] Received Snapshot tick=6690 playerCount=3 bombCount=0
+[2026-03-28 22:59:14.683] [net.input] [debug] Sent Input seq=2760 batch=[2745..2760] buttons=0x08
+[2026-03-28 22:59:14.714] [net.snapshot] [debug] Received Correction tick=6720 lastProcessed=2757 pos=(384, 1497)
+[2026-03-28 22:59:14.714] [net.snapshot] [debug] Received Snapshot tick=6720 playerCount=3 bombCount=0
+[2026-03-28 22:59:14.886] [net.input] [debug] Prediction live ackSeq=2767 corrTick=6730 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:15.184] [net.input] [debug] Sent Input seq=2790 batch=[2775..2790] buttons=0x09
+[2026-03-28 22:59:15.213] [net.snapshot] [debug] Received Correction tick=6750 lastProcessed=2787 pos=(435, 1497)
+[2026-03-28 22:59:15.214] [net.snapshot] [debug] Received Snapshot tick=6750 playerCount=3 bombCount=0
+[2026-03-28 22:59:15.685] [net.input] [debug] Sent Input seq=2820 batch=[2805..2820] buttons=0x04
+[2026-03-28 22:59:15.709] [net.snapshot] [debug] Received Correction tick=6780 lastProcessed=2817 pos=(469, 1429)
+[2026-03-28 22:59:15.709] [net.snapshot] [debug] Received Snapshot tick=6780 playerCount=3 bombCount=0
+[2026-03-28 22:59:15.939] [net.input] [debug] Prediction live ackSeq=2830 corrTick=6793 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:16.183] [net.input] [debug] Sent Input seq=2850 batch=[2835..2850] buttons=0x01
+[2026-03-28 22:59:16.214] [net.snapshot] [debug] Received Correction tick=6810 lastProcessed=2847 pos=(333, 1191)
+[2026-03-28 22:59:16.214] [net.snapshot] [debug] Received Snapshot tick=6810 playerCount=3 bombCount=0
+[2026-03-28 22:59:16.688] [net.input] [debug] Sent Input seq=2880 batch=[2865..2880] buttons=0x08
+[2026-03-28 22:59:16.710] [net.snapshot] [debug] Received Correction tick=6840 lastProcessed=2877 pos=(639, 953)
+[2026-03-28 22:59:16.710] [net.snapshot] [debug] Received Snapshot tick=6840 playerCount=3 bombCount=0
+[2026-03-28 22:59:16.987] [net.input] [debug] Prediction live ackSeq=2893 corrTick=6856 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:17.187] [net.input] [debug] Sent Input seq=2910 batch=[2895..2910] buttons=0x04
+[2026-03-28 22:59:17.209] [net.snapshot] [debug] Received Correction tick=6870 lastProcessed=2907 pos=(1149, 953)
+[2026-03-28 22:59:17.209] [net.snapshot] [debug] Received Snapshot tick=6870 playerCount=3 bombCount=0
+[2026-03-28 22:59:17.689] [net.input] [debug] Sent Input seq=2940 batch=[2925..2940] buttons=0x04
+[2026-03-28 22:59:17.710] [net.snapshot] [debug] Received Correction tick=6900 lastProcessed=2937 pos=(690, 953)
+[2026-03-28 22:59:17.710] [net.snapshot] [debug] Received Snapshot tick=6900 playerCount=3 bombCount=0
+[2026-03-28 22:59:18.037] [net.input] [debug] Prediction live ackSeq=2956 corrTick=6919 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:18.183] [net.input] [debug] Sent Input seq=2970 batch=[2955..2970] buttons=0x02
+[2026-03-28 22:59:18.213] [net.snapshot] [debug] Received Correction tick=6930 lastProcessed=2967 pos=(384, 1191)
+[2026-03-28 22:59:18.213] [net.snapshot] [debug] Received Snapshot tick=6930 playerCount=3 bombCount=0
+[2026-03-28 22:59:18.687] [net.input] [debug] Sent Input seq=3000 batch=[2985..3000] buttons=0x08
+[2026-03-28 22:59:18.709] [net.snapshot] [debug] Received Correction tick=6960 lastProcessed=2997 pos=(707, 1395)
+[2026-03-28 22:59:18.709] [net.snapshot] [debug] Received Snapshot tick=6960 playerCount=3 bombCount=0
+[2026-03-28 22:59:19.089] [net.input] [debug] Prediction live ackSeq=3019 corrTick=6982 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:19.185] [net.input] [debug] Sent Input seq=3030 batch=[3015..3030] buttons=0x08
+[2026-03-28 22:59:19.214] [net.snapshot] [debug] Received Correction tick=6990 lastProcessed=3027 pos=(1217, 1395)
+[2026-03-28 22:59:19.214] [net.snapshot] [debug] Received Snapshot tick=6990 playerCount=3 bombCount=0
+[2026-03-28 22:59:19.685] [net.input] [debug] Sent Input seq=3060 batch=[3045..3060] buttons=0x04
+[2026-03-28 22:59:19.715] [net.snapshot] [debug] Received Correction tick=7020 lastProcessed=3057 pos=(1115, 1395)
+[2026-03-28 22:59:19.715] [net.snapshot] [debug] Received Snapshot tick=7020 playerCount=3 bombCount=0
+[2026-03-28 22:59:20.135] [net.input] [debug] Prediction live ackSeq=3082 corrTick=7045 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:20.186] [net.input] [debug] Sent Input seq=3090 batch=[3075..3090] buttons=0x01
+[2026-03-28 22:59:20.215] [net.snapshot] [debug] Received Correction tick=7050 lastProcessed=3087 pos=(775, 1344)
+[2026-03-28 22:59:20.215] [net.snapshot] [debug] Received Snapshot tick=7050 playerCount=3 bombCount=0
+[2026-03-28 22:59:20.689] [net.input] [debug] Sent Input seq=3120 batch=[3105..3120] buttons=0x01
+[2026-03-28 22:59:20.711] [net.snapshot] [debug] Received Correction tick=7080 lastProcessed=3117 pos=(843, 1327)
+[2026-03-28 22:59:20.711] [net.snapshot] [debug] Received Snapshot tick=7080 playerCount=3 bombCount=0
+[2026-03-28 22:59:21.189] [net.input] [debug] Sent Input seq=3150 batch=[3135..3150] buttons=0x04
+[2026-03-28 22:59:21.189] [net.input] [debug] Prediction live ackSeq=3145 corrTick=7108 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:21.212] [net.snapshot] [debug] Received Correction tick=7110 lastProcessed=3147 pos=(758, 885)
+[2026-03-28 22:59:21.212] [net.snapshot] [debug] Received Snapshot tick=7110 playerCount=3 bombCount=0
+[2026-03-28 22:59:21.688] [net.input] [debug] Sent Input seq=3180 batch=[3165..3180] buttons=0x02
+[2026-03-28 22:59:21.710] [net.snapshot] [debug] Received Correction tick=7140 lastProcessed=3177 pos=(333, 953)
+[2026-03-28 22:59:21.710] [net.snapshot] [debug] Received Snapshot tick=7140 playerCount=3 bombCount=0
+[2026-03-28 22:59:22.184] [net.input] [debug] Sent Input seq=3210 batch=[3195..3210] buttons=0x08
+[2026-03-28 22:59:22.214] [net.snapshot] [debug] Received Correction tick=7170 lastProcessed=3207 pos=(333, 1463)
+[2026-03-28 22:59:22.214] [net.snapshot] [debug] Received Snapshot tick=7170 playerCount=3 bombCount=0
+[2026-03-28 22:59:22.237] [net.input] [debug] Prediction live ackSeq=3208 corrTick=7171 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:22.685] [net.input] [debug] Sent Input seq=3240 batch=[3225..3240] buttons=0x08
+[2026-03-28 22:59:22.709] [net.snapshot] [debug] Received Correction tick=7200 lastProcessed=3237 pos=(843, 1463)
+[2026-03-28 22:59:22.709] [net.snapshot] [debug] Received Snapshot tick=7200 playerCount=3 bombCount=0
+[2026-03-28 22:59:23.183] [net.input] [debug] Sent Input seq=3270 batch=[3255..3270] buttons=0x04
+[2026-03-28 22:59:23.215] [net.snapshot] [debug] Received Correction tick=7230 lastProcessed=3267 pos=(792, 1463)
+[2026-03-28 22:59:23.215] [net.snapshot] [debug] Received Snapshot tick=7230 playerCount=3 bombCount=0
+[2026-03-28 22:59:23.286] [net.input] [debug] Prediction live ackSeq=3271 corrTick=7234 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:23.688] [net.input] [debug] Sent Input seq=3300 batch=[3285..3300] buttons=0x04
+[2026-03-28 22:59:23.711] [net.snapshot] [debug] Received Correction tick=7260 lastProcessed=3297 pos=(333, 1463)
+[2026-03-28 22:59:23.711] [net.snapshot] [debug] Received Snapshot tick=7260 playerCount=3 bombCount=0
+[2026-03-28 22:59:24.185] [net.input] [debug] Sent Input seq=3330 batch=[3315..3330] buttons=0x06
+[2026-03-28 22:59:24.216] [net.snapshot] [debug] Received Correction tick=7290 lastProcessed=3327 pos=(333, 1769)
+[2026-03-28 22:59:24.216] [net.snapshot] [debug] Received Snapshot tick=7290 playerCount=3 bombCount=0
+[2026-03-28 22:59:24.335] [net.input] [debug] Prediction live ackSeq=3334 corrTick=7297 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:24.689] [net.input] [debug] Sent Input seq=3360 batch=[3345..3360] buttons=0x04
+[2026-03-28 22:59:24.712] [net.snapshot] [debug] Received Correction tick=7320 lastProcessed=3357 pos=(333, 2279)
+[2026-03-28 22:59:24.712] [net.snapshot] [debug] Received Snapshot tick=7320 playerCount=3 bombCount=0
+[2026-03-28 22:59:25.185] [net.input] [debug] Sent Input seq=3390 batch=[3375..3390] buttons=0x05
+[2026-03-28 22:59:25.216] [net.snapshot] [debug] Received Correction tick=7350 lastProcessed=3387 pos=(333, 1905)
+[2026-03-28 22:59:25.216] [net.snapshot] [debug] Received Snapshot tick=7350 playerCount=3 bombCount=0
+[2026-03-28 22:59:25.386] [net.input] [debug] Prediction live ackSeq=3397 corrTick=7360 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:25.688] [net.input] [debug] Sent Input seq=3420 batch=[3405..3420] buttons=0x00
+[2026-03-28 22:59:25.710] [net.snapshot] [debug] Received Correction tick=7380 lastProcessed=3417 pos=(333, 1514)
+[2026-03-28 22:59:25.710] [net.snapshot] [debug] Received Snapshot tick=7380 playerCount=3 bombCount=0
+[2026-03-28 22:59:26.186] [net.input] [debug] Sent Input seq=3450 batch=[3435..3450] buttons=0x00
+[2026-03-28 22:59:26.215] [net.snapshot] [debug] Received Correction tick=7410 lastProcessed=3447 pos=(333, 1514)
+[2026-03-28 22:59:26.215] [net.snapshot] [debug] Received Snapshot tick=7410 playerCount=3 bombCount=0
+[2026-03-28 22:59:26.434] [net.input] [debug] Prediction live ackSeq=3460 corrTick=7423 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:26.686] [net.input] [debug] Sent Input seq=3480 batch=[3465..3480] buttons=0x00
+[2026-03-28 22:59:26.715] [net.snapshot] [debug] Received Correction tick=7440 lastProcessed=3477 pos=(333, 1514)
+[2026-03-28 22:59:26.715] [net.snapshot] [debug] Received Snapshot tick=7440 playerCount=3 bombCount=0
+[2026-03-28 22:59:27.184] [net.input] [debug] Sent Input seq=3510 batch=[3495..3510] buttons=0x00
+[2026-03-28 22:59:27.213] [net.snapshot] [debug] Received Correction tick=7470 lastProcessed=3507 pos=(333, 1514)
+[2026-03-28 22:59:27.213] [net.snapshot] [debug] Received Snapshot tick=7470 playerCount=3 bombCount=0
+[2026-03-28 22:59:27.489] [net.input] [debug] Prediction live ackSeq=3523 corrTick=7486 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:27.687] [net.input] [debug] Sent Input seq=3540 batch=[3525..3540] buttons=0x00
+[2026-03-28 22:59:27.709] [net.snapshot] [debug] Received Correction tick=7500 lastProcessed=3537 pos=(333, 1514)
+[2026-03-28 22:59:27.709] [net.snapshot] [debug] Received Snapshot tick=7500 playerCount=3 bombCount=0
+[2026-03-28 22:59:27.931] [net.snapshot] [debug] Received BombPlaced tick=7513 ownerId=0 cell=(1, 1) radius=1 explodeTick=7603
+[2026-03-28 22:59:28.185] [net.input] [debug] Sent Input seq=3570 batch=[3555..3570] buttons=0x00
+[2026-03-28 22:59:28.214] [net.snapshot] [debug] Received Correction tick=7530 lastProcessed=3567 pos=(333, 1514)
+[2026-03-28 22:59:28.214] [net.snapshot] [debug] Received Snapshot tick=7530 playerCount=3 bombCount=1
+[2026-03-28 22:59:28.536] [net.input] [debug] Prediction live ackSeq=3586 corrTick=7549 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:28.684] [net.input] [debug] Sent Input seq=3600 batch=[3585..3600] buttons=0x00
+[2026-03-28 22:59:28.713] [net.snapshot] [debug] Received Correction tick=7560 lastProcessed=3597 pos=(333, 1514)
+[2026-03-28 22:59:28.713] [net.snapshot] [debug] Received Snapshot tick=7560 playerCount=3 bombCount=1
+[2026-03-28 22:59:29.188] [net.input] [debug] Sent Input seq=3630 batch=[3615..3630] buttons=0x00
+[2026-03-28 22:59:29.210] [net.snapshot] [debug] Received Correction tick=7590 lastProcessed=3627 pos=(333, 1514)
+[2026-03-28 22:59:29.210] [net.snapshot] [debug] Received Snapshot tick=7590 playerCount=3 bombCount=1
+[2026-03-28 22:59:29.430] [net.snapshot] [debug] Received ExplosionResolved tick=7603 ownerId=0 origin=(1, 1) blastCells=3 destroyedBricks=0 killedMask=0x00
+[2026-03-28 22:59:29.584] [net.input] [debug] Prediction live ackSeq=3649 corrTick=7612 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:29.688] [net.input] [debug] Sent Input seq=3660 batch=[3645..3660] buttons=0x00
+[2026-03-28 22:59:29.709] [net.snapshot] [debug] Received Correction tick=7620 lastProcessed=3657 pos=(333, 1514)
+[2026-03-28 22:59:29.710] [net.snapshot] [debug] Received Snapshot tick=7620 playerCount=3 bombCount=0
+[2026-03-28 22:59:30.186] [net.input] [debug] Sent Input seq=3690 batch=[3675..3690] buttons=0x00
+[2026-03-28 22:59:30.215] [net.snapshot] [debug] Received Correction tick=7650 lastProcessed=3687 pos=(333, 1514)
+[2026-03-28 22:59:30.215] [net.snapshot] [debug] Received Snapshot tick=7650 playerCount=3 bombCount=0
+[2026-03-28 22:59:30.633] [net.input] [debug] Prediction live ackSeq=3712 corrTick=7675 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:30.686] [net.input] [debug] Sent Input seq=3720 batch=[3705..3720] buttons=0x00
+[2026-03-28 22:59:30.716] [net.snapshot] [debug] Received Correction tick=7680 lastProcessed=3717 pos=(333, 1514)
+[2026-03-28 22:59:30.716] [net.snapshot] [debug] Received Snapshot tick=7680 playerCount=3 bombCount=0
+[2026-03-28 22:59:31.183] [net.input] [debug] Sent Input seq=3750 batch=[3735..3750] buttons=0x00
+[2026-03-28 22:59:31.213] [net.snapshot] [debug] Received Correction tick=7710 lastProcessed=3747 pos=(333, 1514)
+[2026-03-28 22:59:31.213] [net.snapshot] [debug] Received Snapshot tick=7710 playerCount=3 bombCount=0
+[2026-03-28 22:59:31.684] [net.input] [debug] Sent Input seq=3780 batch=[3765..3780] buttons=0x00
+[2026-03-28 22:59:31.684] [net.input] [debug] Prediction live ackSeq=3775 corrTick=7738 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:31.715] [net.snapshot] [debug] Received Correction tick=7740 lastProcessed=3777 pos=(333, 1514)
+[2026-03-28 22:59:31.715] [net.snapshot] [debug] Received Snapshot tick=7740 playerCount=3 bombCount=0
+[2026-03-28 22:59:32.187] [net.input] [debug] Sent Input seq=3810 batch=[3795..3810] buttons=0x00
+[2026-03-28 22:59:32.209] [net.snapshot] [debug] Received Correction tick=7770 lastProcessed=3807 pos=(333, 1514)
+[2026-03-28 22:59:32.209] [net.snapshot] [debug] Received Snapshot tick=7770 playerCount=3 bombCount=0
+[2026-03-28 22:59:32.690] [net.input] [debug] Sent Input seq=3840 batch=[3825..3840] buttons=0x00
+[2026-03-28 22:59:32.713] [net.snapshot] [debug] Received Correction tick=7800 lastProcessed=3837 pos=(333, 1514)
+[2026-03-28 22:59:32.713] [net.snapshot] [debug] Received Snapshot tick=7800 playerCount=3 bombCount=0
+[2026-03-28 22:59:32.735] [net.input] [debug] Prediction live ackSeq=3838 corrTick=7801 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:33.190] [net.input] [debug] Sent Input seq=3870 batch=[3855..3870] buttons=0x00
+[2026-03-28 22:59:33.212] [net.snapshot] [debug] Received Correction tick=7830 lastProcessed=3867 pos=(333, 1514)
+[2026-03-28 22:59:33.212] [net.snapshot] [debug] Received Snapshot tick=7830 playerCount=3 bombCount=0
+[2026-03-28 22:59:33.277] [net.snapshot] [debug] Received BombPlaced tick=7834 ownerId=0 cell=(9, 3) radius=1 explodeTick=7924
+[2026-03-28 22:59:33.686] [net.input] [debug] Sent Input seq=3900 batch=[3885..3900] buttons=0x00
+[2026-03-28 22:59:33.717] [net.snapshot] [debug] Received Correction tick=7860 lastProcessed=3897 pos=(333, 1514)
+[2026-03-28 22:59:33.717] [net.snapshot] [debug] Received Snapshot tick=7860 playerCount=3 bombCount=1
+[2026-03-28 22:59:33.785] [net.input] [debug] Prediction live ackSeq=3901 corrTick=7864 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:34.185] [net.input] [debug] Sent Input seq=3930 batch=[3915..3930] buttons=0x00
+[2026-03-28 22:59:34.214] [net.snapshot] [debug] Received Correction tick=7890 lastProcessed=3927 pos=(333, 1514)
+[2026-03-28 22:59:34.214] [net.snapshot] [debug] Received Snapshot tick=7890 playerCount=3 bombCount=1
+[2026-03-28 22:59:34.690] [net.input] [debug] Sent Input seq=3960 batch=[3945..3960] buttons=0x00
+[2026-03-28 22:59:34.712] [net.snapshot] [debug] Received Correction tick=7920 lastProcessed=3957 pos=(333, 1514)
+[2026-03-28 22:59:34.712] [net.snapshot] [debug] Received Snapshot tick=7920 playerCount=3 bombCount=1
+[2026-03-28 22:59:34.778] [net.snapshot] [debug] Received ExplosionResolved tick=7924 ownerId=0 origin=(9, 3) blastCells=5 destroyedBricks=1 killedMask=0x00
+[2026-03-28 22:59:34.837] [net.input] [debug] Prediction live ackSeq=3964 corrTick=7927 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:35.185] [net.input] [debug] Sent Input seq=3990 batch=[3975..3990] buttons=0x00
+[2026-03-28 22:59:35.215] [net.snapshot] [debug] Received Correction tick=7950 lastProcessed=3987 pos=(333, 1514)
+[2026-03-28 22:59:35.215] [net.snapshot] [debug] Received Snapshot tick=7950 playerCount=3 bombCount=0
+[2026-03-28 22:59:35.690] [net.input] [debug] Sent Input seq=4020 batch=[4005..4020] buttons=0x00
+[2026-03-28 22:59:35.712] [net.snapshot] [debug] Received Correction tick=7980 lastProcessed=4017 pos=(333, 1514)
+[2026-03-28 22:59:35.712] [net.snapshot] [debug] Received Snapshot tick=7980 playerCount=3 bombCount=0
+[2026-03-28 22:59:35.884] [net.input] [debug] Prediction live ackSeq=4027 corrTick=7990 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:35.980] [net.snapshot] [debug] Received BombPlaced tick=7996 ownerId=0 cell=(13, 3) radius=1 explodeTick=8086
+[2026-03-28 22:59:36.184] [net.input] [debug] Sent Input seq=4050 batch=[4035..4050] buttons=0x00
+[2026-03-28 22:59:36.215] [net.snapshot] [debug] Received Correction tick=8010 lastProcessed=4047 pos=(333, 1514)
+[2026-03-28 22:59:36.215] [net.snapshot] [debug] Received Snapshot tick=8010 playerCount=3 bombCount=1
+[2026-03-28 22:59:36.686] [net.input] [debug] Sent Input seq=4080 batch=[4065..4080] buttons=0x00
+[2026-03-28 22:59:36.716] [net.snapshot] [debug] Received Correction tick=8040 lastProcessed=4077 pos=(333, 1514)
+[2026-03-28 22:59:36.716] [net.snapshot] [debug] Received Snapshot tick=8040 playerCount=3 bombCount=1
+[2026-03-28 22:59:36.941] [net.input] [debug] Prediction live ackSeq=4090 corrTick=8053 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:37.189] [net.input] [debug] Sent Input seq=4110 batch=[4095..4110] buttons=0x00
+[2026-03-28 22:59:37.212] [net.snapshot] [debug] Received Correction tick=8070 lastProcessed=4107 pos=(333, 1514)
+[2026-03-28 22:59:37.212] [net.snapshot] [debug] Received Snapshot tick=8070 playerCount=3 bombCount=1
+[2026-03-28 22:59:37.481] [net.snapshot] [debug] Received ExplosionResolved tick=8086 ownerId=0 origin=(13, 3) blastCells=5 destroyedBricks=1 killedMask=0x00
+[2026-03-28 22:59:37.688] [net.input] [debug] Sent Input seq=4140 batch=[4125..4140] buttons=0x00
+[2026-03-28 22:59:37.711] [net.snapshot] [debug] Received Correction tick=8100 lastProcessed=4137 pos=(333, 1514)
+[2026-03-28 22:59:37.711] [net.snapshot] [debug] Received Snapshot tick=8100 playerCount=3 bombCount=0
+[2026-03-28 22:59:37.989] [net.input] [debug] Prediction live ackSeq=4153 corrTick=8116 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:38.184] [net.input] [debug] Sent Input seq=4170 batch=[4155..4170] buttons=0x00
+[2026-03-28 22:59:38.215] [net.snapshot] [debug] Received Correction tick=8130 lastProcessed=4167 pos=(333, 1514)
+[2026-03-28 22:59:38.215] [net.snapshot] [debug] Received Snapshot tick=8130 playerCount=3 bombCount=0
+[2026-03-28 22:59:38.684] [net.input] [debug] Sent Input seq=4200 batch=[4185..4200] buttons=0x00
+[2026-03-28 22:59:38.713] [net.snapshot] [debug] Received Correction tick=8160 lastProcessed=4197 pos=(333, 1514)
+[2026-03-28 22:59:38.713] [net.snapshot] [debug] Received Snapshot tick=8160 playerCount=3 bombCount=0
+[2026-03-28 22:59:39.037] [net.input] [debug] Prediction live ackSeq=4216 corrTick=8179 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:39.186] [net.input] [debug] Sent Input seq=4230 batch=[4215..4230] buttons=0x00
+[2026-03-28 22:59:39.214] [net.snapshot] [debug] Received Correction tick=8190 lastProcessed=4227 pos=(333, 1514)
+[2026-03-28 22:59:39.215] [net.snapshot] [debug] Received Snapshot tick=8190 playerCount=3 bombCount=0
+[2026-03-28 22:59:39.688] [net.input] [debug] Sent Input seq=4260 batch=[4245..4260] buttons=0x00
+[2026-03-28 22:59:39.710] [net.snapshot] [debug] Received Correction tick=8220 lastProcessed=4257 pos=(333, 1514)
+[2026-03-28 22:59:39.710] [net.snapshot] [debug] Received Snapshot tick=8220 playerCount=3 bombCount=0
+[2026-03-28 22:59:40.085] [net.input] [debug] Prediction live ackSeq=4279 corrTick=8242 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:40.189] [net.input] [debug] Sent Input seq=4290 batch=[4275..4290] buttons=0x00
+[2026-03-28 22:59:40.211] [net.snapshot] [debug] Received Correction tick=8250 lastProcessed=4287 pos=(333, 1514)
+[2026-03-28 22:59:40.212] [net.snapshot] [debug] Received Snapshot tick=8250 playerCount=3 bombCount=0
+[2026-03-28 22:59:40.683] [net.input] [debug] Sent Input seq=4320 batch=[4305..4320] buttons=0x00
+[2026-03-28 22:59:40.713] [net.snapshot] [debug] Received Correction tick=8280 lastProcessed=4317 pos=(333, 1514)
+[2026-03-28 22:59:40.713] [net.snapshot] [debug] Received Snapshot tick=8280 playerCount=3 bombCount=0
+[2026-03-28 22:59:41.136] [net.input] [debug] Prediction live ackSeq=4342 corrTick=8305 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:41.188] [net.input] [debug] Sent Input seq=4350 batch=[4335..4350] buttons=0x00
+[2026-03-28 22:59:41.212] [net.snapshot] [debug] Received Correction tick=8310 lastProcessed=4347 pos=(333, 1514)
+[2026-03-28 22:59:41.212] [net.snapshot] [debug] Received Snapshot tick=8310 playerCount=3 bombCount=0
+[2026-03-28 22:59:41.689] [net.input] [debug] Sent Input seq=4380 batch=[4365..4380] buttons=0x00
+[2026-03-28 22:59:41.711] [net.snapshot] [debug] Received Correction tick=8340 lastProcessed=4377 pos=(333, 1514)
+[2026-03-28 22:59:41.711] [net.snapshot] [debug] Received Snapshot tick=8340 playerCount=3 bombCount=0
+[2026-03-28 22:59:42.184] [net.input] [debug] Sent Input seq=4410 batch=[4395..4410] buttons=0x00
+[2026-03-28 22:59:42.184] [net.input] [debug] Prediction live ackSeq=4405 corrTick=8368 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:42.213] [net.snapshot] [debug] Received Correction tick=8370 lastProcessed=4407 pos=(333, 1514)
+[2026-03-28 22:59:42.213] [net.snapshot] [debug] Received Snapshot tick=8370 playerCount=3 bombCount=0
+[2026-03-28 22:59:42.689] [net.input] [debug] Sent Input seq=4440 batch=[4425..4440] buttons=0x00
+[2026-03-28 22:59:42.711] [net.snapshot] [debug] Received BombPlaced tick=8400 ownerId=0 cell=(1, 3) radius=1 explodeTick=8490
+[2026-03-28 22:59:42.711] [net.snapshot] [debug] Received Correction tick=8400 lastProcessed=4437 pos=(333, 1514)
+[2026-03-28 22:59:42.711] [net.snapshot] [debug] Received Snapshot tick=8400 playerCount=3 bombCount=1
+[2026-03-28 22:59:43.187] [net.input] [debug] Sent Input seq=4470 batch=[4455..4470] buttons=0x00
+[2026-03-28 22:59:43.209] [net.snapshot] [debug] Received Correction tick=8430 lastProcessed=4467 pos=(333, 1514)
+[2026-03-28 22:59:43.209] [net.snapshot] [debug] Received Snapshot tick=8430 playerCount=3 bombCount=1
+[2026-03-28 22:59:43.241] [net.input] [debug] Prediction live ackSeq=4468 corrTick=8431 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:43.685] [net.input] [debug] Sent Input seq=4500 batch=[4485..4500] buttons=0x00
+[2026-03-28 22:59:43.716] [net.snapshot] [debug] Received Correction tick=8460 lastProcessed=4497 pos=(333, 1514)
+[2026-03-28 22:59:43.716] [net.snapshot] [debug] Received Snapshot tick=8460 playerCount=3 bombCount=1
+[2026-03-28 22:59:44.188] [net.input] [debug] Sent Input seq=4530 batch=[4515..4530] buttons=0x00
+[2026-03-28 22:59:44.210] [net.snapshot] [debug] Received Correction tick=8490 lastProcessed=4527 pos=(333, 1514)
+[2026-03-28 22:59:44.210] [net.snapshot] [debug] Received ExplosionResolved tick=8490 ownerId=0 origin=(1, 3) blastCells=4 destroyedBricks=0 killedMask=0x04
+[2026-03-28 22:59:44.210] [net.snapshot] [debug] Received Snapshot tick=8490 playerCount=3 bombCount=0
+[2026-03-28 22:59:44.283] [net.input] [debug] Prediction live ackSeq=4531 corrTick=8494 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:44.686] [net.input] [debug] Sent Input seq=4560 batch=[4545..4560] buttons=0x00
+[2026-03-28 22:59:44.708] [net.snapshot] [debug] Received Correction tick=8520 lastProcessed=4557 pos=(333, 1514)
+[2026-03-28 22:59:44.708] [net.snapshot] [debug] Received Snapshot tick=8520 playerCount=3 bombCount=0
+[2026-03-28 22:59:44.864] [net.snapshot] [debug] Received BombPlaced tick=8529 ownerId=0 cell=(1, 6) radius=1 explodeTick=8619
+[2026-03-28 22:59:45.187] [net.input] [debug] Sent Input seq=4590 batch=[4575..4590] buttons=0x00
+[2026-03-28 22:59:45.210] [net.snapshot] [debug] Received Correction tick=8550 lastProcessed=4587 pos=(333, 1514)
+[2026-03-28 22:59:45.210] [net.snapshot] [debug] Received Snapshot tick=8550 playerCount=3 bombCount=1
+[2026-03-28 22:59:45.337] [net.input] [debug] Prediction live ackSeq=4594 corrTick=8557 pendingDepth=5 pendingAgeMs=80 lastDeltaQ=0 lastReplay=5 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 22:59:45.683] [net.input] [debug] Sent Input seq=4620 batch=[4605..4620] buttons=0x00
+[2026-03-28 22:59:45.713] [net.snapshot] [debug] Received Correction tick=8580 lastProcessed=4617 pos=(333, 1514)
+[2026-03-28 22:59:45.713] [net.snapshot] [debug] Received Snapshot tick=8580 playerCount=3 bombCount=1
+[2026-03-28 22:59:46.183] [net.input] [debug] Sent Input seq=4650 batch=[4635..4650] buttons=0x00
+[2026-03-28 22:59:46.212] [net.snapshot] [debug] Received Correction tick=8610 lastProcessed=4647 pos=(333, 1514)
+[2026-03-28 22:59:46.212] [net.snapshot] [debug] Received Snapshot tick=8610 playerCount=3 bombCount=1
+[2026-03-28 22:59:46.361] [net.snapshot] [debug] Received ExplosionResolved tick=8619 ownerId=0 origin=(1, 6) blastCells=3 destroyedBricks=0 killedMask=0x02
+[2026-03-28 22:59:46.361] [net.conn] [info] Received MatchResult matchId=1 result=loss
+[2026-03-28 22:59:46.711] [net.snapshot] [debug] Received Correction tick=8640 lastProcessed=4656 pos=(333, 1514)
+[2026-03-28 22:59:46.711] [net.snapshot] [debug] Received Snapshot tick=8640 playerCount=3 bombCount=0
+[2026-03-28 22:59:47.211] [net.snapshot] [debug] Received Correction tick=8670 lastProcessed=4656 pos=(333, 1514)
+[2026-03-28 22:59:47.211] [net.snapshot] [debug] Received Snapshot tick=8670 playerCount=3 bombCount=0
+[2026-03-28 22:59:47.715] [net.snapshot] [debug] Received Correction tick=8700 lastProcessed=4656 pos=(333, 1514)
+[2026-03-28 22:59:47.715] [net.snapshot] [debug] Received Snapshot tick=8700 playerCount=3 bombCount=0
+[2026-03-28 22:59:48.212] [net.snapshot] [debug] Received Correction tick=8730 lastProcessed=4656 pos=(333, 1514)
+[2026-03-28 22:59:48.212] [net.snapshot] [debug] Received Snapshot tick=8730 playerCount=3 bombCount=0
+[2026-03-28 22:59:48.710] [net.snapshot] [debug] Received Correction tick=8760 lastProcessed=4656 pos=(333, 1514)
+[2026-03-28 22:59:48.710] [net.snapshot] [debug] Received Snapshot tick=8760 playerCount=3 bombCount=0
+[2026-03-28 22:59:49.216] [net.snapshot] [debug] Received Correction tick=8790 lastProcessed=4656 pos=(333, 1514)
+[2026-03-28 22:59:49.216] [net.snapshot] [debug] Received Snapshot tick=8790 playerCount=3 bombCount=0
+[2026-03-28 22:59:49.369] [net.conn] [info] Leaving multiplayer match back to lobby (ReturnedToLobby)
+[2026-03-28 22:59:49.379] [net.input] [debug] Prediction summary localInputs=4660 deferredInputs=1 rejectedInputs=0 corrections=4655 mismatches=5 avgDeltaQ=0.02 maxDeltaQ=17 replayedInputs=23270 maxReplay=5 truncations=0 recoveries=0 recoveryResolutions=0 maxMissingInputs=0 maxPendingDepth=7
+[2026-03-28 22:59:51.638] [net.conn] [info] Leaving lobby and disconnecting: LocalLeaveLobby
+[2026-03-28 22:59:51.638] [net.conn] [info] Queued graceful disconnect
+[2026-03-28 22:59:51.720] [net.conn] [info] Graceful disconnect completed
+[2026-03-28 22:59:51.722] [net.diag] [info] Client diagnostics JSON report written to logs/diag_client_p2_225951.json
+[2026-03-28 23:18:53.377] [game] [debug] Client multiplayer config: prediction=on, remoteSmoothing=on
+[2026-03-28 23:18:53.460] [game] [debug] Renderer pacing: manual-cap
+[2026-03-28 23:19:27.364] [net.conn] [debug] Async connect initiated to 192.168.1.51:12345
+[2026-03-28 23:19:27.453] [net.conn] [debug] ENet connect event received, sending Hello
+[2026-03-28 23:19:27.520] [net.conn] [info] Welcome: playerId=1, tickRate=60 - session connected, waiting for lobby or next round start
+[2026-03-28 23:19:31.120] [net.conn] [debug] Queued LobbyReady desiredReady=true
+[2026-03-28 23:19:34.212] [net.conn] [info] Received LevelInfo matchId=1 seed=12345
+[2026-03-28 23:19:34.212] [net.conn] [info] Lobby received match bootstrap matchId=1 seed=12345 - entering multiplayer level
+[2026-03-28 23:19:34.227] [net.conn] [debug] Queued MatchLoaded matchId=1
+[2026-03-28 23:19:34.227] [net.conn] [debug] Acknowledged match bootstrap loaded matchId=1
+[2026-03-28 23:19:34.295] [net.conn] [info] Received MatchStart matchId=1 goTick=5415 unlockTick=5415
+[2026-03-28 23:19:34.295] [net.conn] [info] Match start confirmed locally matchId=1
+[2026-03-28 23:19:34.541] [net.snapshot] [debug] Received Correction tick=5370 lastProcessed=0 pos=(384, 2432)
+[2026-03-28 23:19:34.541] [net.snapshot] [debug] Received Snapshot tick=5370 playerCount=2 bombCount=0
+[2026-03-28 23:19:35.044] [net.snapshot] [debug] Received Correction tick=5400 lastProcessed=0 pos=(384, 2432)
+[2026-03-28 23:19:35.044] [net.snapshot] [debug] Received Snapshot tick=5400 playerCount=2 bombCount=0
+[2026-03-28 23:19:35.313] [net.input] [debug] Local prediction armed from authoritative state tick=5416 lastProcessed=0 pos=(384, 2432)
+[2026-03-28 23:19:35.328] [net.input] [debug] Ignored stale local correction tick=5417 lastProcessed=0 lastAppliedTick=5416
+[2026-03-28 23:19:35.344] [net.input] [debug] Ignored stale local correction tick=5418 lastProcessed=0 lastAppliedTick=5417
+[2026-03-28 23:19:35.366] [net.input] [debug] Ignored stale local correction tick=5419 lastProcessed=0 lastAppliedTick=5418
+[2026-03-28 23:19:35.381] [net.input] [debug] Ignored stale local correction tick=5420 lastProcessed=0 lastAppliedTick=5419
+[2026-03-28 23:19:35.396] [net.input] [debug] Ignored stale local correction tick=5421 lastProcessed=0 lastAppliedTick=5420
+[2026-03-28 23:19:35.544] [net.snapshot] [debug] Received Correction tick=5430 lastProcessed=9 pos=(384, 2432)
+[2026-03-28 23:19:35.544] [net.snapshot] [debug] Received Snapshot tick=5430 playerCount=2 bombCount=0
+[2026-03-28 23:19:35.800] [net.input] [debug] Sent Input seq=30 batch=[15..30] buttons=0x00
+[2026-03-28 23:19:36.043] [net.snapshot] [debug] Received Correction tick=5460 lastProcessed=39 pos=(384, 2432)
+[2026-03-28 23:19:36.043] [net.snapshot] [debug] Received Snapshot tick=5460 playerCount=2 bombCount=0
+[2026-03-28 23:19:36.301] [net.input] [debug] Sent Input seq=60 batch=[45..60] buttons=0x00
+[2026-03-28 23:19:36.346] [net.input] [debug] Prediction live ackSeq=57 corrTick=5478 pendingDepth=6 pendingAgeMs=96 lastDeltaQ=0 lastReplay=6 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 23:19:36.543] [net.snapshot] [debug] Received Correction tick=5490 lastProcessed=69 pos=(384, 2432)
+[2026-03-28 23:19:36.543] [net.snapshot] [debug] Received Snapshot tick=5490 playerCount=2 bombCount=0
+[2026-03-28 23:19:36.799] [net.input] [debug] Sent Input seq=90 batch=[75..90] buttons=0x00
+[2026-03-28 23:19:37.047] [net.snapshot] [debug] Received Correction tick=5520 lastProcessed=99 pos=(384, 2432)
+[2026-03-28 23:19:37.047] [net.snapshot] [debug] Received Snapshot tick=5520 playerCount=2 bombCount=0
+[2026-03-28 23:19:37.247] [net.snapshot] [debug] Received BombPlaced tick=5532 ownerId=0 cell=(8, 1) radius=1 explodeTick=5622
+[2026-03-28 23:19:37.300] [net.input] [debug] Sent Input seq=120 batch=[105..120] buttons=0x00
+[2026-03-28 23:19:37.396] [net.input] [debug] Prediction live ackSeq=120 corrTick=5541 pendingDepth=6 pendingAgeMs=96 lastDeltaQ=0 lastReplay=6 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 23:19:37.544] [net.snapshot] [debug] Received Correction tick=5550 lastProcessed=129 pos=(384, 2432)
+[2026-03-28 23:19:37.544] [net.snapshot] [debug] Received Snapshot tick=5550 playerCount=2 bombCount=1
+[2026-03-28 23:19:37.797] [net.input] [debug] Sent Input seq=150 batch=[135..150] buttons=0x00
+[2026-03-28 23:19:38.046] [net.snapshot] [debug] Received Correction tick=5580 lastProcessed=159 pos=(384, 2432)
+[2026-03-28 23:19:38.046] [net.snapshot] [debug] Received Snapshot tick=5580 playerCount=2 bombCount=1
+[2026-03-28 23:19:38.299] [net.input] [debug] Sent Input seq=180 batch=[165..180] buttons=0x00
+[2026-03-28 23:19:38.444] [net.input] [debug] Prediction live ackSeq=183 corrTick=5604 pendingDepth=6 pendingAgeMs=96 lastDeltaQ=0 lastReplay=6 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 23:19:38.541] [net.snapshot] [debug] Received Correction tick=5610 lastProcessed=189 pos=(384, 2432)
+[2026-03-28 23:19:38.541] [net.snapshot] [debug] Received Snapshot tick=5610 playerCount=2 bombCount=1
+[2026-03-28 23:19:38.742] [net.snapshot] [debug] Received ExplosionResolved tick=5622 ownerId=0 origin=(8, 1) blastCells=3 destroyedBricks=1 killedMask=0x00
+[2026-03-28 23:19:38.794] [net.input] [debug] Sent Input seq=210 batch=[195..210] buttons=0x00
+[2026-03-28 23:19:39.040] [net.snapshot] [debug] Received Correction tick=5640 lastProcessed=219 pos=(384, 2432)
+[2026-03-28 23:19:39.040] [net.snapshot] [debug] Received Snapshot tick=5640 playerCount=2 bombCount=0
+[2026-03-28 23:19:39.300] [net.input] [debug] Sent Input seq=240 batch=[225..240] buttons=0x00
+[2026-03-28 23:19:39.496] [net.input] [debug] Prediction live ackSeq=246 corrTick=5667 pendingDepth=6 pendingAgeMs=96 lastDeltaQ=0 lastReplay=6 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 23:19:39.542] [net.snapshot] [debug] Received Correction tick=5670 lastProcessed=249 pos=(384, 2432)
+[2026-03-28 23:19:39.542] [net.snapshot] [debug] Received Snapshot tick=5670 playerCount=2 bombCount=0
+[2026-03-28 23:19:39.797] [net.input] [debug] Sent Input seq=270 batch=[255..270] buttons=0x00
+[2026-03-28 23:19:40.040] [net.snapshot] [debug] Received Correction tick=5700 lastProcessed=279 pos=(384, 2432)
+[2026-03-28 23:19:40.040] [net.snapshot] [debug] Received Snapshot tick=5700 playerCount=2 bombCount=0
+[2026-03-28 23:19:40.296] [net.input] [debug] Sent Input seq=300 batch=[285..300] buttons=0x00
+[2026-03-28 23:19:40.544] [net.snapshot] [debug] Received Correction tick=5730 lastProcessed=309 pos=(469, 2432)
+[2026-03-28 23:19:40.544] [net.snapshot] [debug] Received Snapshot tick=5730 playerCount=2 bombCount=0
+[2026-03-28 23:19:40.544] [net.input] [debug] Prediction live ackSeq=309 corrTick=5730 pendingDepth=6 pendingAgeMs=96 lastDeltaQ=0 lastReplay=6 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 23:19:40.796] [net.input] [debug] Sent Input seq=330 batch=[315..330] buttons=0x08
+[2026-03-28 23:19:41.043] [net.snapshot] [debug] Received Correction tick=5760 lastProcessed=339 pos=(979, 2432)
+[2026-03-28 23:19:41.043] [net.snapshot] [debug] Received Snapshot tick=5760 playerCount=2 bombCount=0
+[2026-03-28 23:19:41.296] [net.input] [debug] Sent Input seq=360 batch=[345..360] buttons=0x00
+[2026-03-28 23:19:41.523] [net.snapshot] [debug] Received BombPlaced tick=5789 ownerId=1 cell=(4, 9) radius=1 explodeTick=5879
+[2026-03-28 23:19:41.545] [net.snapshot] [debug] Received Correction tick=5790 lastProcessed=369 pos=(1183, 2432)
+[2026-03-28 23:19:41.545] [net.snapshot] [debug] Received Snapshot tick=5790 playerCount=2 bombCount=1
+[2026-03-28 23:19:41.598] [net.input] [debug] Prediction live ackSeq=372 corrTick=5793 pendingDepth=6 pendingAgeMs=96 lastDeltaQ=0 lastReplay=6 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 23:19:41.800] [net.input] [debug] Sent Input seq=390 batch=[375..390] buttons=0x04
+[2026-03-28 23:19:42.047] [net.snapshot] [debug] Received Correction tick=5820 lastProcessed=399 pos=(792, 2432)
+[2026-03-28 23:19:42.047] [net.snapshot] [debug] Received Snapshot tick=5820 playerCount=2 bombCount=1
+[2026-03-28 23:19:42.294] [net.input] [debug] Sent Input seq=420 batch=[405..420] buttons=0x04
+[2026-03-28 23:19:42.541] [net.snapshot] [debug] Received Correction tick=5850 lastProcessed=429 pos=(333, 2432)
+[2026-03-28 23:19:42.541] [net.snapshot] [debug] Received Snapshot tick=5850 playerCount=2 bombCount=1
+[2026-03-28 23:19:42.647] [net.input] [debug] Prediction live ackSeq=435 corrTick=5856 pendingDepth=6 pendingAgeMs=96 lastDeltaQ=0 lastReplay=6 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 23:19:42.796] [net.input] [debug] Sent Input seq=450 batch=[435..450] buttons=0x00
+[2026-03-28 23:19:43.025] [net.snapshot] [debug] Received ExplosionResolved tick=5879 ownerId=1 origin=(4, 9) blastCells=3 destroyedBricks=1 killedMask=0x00
+[2026-03-28 23:19:43.040] [net.snapshot] [debug] Received Correction tick=5880 lastProcessed=459 pos=(333, 2432)
+[2026-03-28 23:19:43.040] [net.snapshot] [debug] Received Snapshot tick=5880 playerCount=2 bombCount=0
+[2026-03-28 23:19:43.296] [net.input] [debug] Sent Input seq=480 batch=[465..480] buttons=0x00
+[2026-03-28 23:19:43.545] [net.snapshot] [debug] Received Correction tick=5910 lastProcessed=489 pos=(333, 2432)
+[2026-03-28 23:19:43.545] [net.snapshot] [debug] Received Snapshot tick=5910 playerCount=2 bombCount=0
+[2026-03-28 23:19:43.644] [net.snapshot] [debug] Received BombPlaced tick=5916 ownerId=1 cell=(1, 9) radius=1 explodeTick=6006
+[2026-03-28 23:19:43.696] [net.input] [debug] Prediction live ackSeq=498 corrTick=5919 pendingDepth=6 pendingAgeMs=96 lastDeltaQ=0 lastReplay=6 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 23:19:43.799] [net.input] [debug] Sent Input seq=510 batch=[495..510] buttons=0x01
+[2026-03-28 23:19:44.044] [net.snapshot] [debug] Received Correction tick=5940 lastProcessed=519 pos=(333, 2160)
+[2026-03-28 23:19:44.044] [net.snapshot] [debug] Received Snapshot tick=5940 playerCount=2 bombCount=1
+[2026-03-28 23:19:44.299] [net.input] [debug] Sent Input seq=540 batch=[525..540] buttons=0x01
+[2026-03-28 23:19:44.547] [net.snapshot] [debug] Received Correction tick=5970 lastProcessed=549 pos=(333, 1650)
+[2026-03-28 23:19:44.548] [net.snapshot] [debug] Received Snapshot tick=5970 playerCount=2 bombCount=1
+[2026-03-28 23:19:44.749] [net.input] [debug] Prediction live ackSeq=561 corrTick=5982 pendingDepth=6 pendingAgeMs=96 lastDeltaQ=0 lastReplay=6 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 23:19:44.799] [net.input] [debug] Sent Input seq=570 batch=[555..570] buttons=0x01
+[2026-03-28 23:19:45.044] [net.snapshot] [debug] Received Correction tick=6000 lastProcessed=579 pos=(333, 1463)
+[2026-03-28 23:19:45.044] [net.snapshot] [debug] Received Snapshot tick=6000 playerCount=2 bombCount=1
+[2026-03-28 23:19:45.142] [net.snapshot] [debug] Received ExplosionResolved tick=6006 ownerId=1 origin=(1, 9) blastCells=3 destroyedBricks=0 killedMask=0x00
+[2026-03-28 23:19:45.299] [net.input] [debug] Sent Input seq=600 batch=[585..600] buttons=0x00
+[2026-03-28 23:19:45.539] [net.snapshot] [debug] Received Correction tick=6030 lastProcessed=609 pos=(333, 1463)
+[2026-03-28 23:19:45.539] [net.snapshot] [debug] Received Snapshot tick=6030 playerCount=2 bombCount=0
+[2026-03-28 23:19:45.796] [net.input] [debug] Sent Input seq=630 batch=[615..630] buttons=0x00
+[2026-03-28 23:19:45.796] [net.input] [debug] Prediction live ackSeq=624 corrTick=6045 pendingDepth=6 pendingAgeMs=96 lastDeltaQ=0 lastReplay=6 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 23:19:46.043] [net.snapshot] [debug] Received BombPlaced tick=6060 ownerId=0 cell=(1, 1) radius=1 explodeTick=6150
+[2026-03-28 23:19:46.043] [net.snapshot] [debug] Received Correction tick=6060 lastProcessed=639 pos=(333, 1463)
+[2026-03-28 23:19:46.043] [net.snapshot] [debug] Received Snapshot tick=6060 playerCount=2 bombCount=1
+[2026-03-28 23:19:46.295] [net.input] [debug] Sent Input seq=660 batch=[645..660] buttons=0x00
+[2026-03-28 23:19:46.545] [net.snapshot] [debug] Received Correction tick=6090 lastProcessed=669 pos=(333, 1463)
+[2026-03-28 23:19:46.545] [net.snapshot] [debug] Received Snapshot tick=6090 playerCount=2 bombCount=1
+[2026-03-28 23:19:46.795] [net.input] [debug] Sent Input seq=690 batch=[675..690] buttons=0x00
+[2026-03-28 23:19:46.847] [net.input] [debug] Prediction live ackSeq=687 corrTick=6108 pendingDepth=6 pendingAgeMs=96 lastDeltaQ=0 lastReplay=6 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 23:19:47.046] [net.snapshot] [debug] Received Correction tick=6120 lastProcessed=699 pos=(333, 1463)
+[2026-03-28 23:19:47.046] [net.snapshot] [debug] Received Snapshot tick=6120 playerCount=2 bombCount=1
+[2026-03-28 23:19:47.297] [net.input] [debug] Sent Input seq=720 batch=[705..720] buttons=0x00
+[2026-03-28 23:19:47.543] [net.snapshot] [debug] Received Correction tick=6150 lastProcessed=729 pos=(333, 1463)
+[2026-03-28 23:19:47.543] [net.snapshot] [debug] Received ExplosionResolved tick=6150 ownerId=0 origin=(1, 1) blastCells=3 destroyedBricks=0 killedMask=0x00
+[2026-03-28 23:19:47.543] [net.snapshot] [debug] Received Snapshot tick=6150 playerCount=2 bombCount=0
+[2026-03-28 23:19:47.798] [net.input] [debug] Sent Input seq=750 batch=[735..750] buttons=0x00
+[2026-03-28 23:19:47.895] [net.input] [debug] Prediction live ackSeq=750 corrTick=6171 pendingDepth=6 pendingAgeMs=96 lastDeltaQ=0 lastReplay=6 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 23:19:48.042] [net.snapshot] [debug] Received Correction tick=6180 lastProcessed=759 pos=(333, 1463)
+[2026-03-28 23:19:48.042] [net.snapshot] [debug] Received Snapshot tick=6180 playerCount=2 bombCount=0
+[2026-03-28 23:19:48.297] [net.input] [debug] Sent Input seq=780 batch=[765..780] buttons=0x00
+[2026-03-28 23:19:48.541] [net.snapshot] [debug] Received Correction tick=6210 lastProcessed=789 pos=(333, 1463)
+[2026-03-28 23:19:48.541] [net.snapshot] [debug] Received Snapshot tick=6210 playerCount=2 bombCount=0
+[2026-03-28 23:19:48.800] [net.input] [debug] Sent Input seq=810 batch=[795..810] buttons=0x00
+[2026-03-28 23:19:48.950] [net.input] [debug] Prediction live ackSeq=813 corrTick=6234 pendingDepth=6 pendingAgeMs=96 lastDeltaQ=0 lastReplay=6 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 23:19:49.023] [net.snapshot] [debug] Received BombPlaced tick=6239 ownerId=0 cell=(5, 5) radius=1 explodeTick=6329
+[2026-03-28 23:19:49.045] [net.snapshot] [debug] Received Correction tick=6240 lastProcessed=819 pos=(333, 1463)
+[2026-03-28 23:19:49.045] [net.snapshot] [debug] Received Snapshot tick=6240 playerCount=2 bombCount=1
+[2026-03-28 23:19:49.295] [net.input] [debug] Sent Input seq=840 batch=[825..840] buttons=0x00
+[2026-03-28 23:19:49.546] [net.snapshot] [debug] Received Correction tick=6270 lastProcessed=849 pos=(333, 1463)
+[2026-03-28 23:19:49.546] [net.snapshot] [debug] Received Snapshot tick=6270 playerCount=2 bombCount=1
+[2026-03-28 23:19:49.798] [net.input] [debug] Sent Input seq=870 batch=[855..870] buttons=0x00
+[2026-03-28 23:19:49.997] [net.input] [debug] Prediction live ackSeq=876 corrTick=6297 pendingDepth=6 pendingAgeMs=96 lastDeltaQ=0 lastReplay=6 lastMissingInputs=0 remainingDeferredInputs=0 recoveryActive=no recoveryCatchUpSeq=0 maxPendingDepth=7
+[2026-03-28 23:19:50.044] [net.snapshot] [debug] Received Correction tick=6300 lastProcessed=879 pos=(333, 1463)
+[2026-03-28 23:19:50.044] [net.snapshot] [debug] Received Snapshot tick=6300 playerCount=2 bombCount=1
+[2026-03-28 23:19:50.300] [net.input] [debug] Sent Input seq=900 batch=[885..900] buttons=0x00
+[2026-03-28 23:19:50.525] [net.snapshot] [debug] Received ExplosionResolved tick=6329 ownerId=0 origin=(5, 5) blastCells=5 destroyedBricks=2 killedMask=0x01
+[2026-03-28 23:19:50.525] [net.conn] [info] Received MatchResult matchId=1 result=win
+[2026-03-28 23:19:50.548] [net.snapshot] [debug] Received Correction tick=6330 lastProcessed=908 pos=(333, 1463)
+[2026-03-28 23:19:50.548] [net.snapshot] [debug] Received Snapshot tick=6330 playerCount=2 bombCount=0
+[2026-03-28 23:19:51.046] [net.snapshot] [debug] Received Correction tick=6360 lastProcessed=908 pos=(333, 1463)
+[2026-03-28 23:19:51.046] [net.snapshot] [debug] Received Snapshot tick=6360 playerCount=2 bombCount=0
+[2026-03-28 23:19:51.544] [net.snapshot] [debug] Received Correction tick=6390 lastProcessed=908 pos=(333, 1463)
+[2026-03-28 23:19:51.544] [net.snapshot] [debug] Received Snapshot tick=6390 playerCount=2 bombCount=0
+[2026-03-28 23:19:52.042] [net.snapshot] [debug] Received Correction tick=6420 lastProcessed=908 pos=(333, 1463)
+[2026-03-28 23:19:52.042] [net.snapshot] [debug] Received Snapshot tick=6420 playerCount=2 bombCount=0
+[2026-03-28 23:19:52.546] [net.snapshot] [debug] Received Correction tick=6450 lastProcessed=908 pos=(333, 1463)
+[2026-03-28 23:19:52.546] [net.snapshot] [debug] Received Snapshot tick=6450 playerCount=2 bombCount=0
+[2026-03-28 23:19:53.043] [net.snapshot] [debug] Received Correction tick=6480 lastProcessed=908 pos=(333, 1463)
+[2026-03-28 23:19:53.043] [net.snapshot] [debug] Received Snapshot tick=6480 playerCount=2 bombCount=0
+[2026-03-28 23:19:53.532] [net.conn] [info] Leaving multiplayer match back to lobby (ReturnedToLobby)
+[2026-03-28 23:19:53.542] [net.input] [debug] Prediction summary localInputs=913 deferredInputs=1 rejectedInputs=0 corrections=909 mismatches=2 avgDeltaQ=0.04 maxDeltaQ=17 replayedInputs=5449 maxReplay=6 truncations=0 recoveries=0 recoveryResolutions=0 maxMissingInputs=0 maxPendingDepth=7
+[2026-03-28 23:19:56.876] [net.conn] [info] Leaving lobby and disconnecting: LocalLeaveLobby
+[2026-03-28 23:19:56.876] [net.conn] [info] Queued graceful disconnect
+[2026-03-28 23:19:56.965] [net.conn] [info] Graceful disconnect completed
+[2026-03-28 23:19:56.967] [net.diag] [info] Client diagnostics JSON report written to logs/diag_client_p2_231956.json

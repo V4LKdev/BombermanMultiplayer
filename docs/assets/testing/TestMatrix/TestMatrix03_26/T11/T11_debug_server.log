@@ -1,0 +1,51 @@
+[2026-03-27 16:57:15.177] [server] [info] ==== BOMBERMAN DEDICATED SERVER ===================================================================
+[2026-03-27 16:57:15.177] [server] [info] Server diagnostics enabled
+[2026-03-27 16:57:15.177] [server] [info] Listening on port 46011 with max 8 peers (4 gameplay slots)
+[2026-03-27 16:57:15.178] [server] [info] Server input lead=1 tick(s)
+[2026-03-27 16:57:15.178] [server] [info] Server snapshot interval=1 tick(s)
+[2026-03-27 16:57:15.178] [server] [info] Round powerups enabled
+[2026-03-27 16:57:15.178] [server] [debug] ENet peer liveness ping=500ms timeoutLimit=8 timeoutRange=[5000..10000]ms
+[2026-03-27 16:57:15.178] [server] [info] ServerState initialized
+[2026-03-27 16:57:15.178] [server] [info] Map generated with random seed=3913393861
+[2026-03-27 16:58:07.141] [server] [debug] Peer connected (id=0)
+[2026-03-27 16:58:07.142] [net.conn] [debug] Hello from "T11A" (peer 0)
+[2026-03-27 16:58:07.142] [net.conn] [debug] Queued Welcome to playerId=0
+[2026-03-27 16:58:07.142] [server] [info] Lobby participant set changed (a participant joined); ready state reset
+[2026-03-27 16:58:07.142] [net.conn] [info] Accepted playerId=0 into the lobby
+[2026-03-27 16:58:10.285] [server] [debug] Peer connected (id=1)
+[2026-03-27 16:58:10.285] [net.conn] [debug] Hello from "T11B" (peer 1)
+[2026-03-27 16:58:10.285] [net.conn] [debug] Queued Welcome to playerId=1
+[2026-03-27 16:58:10.285] [server] [info] Lobby participant set changed (a participant joined); ready state reset
+[2026-03-27 16:58:10.285] [net.conn] [info] Accepted playerId=1 into the lobby
+[2026-03-27 16:58:15.655] [net.conn] [debug] Lobby ready updated playerId=0 name="T11A" ready=true
+[2026-03-27 16:58:17.512] [net.conn] [debug] Lobby ready updated playerId=1 name="T11B" ready=true
+[2026-03-27 16:58:17.512] [server] [info] Lobby countdown started players=2 seconds=3
+[2026-03-27 16:58:20.496] [server] [info] Prepared hidden round powerups matchId=1 count=4
+[2026-03-27 16:58:20.496] [server] [info] Starting match bootstrap matchId=1 players=2 seed=3913393861
+[2026-03-27 16:58:20.523] [net.conn] [debug] Match loaded acknowledged playerId=1 matchId=1 loaded=1/2
+[2026-03-27 16:58:20.525] [net.conn] [debug] Match loaded acknowledged playerId=0 matchId=1 loaded=2/2
+[2026-03-27 16:58:20.525] [server] [info] Match start committed matchId=1 players=2 goTick=3980 unlockTick=3980
+[2026-03-27 16:58:21.512] [server] [info] Gameplay unlocked matchId=1 tick=3980
+[2026-03-27 16:58:23.522] [net.input] [debug] Input playerId=1 batch=[105..120] lastRecv=120 lastProcessed=119
+[2026-03-27 16:58:23.526] [net.input] [debug] Input playerId=0 batch=[105..120] lastRecv=120 lastProcessed=119
+[2026-03-27 16:58:25.520] [net.input] [debug] Input playerId=0 batch=[225..240] lastRecv=240 lastProcessed=239
+[2026-03-27 16:58:25.524] [net.input] [debug] Input playerId=1 batch=[225..240] lastRecv=240 lastProcessed=239
+[2026-03-27 16:58:27.525] [net.input] [debug] Input playerId=0 batch=[345..360] lastRecv=360 lastProcessed=359
+[2026-03-27 16:58:27.527] [net.input] [debug] Input playerId=1 batch=[345..360] lastRecv=360 lastProcessed=359
+[2026-03-27 16:58:29.520] [net.input] [debug] Input playerId=1 batch=[465..480] lastRecv=480 lastProcessed=479
+[2026-03-27 16:58:29.522] [net.input] [debug] Input playerId=0 batch=[465..480] lastRecv=480 lastProcessed=479
+[2026-03-27 16:58:31.522] [net.input] [debug] Input playerId=1 batch=[585..600] lastRecv=600 lastProcessed=599
+[2026-03-27 16:58:31.525] [net.input] [debug] Input playerId=0 batch=[585..600] lastRecv=600 lastProcessed=599
+[2026-03-27 16:58:33.313] [net.input] [info] Bomb placed playerId=1 tick=4688 cell=(6, 9) radius=1 activeBombs=1/1 explodeTick=4778
+[2026-03-27 16:58:33.524] [net.input] [debug] Input playerId=0 batch=[705..720] lastRecv=720 lastProcessed=719
+[2026-03-27 16:58:33.525] [net.input] [debug] Input playerId=1 batch=[705..720] lastRecv=720 lastProcessed=719
+[2026-03-27 16:58:34.813] [server] [info] Player killed playerId=1 by bombOwnerId=1 tick=4778 blastOrigin=(6, 9)
+[2026-03-27 16:58:34.813] [server] [info] Bomb exploded ownerId=1 tick=4778 origin=(6, 9) radius=1 blastCells=3 destroyedBricks=1 killedPlayers=1
+[2026-03-27 16:58:34.813] [server] [info] Round ended tick=4778 winnerPlayerId=0 activePlayers=2 alivePlayers=1
+[2026-03-27 16:58:37.813] [server] [info] Returned to lobby after end-of-match cooldown
+[2026-03-27 16:58:42.104] [server] [info] Lobby participant set changed (a participant disconnected); ready state reset
+[2026-03-27 16:58:42.104] [server] [info] Peer disconnected (playerId=1, name="T11B")
+[2026-03-27 16:58:43.833] [server] [info] Lobby participant set changed (a participant disconnected); ready state reset
+[2026-03-27 16:58:43.833] [server] [info] Peer disconnected (playerId=0, name="T11A")
+[2026-03-27 16:58:47.284] [server] [info] Diagnostics JSON report written to logs/diag_server_165847.json
+[2026-03-27 16:58:47.284] [server] [info] Shutdown complete

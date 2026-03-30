@@ -1,0 +1,175 @@
+[2026-03-28 22:18:11.462] [server] [info] ==== BOMBERMAN DEDICATED SERVER ===================================================================
+[2026-03-28 22:18:11.462] [server] [info] Server diagnostics enabled
+[2026-03-28 22:18:11.462] [server] [info] Listening on port 12345 with max 8 peers (4 gameplay slots)
+[2026-03-28 22:18:11.462] [server] [info] Server input lead=1 tick(s)
+[2026-03-28 22:18:11.462] [server] [info] Server snapshot interval=1 tick(s)
+[2026-03-28 22:18:11.462] [server] [info] Round powerups enabled
+[2026-03-28 22:18:11.462] [server] [debug] ENet peer liveness ping=500ms timeoutLimit=8 timeoutRange=[5000..10000]ms
+[2026-03-28 22:18:11.462] [server] [info] ServerState initialized
+[2026-03-28 22:18:11.462] [server] [info] Map generated with random seed=2999900091
+[2026-03-28 22:19:52.895] [server] [debug] Peer connected (id=0)
+[2026-03-28 22:19:52.895] [net.conn] [debug] Hello from "T19-A1A" (peer 0)
+[2026-03-28 22:19:52.895] [net.conn] [debug] Queued Welcome to playerId=0
+[2026-03-28 22:19:52.895] [server] [info] Lobby participant set changed (a participant joined); ready state reset
+[2026-03-28 22:19:52.895] [net.conn] [info] Accepted playerId=0 into the lobby
+[2026-03-28 22:20:08.224] [server] [debug] Peer connected (id=1)
+[2026-03-28 22:20:08.224] [net.conn] [debug] Hello from "T19-A1B" (peer 1)
+[2026-03-28 22:20:08.224] [net.conn] [debug] Queued Welcome to playerId=1
+[2026-03-28 22:20:08.224] [server] [info] Lobby participant set changed (a participant joined); ready state reset
+[2026-03-28 22:20:08.224] [net.conn] [info] Accepted playerId=1 into the lobby
+[2026-03-28 22:20:11.264] [net.conn] [debug] Lobby ready updated playerId=0 name="T19-A1A" ready=true
+[2026-03-28 22:20:14.164] [net.conn] [debug] Lobby ready updated playerId=1 name="T19-A1B" ready=true
+[2026-03-28 22:20:14.164] [server] [info] Lobby countdown started players=2 seconds=3
+[2026-03-28 22:20:16.390] [net.conn] [debug] Lobby ready updated playerId=1 name="T19-A1B" ready=false
+[2026-03-28 22:20:16.390] [server] [info] Lobby countdown cancelled (a participant unreadied before countdown completion)
+[2026-03-28 22:20:17.076] [net.conn] [debug] Lobby ready updated playerId=1 name="T19-A1B" ready=true
+[2026-03-28 22:20:17.076] [server] [info] Lobby countdown started players=2 seconds=3
+[2026-03-28 22:20:20.064] [server] [info] Prepared hidden round powerups matchId=1 count=4
+[2026-03-28 22:20:20.064] [server] [info] Starting match bootstrap matchId=1 players=2 seed=2999900091
+[2026-03-28 22:20:20.082] [net.conn] [debug] Match loaded acknowledged playerId=0 matchId=1 loaded=1/2
+[2026-03-28 22:20:20.088] [net.conn] [debug] Match loaded acknowledged playerId=1 matchId=1 loaded=2/2
+[2026-03-28 22:20:20.088] [server] [info] Match start committed matchId=1 players=2 goTick=7777 unlockTick=7777
+[2026-03-28 22:20:21.081] [server] [info] Gameplay unlocked matchId=1 tick=7777
+[2026-03-28 22:20:23.085] [net.input] [debug] Input playerId=0 batch=[105..120] lastRecv=120 lastProcessed=119
+[2026-03-28 22:20:23.087] [net.input] [debug] Input playerId=1 batch=[105..120] lastRecv=120 lastProcessed=119
+[2026-03-28 22:20:25.079] [net.input] [debug] Input playerId=0 batch=[225..240] lastRecv=240 lastProcessed=238
+[2026-03-28 22:20:25.085] [net.input] [debug] Input playerId=1 batch=[225..240] lastRecv=240 lastProcessed=239
+[2026-03-28 22:20:27.081] [net.input] [debug] Input playerId=0 batch=[345..360] lastRecv=360 lastProcessed=359
+[2026-03-28 22:20:27.083] [net.input] [debug] Input playerId=1 batch=[345..360] lastRecv=360 lastProcessed=359
+[2026-03-28 22:20:29.083] [net.input] [debug] Input playerId=0 batch=[465..480] lastRecv=480 lastProcessed=479
+[2026-03-28 22:20:29.084] [net.input] [debug] Input playerId=1 batch=[465..480] lastRecv=480 lastProcessed=479
+[2026-03-28 22:20:31.083] [net.input] [debug] Input playerId=0 batch=[585..600] lastRecv=600 lastProcessed=599
+[2026-03-28 22:20:31.087] [net.input] [debug] Input playerId=1 batch=[585..600] lastRecv=600 lastProcessed=599
+[2026-03-28 22:20:33.080] [net.input] [debug] Input playerId=1 batch=[705..720] lastRecv=720 lastProcessed=718
+[2026-03-28 22:20:33.084] [net.input] [debug] Input playerId=0 batch=[705..720] lastRecv=720 lastProcessed=719
+[2026-03-28 22:20:35.081] [net.input] [debug] Input playerId=0 batch=[825..840] lastRecv=840 lastProcessed=839
+[2026-03-28 22:20:35.085] [net.input] [debug] Input playerId=1 batch=[825..840] lastRecv=840 lastProcessed=839
+[2026-03-28 22:20:37.084] [net.input] [debug] Input playerId=1 batch=[945..960] lastRecv=960 lastProcessed=959
+[2026-03-28 22:20:37.084] [net.input] [debug] Input playerId=0 batch=[945..960] lastRecv=960 lastProcessed=959
+[2026-03-28 22:20:37.964] [net.input] [info] Bomb placed playerId=1 tick=8790 cell=(3, 1) radius=1 activeBombs=1/1 explodeTick=8880
+[2026-03-28 22:20:39.082] [net.input] [debug] Input playerId=0 batch=[1065..1080] lastRecv=1080 lastProcessed=1079
+[2026-03-28 22:20:39.085] [net.input] [debug] Input playerId=1 batch=[1065..1080] lastRecv=1080 lastProcessed=1079
+[2026-03-28 22:20:39.464] [server] [info] Bomb exploded ownerId=1 tick=8880 origin=(3, 1) radius=1 blastCells=4 destroyedBricks=0 killedPlayers=0
+[2026-03-28 22:20:41.079] [net.input] [debug] Input playerId=0 batch=[1185..1200] lastRecv=1200 lastProcessed=1198
+[2026-03-28 22:20:41.085] [net.input] [debug] Input playerId=1 batch=[1185..1200] lastRecv=1200 lastProcessed=1199
+[2026-03-28 22:20:41.147] [net.input] [info] Bomb placed playerId=1 tick=8981 cell=(9, 1) radius=1 activeBombs=1/1 explodeTick=9071
+[2026-03-28 22:20:42.647] [server] [info] Bomb exploded ownerId=1 tick=9071 origin=(9, 1) radius=1 blastCells=4 destroyedBricks=1 killedPlayers=0
+[2026-03-28 22:20:43.080] [net.input] [debug] Input playerId=0 batch=[1305..1320] lastRecv=1320 lastProcessed=1319
+[2026-03-28 22:20:43.087] [net.input] [debug] Input playerId=1 batch=[1305..1320] lastRecv=1320 lastProcessed=1319
+[2026-03-28 22:20:45.084] [net.input] [debug] Input playerId=0 batch=[1425..1440] lastRecv=1440 lastProcessed=1439
+[2026-03-28 22:20:45.084] [net.input] [debug] Input playerId=1 batch=[1425..1440] lastRecv=1440 lastProcessed=1439
+[2026-03-28 22:20:47.081] [net.input] [debug] Input playerId=0 batch=[1545..1560] lastRecv=1560 lastProcessed=1558
+[2026-03-28 22:20:47.083] [net.input] [debug] Input playerId=1 batch=[1545..1560] lastRecv=1560 lastProcessed=1559
+[2026-03-28 22:20:47.131] [net.input] [info] Bomb placed playerId=0 tick=9340 cell=(5, 5) radius=1 activeBombs=1/1 explodeTick=9430
+[2026-03-28 22:20:48.630] [server] [info] Powerup revealed type=MaxBombsBoost tick=9430 cell=(4, 5)
+[2026-03-28 22:20:48.630] [server] [info] Bomb exploded ownerId=0 tick=9430 origin=(5, 5) radius=1 blastCells=5 destroyedBricks=2 killedPlayers=0
+[2026-03-28 22:20:49.079] [net.input] [debug] Input playerId=0 batch=[1665..1680] lastRecv=1680 lastProcessed=1678
+[2026-03-28 22:20:49.084] [net.input] [debug] Input playerId=1 batch=[1665..1680] lastRecv=1680 lastProcessed=1679
+[2026-03-28 22:20:51.082] [net.input] [debug] Input playerId=1 batch=[1785..1800] lastRecv=1800 lastProcessed=1799
+[2026-03-28 22:20:51.084] [net.input] [debug] Input playerId=0 batch=[1785..1800] lastRecv=1800 lastProcessed=1799
+[2026-03-28 22:20:51.180] [server] [info] Powerup collected playerId=0 type=MaxBombsBoost tick=9583 cell=(4, 5) untilTick=10183
+[2026-03-28 22:20:52.697] [net.input] [info] Bomb placed playerId=0 tick=9674 cell=(7, 5) radius=1 activeBombs=1/2 explodeTick=9764
+[2026-03-28 22:20:53.086] [net.input] [debug] Input playerId=0 batch=[1905..1920] lastRecv=1920 lastProcessed=1919
+[2026-03-28 22:20:53.086] [net.input] [debug] Input playerId=1 batch=[1905..1920] lastRecv=1920 lastProcessed=1919
+[2026-03-28 22:20:53.347] [net.input] [info] Bomb placed playerId=0 tick=9713 cell=(5, 5) radius=1 activeBombs=2/2 explodeTick=9803
+[2026-03-28 22:20:53.597] [net.input] [debug] Rejected bomb placement playerId=0 tick=9728 because activeBombCount=2 maxBombs=2
+[2026-03-28 22:20:53.797] [net.input] [debug] Rejected bomb placement playerId=0 tick=9740 because activeBombCount=2 maxBombs=2
+[2026-03-28 22:20:54.197] [server] [info] Bomb exploded ownerId=0 tick=9764 origin=(7, 5) radius=1 blastCells=5 destroyedBricks=0 killedPlayers=0
+[2026-03-28 22:20:54.847] [server] [info] Bomb exploded ownerId=0 tick=9803 origin=(5, 5) radius=1 blastCells=5 destroyedBricks=0 killedPlayers=0
+[2026-03-28 22:20:55.080] [net.input] [debug] Input playerId=1 batch=[2025..2040] lastRecv=2040 lastProcessed=2038
+[2026-03-28 22:20:55.082] [net.input] [debug] Input playerId=0 batch=[2025..2040] lastRecv=2040 lastProcessed=2039
+[2026-03-28 22:20:55.747] [net.input] [info] Bomb placed playerId=0 tick=9857 cell=(1, 1) radius=1 activeBombs=1/2 explodeTick=9947
+[2026-03-28 22:20:56.913] [net.input] [info] Bomb placed playerId=0 tick=9927 cell=(5, 1) radius=1 activeBombs=2/2 explodeTick=10017
+[2026-03-28 22:20:57.082] [net.input] [debug] Input playerId=1 batch=[2145..2160] lastRecv=2160 lastProcessed=2159
+[2026-03-28 22:20:57.085] [net.input] [debug] Input playerId=0 batch=[2145..2160] lastRecv=2160 lastProcessed=2159
+[2026-03-28 22:20:57.247] [server] [info] Bomb exploded ownerId=0 tick=9947 origin=(1, 1) radius=1 blastCells=3 destroyedBricks=0 killedPlayers=0
+[2026-03-28 22:20:58.413] [server] [info] Bomb exploded ownerId=0 tick=10017 origin=(5, 1) radius=1 blastCells=4 destroyedBricks=0 killedPlayers=0
+[2026-03-28 22:20:58.780] [net.input] [info] Bomb placed playerId=0 tick=10039 cell=(10, 1) radius=1 activeBombs=1/2 explodeTick=10129
+[2026-03-28 22:20:59.081] [net.input] [debug] Input playerId=0 batch=[2265..2280] lastRecv=2280 lastProcessed=2278
+[2026-03-28 22:20:59.082] [net.input] [debug] Input playerId=1 batch=[2265..2280] lastRecv=2280 lastProcessed=2279
+[2026-03-28 22:20:59.980] [net.input] [info] Bomb placed playerId=0 tick=10111 cell=(6, 1) radius=1 activeBombs=2/2 explodeTick=10201
+[2026-03-28 22:21:00.280] [server] [info] Bomb exploded ownerId=0 tick=10129 origin=(10, 1) radius=1 blastCells=3 destroyedBricks=0 killedPlayers=0
+[2026-03-28 22:21:01.083] [net.input] [debug] Input playerId=0 batch=[2385..2400] lastRecv=2400 lastProcessed=2399
+[2026-03-28 22:21:01.086] [net.input] [debug] Input playerId=1 batch=[2385..2400] lastRecv=2400 lastProcessed=2399
+[2026-03-28 22:21:01.480] [server] [info] Bomb exploded ownerId=0 tick=10201 origin=(6, 1) radius=1 blastCells=3 destroyedBricks=0 killedPlayers=0
+[2026-03-28 22:21:03.084] [net.input] [debug] Input playerId=0 batch=[2505..2520] lastRecv=2520 lastProcessed=2519
+[2026-03-28 22:21:03.087] [net.input] [debug] Input playerId=1 batch=[2505..2520] lastRecv=2520 lastProcessed=2519
+[2026-03-28 22:21:03.930] [net.input] [info] Bomb placed playerId=1 tick=10348 cell=(11, 3) radius=1 activeBombs=1/1 explodeTick=10438
+[2026-03-28 22:21:05.080] [net.input] [debug] Input playerId=0 batch=[2625..2640] lastRecv=2640 lastProcessed=2638
+[2026-03-28 22:21:05.082] [net.input] [debug] Input playerId=1 batch=[2625..2640] lastRecv=2640 lastProcessed=2639
+[2026-03-28 22:21:05.430] [server] [info] Powerup revealed type=SpeedBoost tick=10438 cell=(12, 3)
+[2026-03-28 22:21:05.430] [server] [info] Bomb exploded ownerId=1 tick=10438 origin=(11, 3) radius=1 blastCells=5 destroyedBricks=1 killedPlayers=0
+[2026-03-28 22:21:05.480] [net.input] [info] Bomb placed playerId=1 tick=10441 cell=(9, 6) radius=1 activeBombs=1/1 explodeTick=10531
+[2026-03-28 22:21:05.630] [net.input] [debug] Rejected bomb placement playerId=1 tick=10450 because activeBombCount=1 maxBombs=1
+[2026-03-28 22:21:06.981] [server] [info] Bomb exploded ownerId=1 tick=10531 origin=(9, 6) radius=1 blastCells=3 destroyedBricks=0 killedPlayers=0
+[2026-03-28 22:21:07.080] [net.input] [debug] Input playerId=0 batch=[2745..2760] lastRecv=2760 lastProcessed=2758
+[2026-03-28 22:21:07.081] [net.input] [debug] Input playerId=1 batch=[2745..2760] lastRecv=2760 lastProcessed=2759
+[2026-03-28 22:21:07.563] [net.input] [info] Bomb placed playerId=1 tick=10566 cell=(9, 9) radius=1 activeBombs=1/1 explodeTick=10656
+[2026-03-28 22:21:09.064] [server] [info] Bomb exploded ownerId=1 tick=10656 origin=(9, 9) radius=1 blastCells=4 destroyedBricks=1 killedPlayers=0
+[2026-03-28 22:21:09.084] [net.input] [debug] Input playerId=0 batch=[2865..2880] lastRecv=2880 lastProcessed=2879
+[2026-03-28 22:21:09.084] [net.input] [debug] Input playerId=1 batch=[2865..2880] lastRecv=2880 lastProcessed=2879
+[2026-03-28 22:21:09.964] [server] [info] Powerup collected playerId=1 type=SpeedBoost tick=10710 cell=(12, 3) untilTick=11310
+[2026-03-28 22:21:11.047] [net.input] [info] Bomb placed playerId=1 tick=10775 cell=(17, 3) radius=1 activeBombs=1/1 explodeTick=10865
+[2026-03-28 22:21:11.081] [net.input] [debug] Input playerId=1 batch=[2985..3000] lastRecv=3000 lastProcessed=2999
+[2026-03-28 22:21:11.083] [net.input] [debug] Input playerId=0 batch=[2985..3000] lastRecv=3000 lastProcessed=2999
+[2026-03-28 22:21:12.547] [server] [info] Bomb exploded ownerId=1 tick=10865 origin=(17, 3) radius=1 blastCells=5 destroyedBricks=1 killedPlayers=0
+[2026-03-28 22:21:13.081] [net.input] [debug] Input playerId=1 batch=[3105..3120] lastRecv=3120 lastProcessed=3119
+[2026-03-28 22:21:13.084] [net.input] [debug] Input playerId=0 batch=[3105..3120] lastRecv=3120 lastProcessed=3119
+[2026-03-28 22:21:13.180] [net.input] [info] Bomb placed playerId=1 tick=10903 cell=(13, 9) radius=1 activeBombs=1/1 explodeTick=10993
+[2026-03-28 22:21:14.680] [server] [info] Bomb exploded ownerId=1 tick=10993 origin=(13, 9) radius=1 blastCells=4 destroyedBricks=1 killedPlayers=0
+[2026-03-28 22:21:15.080] [net.input] [debug] Input playerId=1 batch=[3225..3240] lastRecv=3240 lastProcessed=3239
+[2026-03-28 22:21:15.085] [net.input] [debug] Input playerId=0 batch=[3225..3240] lastRecv=3240 lastProcessed=3239
+[2026-03-28 22:21:15.214] [net.input] [info] Bomb placed playerId=1 tick=11025 cell=(19, 5) radius=1 activeBombs=1/1 explodeTick=11115
+[2026-03-28 22:21:16.714] [server] [info] Bomb exploded ownerId=1 tick=11115 origin=(19, 5) radius=1 blastCells=5 destroyedBricks=2 killedPlayers=0
+[2026-03-28 22:21:17.083] [net.input] [debug] Input playerId=0 batch=[3345..3360] lastRecv=3360 lastProcessed=3359
+[2026-03-28 22:21:17.087] [net.input] [debug] Input playerId=1 batch=[3345..3360] lastRecv=3360 lastProcessed=3359
+[2026-03-28 22:21:18.080] [net.input] [info] Bomb placed playerId=1 tick=11197 cell=(23, 8) radius=1 activeBombs=1/1 explodeTick=11287
+[2026-03-28 22:21:18.947] [net.input] [debug] Rejected bomb placement playerId=1 tick=11249 because activeBombCount=1 maxBombs=1
+[2026-03-28 22:21:19.080] [net.input] [debug] Input playerId=0 batch=[3465..3480] lastRecv=3480 lastProcessed=3479
+[2026-03-28 22:21:19.085] [net.input] [debug] Input playerId=1 batch=[3465..3480] lastRecv=3480 lastProcessed=3479
+[2026-03-28 22:21:19.580] [server] [info] Powerup revealed type=BombRangeBoost tick=11287 cell=(23, 7)
+[2026-03-28 22:21:19.580] [server] [info] Bomb exploded ownerId=1 tick=11287 origin=(23, 8) radius=1 blastCells=3 destroyedBricks=1 killedPlayers=0
+[2026-03-28 22:21:20.763] [net.input] [info] Bomb placed playerId=1 tick=11358 cell=(25, 9) radius=1 activeBombs=1/1 explodeTick=11448
+[2026-03-28 22:21:21.080] [net.input] [debug] Input playerId=1 batch=[3585..3600] lastRecv=3600 lastProcessed=3599
+[2026-03-28 22:21:21.083] [net.input] [debug] Input playerId=0 batch=[3585..3600] lastRecv=3600 lastProcessed=3599
+[2026-03-28 22:21:21.897] [server] [info] Powerup collected playerId=1 type=BombRangeBoost tick=11426 cell=(23, 7) untilTick=12026
+[2026-03-28 22:21:22.264] [server] [info] Bomb exploded ownerId=1 tick=11448 origin=(25, 9) radius=1 blastCells=4 destroyedBricks=1 killedPlayers=0
+[2026-03-28 22:21:22.714] [net.input] [info] Bomb placed playerId=1 tick=11475 cell=(25, 7) radius=2 activeBombs=1/1 explodeTick=11565
+[2026-03-28 22:21:23.079] [net.input] [debug] Input playerId=0 batch=[3705..3720] lastRecv=3720 lastProcessed=3718
+[2026-03-28 22:21:23.082] [net.input] [debug] Input playerId=1 batch=[3705..3720] lastRecv=3720 lastProcessed=3719
+[2026-03-28 22:21:24.214] [server] [info] Bomb exploded ownerId=1 tick=11565 origin=(25, 7) radius=2 blastCells=8 destroyedBricks=1 killedPlayers=0
+[2026-03-28 22:21:24.597] [net.input] [info] Bomb placed playerId=1 tick=11588 cell=(27, 5) radius=2 activeBombs=1/1 explodeTick=11678
+[2026-03-28 22:21:25.081] [net.input] [debug] Input playerId=1 batch=[3825..3840] lastRecv=3840 lastProcessed=3839
+[2026-03-28 22:21:25.081] [net.input] [debug] Input playerId=0 batch=[3825..3840] lastRecv=3840 lastProcessed=3839
+[2026-03-28 22:21:26.097] [server] [info] Bomb exploded ownerId=1 tick=11678 origin=(27, 5) radius=2 blastCells=8 destroyedBricks=1 killedPlayers=0
+[2026-03-28 22:21:27.079] [net.input] [debug] Input playerId=0 batch=[3945..3960] lastRecv=3960 lastProcessed=3958
+[2026-03-28 22:21:27.082] [net.input] [debug] Input playerId=1 batch=[3945..3960] lastRecv=3960 lastProcessed=3959
+[2026-03-28 22:21:27.730] [net.input] [info] Bomb placed playerId=1 tick=11776 cell=(17, 3) radius=2 activeBombs=1/1 explodeTick=11866
+[2026-03-28 22:21:29.082] [net.input] [debug] Input playerId=0 batch=[4065..4080] lastRecv=4080 lastProcessed=4079
+[2026-03-28 22:21:29.085] [net.input] [debug] Input playerId=1 batch=[4065..4080] lastRecv=4080 lastProcessed=4079
+[2026-03-28 22:21:29.230] [server] [info] Powerup revealed type=Invincibility tick=11866 cell=(17, 1)
+[2026-03-28 22:21:29.230] [server] [info] Bomb exploded ownerId=1 tick=11866 origin=(17, 3) radius=2 blastCells=9 destroyedBricks=1 killedPlayers=0
+[2026-03-28 22:21:31.047] [net.input] [info] Bomb placed playerId=1 tick=11975 cell=(7, 3) radius=2 activeBombs=1/1 explodeTick=12065
+[2026-03-28 22:21:31.081] [net.input] [debug] Input playerId=0 batch=[4185..4200] lastRecv=4200 lastProcessed=4199
+[2026-03-28 22:21:31.085] [net.input] [debug] Input playerId=1 batch=[4185..4200] lastRecv=4200 lastProcessed=4199
+[2026-03-28 22:21:32.547] [server] [info] Bomb exploded ownerId=1 tick=12065 origin=(7, 3) radius=2 blastCells=9 destroyedBricks=0 killedPlayers=0
+[2026-03-28 22:21:32.596] [net.input] [info] Bomb placed playerId=1 tick=12068 cell=(1, 3) radius=1 activeBombs=1/1 explodeTick=12158
+[2026-03-28 22:21:33.080] [net.input] [debug] Input playerId=1 batch=[4305..4320] lastRecv=4320 lastProcessed=4319
+[2026-03-28 22:21:33.082] [net.input] [debug] Input playerId=0 batch=[4305..4320] lastRecv=4320 lastProcessed=4319
+[2026-03-28 22:21:34.097] [server] [info] Bomb exploded ownerId=1 tick=12158 origin=(1, 3) radius=1 blastCells=4 destroyedBricks=0 killedPlayers=0
+[2026-03-28 22:21:35.080] [net.input] [debug] Input playerId=0 batch=[4425..4440] lastRecv=4440 lastProcessed=4438
+[2026-03-28 22:21:35.082] [net.input] [debug] Input playerId=1 batch=[4425..4440] lastRecv=4440 lastProcessed=4439
+[2026-03-28 22:21:36.097] [net.input] [info] Bomb placed playerId=1 tick=12278 cell=(1, 1) radius=1 activeBombs=1/1 explodeTick=12368
+[2026-03-28 22:21:37.079] [net.input] [debug] Input playerId=0 batch=[4545..4560] lastRecv=4560 lastProcessed=4558
+[2026-03-28 22:21:37.083] [net.input] [debug] Input playerId=1 batch=[4545..4560] lastRecv=4560 lastProcessed=4559
+[2026-03-28 22:21:37.597] [server] [info] Player killed playerId=0 by bombOwnerId=1 tick=12368 blastOrigin=(1, 1)
+[2026-03-28 22:21:37.597] [server] [info] Player killed playerId=1 by bombOwnerId=1 tick=12368 blastOrigin=(1, 1)
+[2026-03-28 22:21:37.597] [server] [info] Bomb exploded ownerId=1 tick=12368 origin=(1, 1) radius=1 blastCells=3 destroyedBricks=0 killedPlayers=2
+[2026-03-28 22:21:37.597] [server] [info] Round ended tick=12368 result=draw activePlayers=2 alivePlayers=0
+[2026-03-28 22:21:40.597] [server] [info] Returned to lobby after end-of-match cooldown
+[2026-03-28 22:21:43.187] [server] [info] Lobby participant set changed (a participant disconnected); ready state reset
+[2026-03-28 22:21:43.187] [server] [info] Peer disconnected (playerId=1, name="T19-A1B")
+[2026-03-28 22:22:20.644] [server] [info] Lobby participant set changed (a participant disconnected); ready state reset
+[2026-03-28 22:22:20.644] [server] [info] Peer disconnected (playerId=0, name="T19-A1A")
+[2026-03-28 22:22:23.037] [server] [info] Diagnostics JSON report written to logs/diag_server_222223.json
+[2026-03-28 22:22:23.037] [server] [info] Shutdown complete
