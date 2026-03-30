@@ -43,17 +43,20 @@ namespace bomberman::sim
     /** @brief Number of hidden powerups seeded into each round when enabled. */
     constexpr uint8_t kPowerupsPerRound = static_cast<uint8_t>(kRoundPowerupPlacements.size());
 
+    /** @brief Default temporary powerup lifetime in simulation ticks. */
+    constexpr uint32_t kDefaultPowerupDurationTicks = static_cast<uint32_t>(kTickRate) * 10u;
+
     /** @brief Invincibility lifetime in simulation ticks. */
-    constexpr uint32_t kInvincibilityDurationTicks = static_cast<uint32_t>(kTickRate) * 10u;
+    constexpr uint32_t kInvincibilityDurationTicks = kDefaultPowerupDurationTicks;
 
     /** @brief Speed boost lifetime in simulation ticks. */
-    constexpr uint32_t kSpeedBoostDurationTicks = static_cast<uint32_t>(kTickRate) * 10u;
+    constexpr uint32_t kSpeedBoostDurationTicks = kDefaultPowerupDurationTicks;
 
     /** @brief Bomb-range boost lifetime in simulation ticks. */
-    constexpr uint32_t kBombRangeBoostDurationTicks = static_cast<uint32_t>(kTickRate) * 10u;
+    constexpr uint32_t kBombRangeBoostDurationTicks = kDefaultPowerupDurationTicks;
 
     /** @brief Max-bombs boost lifetime in simulation ticks. */
-    constexpr uint32_t kMaxBombsBoostDurationTicks = static_cast<uint32_t>(kTickRate) * 10u;
+    constexpr uint32_t kMaxBombsBoostDurationTicks = kDefaultPowerupDurationTicks;
 
     /** @brief Future movement-speed target while the speed boost is active. */
     constexpr double kSpeedBoostTilesPerSecond = 5.5;
@@ -70,6 +73,9 @@ namespace bomberman::sim
 
     /** @brief Deterministic salt mixed into round placement RNG so repeated map seeds can still vary by round. */
     constexpr uint32_t kPowerupPlacementSeedSalt = 0x9E3779B9u;
+
+    static_assert(static_cast<std::size_t>(PowerupType::MaxBombsBoost) + 1u == kPowerupTypeCount,
+                  "kPowerupTypeCount must match the defined powerup enum range");
 
     /** @brief Returns true when a raw byte encodes one of the defined powerup types. */
     constexpr bool isValidPowerupType(const uint8_t rawType)

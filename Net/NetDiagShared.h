@@ -11,6 +11,7 @@
 
 namespace bomberman::net
 {
+    /** @brief Shared JSON report schema version for diagnostics outputs. */
     inline constexpr uint32_t kDiagnosticsReportVersion = 1;
 
     /** @brief High-level kinds of recent events captured during a diagnostics session. */
@@ -75,11 +76,11 @@ namespace bomberman::net
         uint8_t channelId = 0xFF; ///< Raw ENet channel id for packet events.
         uint8_t msgType = 0; ///< Raw @ref EMsgType value for packet events.
 
-        uint32_t seq = 0; ///< Input sequence or other event-specific sequence value.
-        uint32_t detailA = 0; ///< Event-specific numeric detail.
-        uint32_t detailB = 0; ///< Event-specific numeric detail.
+        uint32_t seq = 0;
+        uint32_t detailA = 0;
+        uint32_t detailB = 0;
 
-        std::string note; ///< Optional short human-readable note for reports.
+        std::string note; ///< Optional short note for reports.
     };
 
     /** @brief Latest sampled transport health values for a single gameplay player id. */

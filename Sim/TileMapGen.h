@@ -14,6 +14,10 @@
  *   bomberman::sim::generateTileMap(seed, map);
  *
  * The seed is chosen by the server and transmitted to the client over MsgLevelInfo at the start of the game.
+ *
+ * @warning `std::uniform_int_distribution` is deterministic within one standard library implementation,
+ * but mixed client/server toolchains could still diverge. If heterogeneous builds ever matter,
+ * switch to an explicitly specified distribution policy over raw PRNG output.
  */
 
 namespace bomberman::sim

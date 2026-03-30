@@ -22,7 +22,7 @@ namespace bomberman::sim
     /// Player movement speed in tile-Q8 units per simulation tick.
     constexpr int32_t kPlayerSpeedQ = static_cast<int32_t>(kPlayerSpeedTilesPerSecond * 256.0 / kTickRate + 0.5);
 
-    /// Player hitbox half-extent in tile-Q8 units (half a tile at kPlayerHitboxScale=0.5).
+    /// Player hitbox half-extent in tile-Q8 units.
     constexpr int32_t kHitboxHalfQ = static_cast<int32_t>(kPlayerHitboxScale * 256.0f / 2.0f);
 
     /** @brief Tile-space Q8 position representing the CENTER of the entity. */
@@ -62,8 +62,7 @@ namespace bomberman::sim
     [[nodiscard]]
     inline bool overlapsWall(const TileMap& map, int32_t xQ, int32_t yQ)
     {
-        // Convert the four corners of the hitbox to tile indices and check each.
-        // Integer divide by 256 gives the tile column/row.
+        // Convert the hitbox corners from tile-Q8 center coordinates to tile indices.
         const int left   = (xQ - kHitboxHalfQ) / 256;
         const int right  = (xQ + kHitboxHalfQ - 1) / 256; // -1 so touching edge is not solid
         const int top    = (yQ - kHitboxHalfQ) / 256;
@@ -77,6 +76,10 @@ namespace bomberman::sim
 
     /**
      * @brief Advances a position by one simulation tick given a directional input.
+     * @param pos Current position in tile-Q8.
+     * @param moveX Horizontal input in {-1, 0, 1}.
+     * @param moveY Vertical input in {-1, 0, 1}.
+     * @param speedQ Movement speed in tile-Q8 units per simulation tick.
      */
     [[nodiscard]]
     inline TilePos stepMovement(TilePos pos, int8_t moveX, int8_t moveY, int32_t speedQ = kPlayerSpeedQ)
@@ -95,6 +98,7 @@ namespace bomberman::sim
      * @param moveX Horizontal input in {-1, 0, 1}.
      * @param moveY Vertical input in {-1, 0, 1}.
      * @param map   Read-only tile map to check collision against.
+     * @param speedQ Movement speed in tile-Q8 units per simulation tick.
      * @return New position, guaranteed not to overlap any solid tile.
      */
     [[nodiscard]]

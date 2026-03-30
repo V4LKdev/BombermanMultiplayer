@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
+## @file netem_launcher.sh
+## @brief Applies temporary Linux `tc netem` impairment and launches a client for local testing.
+
 set -euo pipefail
 
-# Linux-only helper for repeatable client latency testing.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 DEFAULT_IFACE="lo"
 DEFAULT_DELAY_MS=0
 DEFAULT_JITTER_MS=0
 DEFAULT_LOSS_PCT=0
 DEFAULT_LOSS_CORRELATION_PCT=0
-DEFAULT_CLIENT_CMD=(./cmake-build-debug/Bomberman)
+DEFAULT_CLIENT_CMD=("${REPO_DIR}/build/linux-debug/Bomberman")
 ACTIVE_IFACE=""
 ACTIVE_CHILD_PID=0
 SUDO_READY=0
@@ -35,7 +39,6 @@ abort_script() {
   exit 130
 }
 
-# Checks if ip, tc, sudo, and awk are available.
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
     printf 'Missing required command: %s\n' "$1" >&2
@@ -102,14 +105,12 @@ prompt_loss_correlation_pct() {
   prompt_pct_in_range "$1" "Loss correlation percent" "$DEFAULT_LOSS_CORRELATION_PCT"
 }
 
-
 show_interfaces() {
   printf '\nDetected network interfaces:\n'
   ip -o link show | awk -F': ' '{print "  - " $2}'
   printf '\n'
 }
 
-# qdisc contains the current network impairment settings for an interface.
 show_qdisc_state() {
   local iface="$1"
   printf '\nCurrent qdisc for %s:\n' "$iface"
@@ -131,7 +132,10 @@ ensure_sudo_session() {
   fi
 
   printf '\nAuthenticating sudo for tc netem changes...\n'
-  if ! sudo -v < /dev/tty; then
+  if sudo -v < /dev/tty; then
+    SUDO_READY=1
+    return 0
+  else
     local rc=$?
     if [[ "$rc" -eq 130 ]]; then
       return 130
@@ -139,10 +143,8 @@ ensure_sudo_session() {
     printf 'sudo authentication failed. No impairment was applied.\n' >&2
     return "$rc"
   fi
-  SUDO_READY=1
 }
 
-# Builds and applies the tc netem command based on the provided parameters.
 apply_impairment() {
   local iface="$1"
   local delay_ms="$2"
@@ -174,7 +176,6 @@ apply_impairment() {
 
   printf 'Applying impairment on %s: tc qdisc replace dev %s root %s\n' \
     "$iface" "$iface" "${args[*]}"
-  # Replace existing qdisc or add if none exists
   sudo -n tc qdisc replace dev "$iface" root "${args[@]}"
 }
 
@@ -221,10 +222,15 @@ main() {
   apply_impairment "$iface" "$delay_ms" "$jitter_ms" "$loss_pct" "$loss_correlation_pct"
   show_qdisc_state "$iface"
 
-  # Build the client command, allowing additional arguments to be passed through.
   local client_cmd=("${DEFAULT_CLIENT_CMD[@]}")
   if [[ $# -gt 0 ]]; then
     client_cmd+=("$@")
+  fi
+
+  if [[ ! -x "${client_cmd[0]}" ]]; then
+    printf 'Client executable not found or not executable:\n  %s\n' "${client_cmd[0]}" >&2
+    printf 'Build the client first or update the launcher default path.\n' >&2
+    exit 1
   fi
 
   run_client "$iface" "${client_cmd[@]}"

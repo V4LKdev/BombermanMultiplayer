@@ -54,17 +54,16 @@ namespace bomberman::log
     void init(spdlog::level::level_enum baseLevel = static_cast<spdlog::level::level_enum>(BOMBERMAN_DEFAULT_LOG_LEVEL), const std::string& logFile = "");
 
 
-    spdlog::logger* client();       ///< Client-process bootstrap and top-level configuration.
-    spdlog::logger* server();       ///< Dedicated-server process lifecycle and authoritative round-flow milestones.
-    spdlog::logger* game();         ///< SDL/game runtime lifecycle outside network semantics.
-    spdlog::logger* netConn();      ///< Session lifecycle and user-visible connect/lobby/match admission transitions.
-    spdlog::logger* netPacket();    ///< Raw transport queueing/dispatch detail and channel-level anomalies.
-    spdlog::logger* netProto();     ///< Malformed payloads, wrong-state protocol use, and version/shape mismatches.
-    spdlog::logger* netInput();     ///< Authoritative input acceptance, prediction/replay, and input-stream anomalies.
-    spdlog::logger* netSnapshot();  ///< Snapshot/correction and reliable gameplay-event transport/merge detail.
-    spdlog::logger* netDiag();      ///< Explicit diagnostics-layer summaries or recorder lifecycle, not normal flow logs.
+    spdlog::logger* client();       ///< Client bootstrap and top-level runtime.
+    spdlog::logger* server();       ///< Dedicated-server lifecycle and round flow.
+    spdlog::logger* game();         ///< SDL/game runtime outside netcode semantics.
+    spdlog::logger* netConn();      ///< Session lifecycle and lobby/match admission.
+    spdlog::logger* netPacket();    ///< Raw transport queueing/dispatch detail.
+    spdlog::logger* netProto();     ///< Protocol misuse and malformed payloads.
+    spdlog::logger* netInput();     ///< Authoritative input and prediction/replay anomalies.
+    spdlog::logger* netSnapshot();  ///< Snapshot, correction, and gameplay-event transport.
+    spdlog::logger* netDiag();      ///< Diagnostics summaries and recorder lifecycle.
 } // namespace bomberman::log
-
 
 // =====================================================================================================================
 // Convenience macros

@@ -14,7 +14,7 @@
 #endif
 
 /**
- * @brief Shared CLI parsing utilities for bomberman.
+ * @brief Shared CLI parsing utilities for the project.
  */
 namespace bomberman::cli
 {
@@ -29,7 +29,6 @@ namespace bomberman::cli
 #else
     inline constexpr bool kClientNetcodeDebugOptionsAvailable = false;
 #endif
-
 
     struct LoggingCliOptions
     {
@@ -61,8 +60,6 @@ namespace bomberman::cli
         "[--no-prediction] [--no-remote-smoothing]",
         sizeof("[--no-prediction] [--no-remote-smoothing]") - 1
     };
-
-
 
     /** @brief Parses a textual log level into a spdlog level enum. Case-sensitive. */
     inline bool parseLogLevel(std::string_view text, spdlog::level::level_enum& outLevel)

@@ -315,11 +315,17 @@ namespace bomberman::net
 
     void ClientDiagnostics::sampleLobbySilence(const uint32_t lobbySilenceMs)
     {
+        if (!enabled_ || !sessionActive_)
+            return;
+
         summary_.maxLobbySilenceMs = std::max(summary_.maxLobbySilenceMs, static_cast<uint64_t>(lobbySilenceMs));
     }
 
     void ClientDiagnostics::sampleGameplaySilence(const uint32_t gameplaySilenceMs)
     {
+        if (!enabled_ || !sessionActive_)
+            return;
+
         summary_.maxGameplaySilenceMs = std::max(summary_.maxGameplaySilenceMs, static_cast<uint64_t>(gameplaySilenceMs));
     }
 
@@ -375,6 +381,9 @@ namespace bomberman::net
 
     void ClientDiagnostics::samplePendingGameplayEventDepth(const std::size_t depth)
     {
+        if (!enabled_ || !sessionActive_)
+            return;
+
         summary_.maxPendingGameplayEventDepth =
             std::max(summary_.maxPendingGameplayEventDepth, static_cast<uint64_t>(depth));
     }
@@ -543,6 +552,8 @@ namespace bomberman::net
 
     uint64_t ClientDiagnostics::recentEventDedupeCooldownMs(const NetEvent& /*event*/)
     {
+        // Keep the hook event-shaped so specific event classes can later opt into
+        // different dedupe windows without reshaping the call sites.
         return kRecentEventDedupeCooldownMs;
     }
 

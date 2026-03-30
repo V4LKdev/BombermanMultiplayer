@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+## @file diag_viewer_launcher.sh
+## @brief Opens the local diagnostics viewer in the default browser when possible.
+
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

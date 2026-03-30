@@ -104,6 +104,22 @@ namespace bomberman::net
             if (type == EMsgType::Input)
                 keyMessages.inputRecv++;
         }
+
+        template<typename TValue>
+        [[nodiscard]]
+        std::vector<uint8_t> sortedPeerIds(const std::unordered_map<uint8_t, TValue>& entries)
+        {
+            std::vector<uint8_t> ids;
+            ids.reserve(entries.size());
+            for (const auto& [peerId, value] : entries)
+            {
+                (void)value;
+                ids.push_back(peerId);
+            }
+
+            std::sort(ids.begin(), ids.end());
+            return ids;
+        }
     }
 
     // =================================================================================================================
@@ -538,15 +554,7 @@ namespace bomberman::net
             roundWins.push_back(wins);
 
         nlohmann::json continuity = nlohmann::json::array();
-        std::vector<uint8_t> continuityIds;
-        continuityIds.reserve(peerContinuitySummaries_.size());
-        for (const auto& [peerId, summary] : peerContinuitySummaries_)
-        {
-            (void)summary;
-            continuityIds.push_back(peerId);
-        }
-        std::sort(continuityIds.begin(), continuityIds.end());
-        for (const uint8_t peerId : continuityIds)
+        for (const uint8_t peerId : sortedPeerIds(peerContinuitySummaries_))
         {
             const auto& peerSummary = peerContinuitySummaries_.at(peerId);
             const uint32_t pendingInputs =
@@ -567,15 +575,7 @@ namespace bomberman::net
         }
 
         nlohmann::json transportSamples = nlohmann::json::array();
-        std::vector<uint8_t> transportIds;
-        transportIds.reserve(latestPeerSamples_.size());
-        for (const auto& [peerId, sample] : latestPeerSamples_)
-        {
-            (void)sample;
-            transportIds.push_back(peerId);
-        }
-        std::sort(transportIds.begin(), transportIds.end());
-        for (const uint8_t peerId : transportIds)
+        for (const uint8_t peerId : sortedPeerIds(latestPeerSamples_))
         {
             const auto& sample = latestPeerSamples_.at(peerId);
             transportSamples.push_back({
@@ -705,6 +705,8 @@ namespace bomberman::net
 
     uint64_t NetDiagnostics::recentEventDedupeCooldownMs(const NetEvent& /*event*/)
     {
+        // Keep the hook event-shaped so specific event classes can later opt into
+        // different dedupe windows without reshaping the call sites.
         return kRecentEventDedupeCooldownMs;
     }
 

@@ -5,6 +5,11 @@
 
 #include "NetCommon.h"
 
+/**
+ * @file NetTransportConfig.h
+ * @brief Shared ENet peer transport-liveness configuration helper.
+ */
+
 namespace bomberman::net
 {
     /**

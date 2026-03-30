@@ -13,9 +13,7 @@
 
 namespace bomberman::net
 {
-    // =================================================================================================================
-    // ===== Recent-event storage policy ===============================================================================
-    // =================================================================================================================
+    // ----- Recent-event storage -----
 
     /** @brief Maximum number of recent events retained in the NetDiagnostics ring buffer. */
     constexpr std::size_t kRecentEventCapacity = 256;
@@ -23,22 +21,18 @@ namespace bomberman::net
     /** @brief Minimum time between repeated recent events with the same semantic signature. */
     constexpr uint64_t kRecentEventDedupeCooldownMs = 1000;
 
-    // =================================================================================================================
-    // ===== Current server runtime cadence ============================================================================
-    // =================================================================================================================
+    // ----- Current server runtime cadence -----
 
     /** @brief Accepted-input debug log cadence in authoritative server ticks. */
-    constexpr uint32_t kServerInputBatchLogIntervalTicks = static_cast<uint32_t>(sim::kTickRate) * 2u; ///< Every 2 seconds.
+    constexpr uint32_t kServerInputBatchLogIntervalTicks = static_cast<uint32_t>(sim::kTickRate) * 2u;
 
     /** @brief Snapshot summary debug log cadence in authoritative server ticks. */
-    constexpr uint32_t kServerSnapshotLogIntervalTicks = static_cast<uint32_t>(sim::kTickRate) * 2u; ///< Every 2 seconds.
+    constexpr uint32_t kServerSnapshotLogIntervalTicks = static_cast<uint32_t>(sim::kTickRate) * 2u;
 
     /** @brief ENet transport-health sampling cadence in authoritative server ticks. */
-    constexpr uint32_t kPeerTransportSampleTicks = static_cast<uint32_t>(sim::kTickRate); ///< Once per second.
+    constexpr uint32_t kPeerTransportSampleTicks = static_cast<uint32_t>(sim::kTickRate);
 
-    // =================================================================================================================
-    // ===== Repeated anomaly warn throttling ==========================================================================
-    // =================================================================================================================
+    // ----- Repeated anomaly warn throttling -----
 
     /** @brief Consecutive anomaly streak that triggers a WARN log for repeated ahead drops or input gaps. */
     constexpr uint16_t kRepeatedInputWarnThreshold = 6;
