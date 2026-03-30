@@ -87,6 +87,8 @@ HTML_EXTRA_STYLESHEET  = docs/theme/doxygen-awesome.css \
 HTML_EXTRA_FILES       = docs/theme/doxygen-awesome-darkmode-toggle.js \
                          docs/theme/doxygen-awesome-interactive-toc.js \
                          docs/theme/image-modal.js \
+                         Tools/diag_viewer.html \
+                         Tools/diag_viewer.js \
                          docs/assets/logo-light.svg \
                          docs/assets/diagrams/multiplayer-level-scene-structure-light.svg \
                          docs/assets/diagrams/multiplayer-level-scene-structure-dark.svg \
@@ -113,4 +115,13 @@ HTML_EXTRA_FILES       = docs/theme/doxygen-awesome-darkmode-toggle.js \
                          docs/assets/diagrams/decisions-development-loop-light.svg \
                          docs/assets/diagrams/decisions-development-loop-dark.svg \
                          docs/assets/diagrams/decisions-phase-timeline-light.svg \
-                         docs/assets/diagrams/decisions-phase-timeline-dark.svg
+                         docs/assets/diagrams/decisions-phase-timeline-dark.svg \
+                         docs/assets/images/testing-pred-optimized.gif \
+                         docs/assets/images/testing-nopred-optimized.gif \
+                         docs/assets/images/testing-smooth-optimized.gif \
+                         docs/assets/images/testing-nosmooth-optimized.gif \
+                         docs/assets/images/testing-input-lead-diag-comparison.png \
+                         docs/assets/images/testing-real-setup-workspace.png \
+                         docs/assets/images/diagnostics-viewer-single-report.png \
+                         docs/assets/images/diagnostics-viewer-single-report-cropped.png \
+                         docs/assets/images/diagnostics-viewer-comparison-table.png

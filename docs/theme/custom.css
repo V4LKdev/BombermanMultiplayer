@@ -129,6 +129,74 @@ html:not(.dark-mode) .theme-image-swap .theme-image-dark {
   width: min(460px, 100%);
 }
 
+.docs-media {
+  display: flex;
+  justify-content: center;
+  margin: 1rem 0 1.25rem;
+}
+
+.docs-media--medium img {
+  width: min(760px, 100%);
+}
+
+.docs-media--small img {
+  width: min(460px, 100%);
+}
+
+.docs-media img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  cursor: zoom-in;
+}
+
+.media-compare {
+  width: min(980px, 100%);
+  margin: 1rem auto 1.25rem;
+  border-collapse: separate;
+  border-spacing: 0.75rem 0.35rem;
+}
+
+.media-compare td {
+  width: 50%;
+  vertical-align: top;
+  text-align: center;
+}
+
+.media-compare img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 0.35rem;
+  cursor: zoom-in;
+}
+
+.docs-action-row {
+  display: flex;
+  justify-content: center;
+  margin: 1rem 0 1.25rem;
+}
+
+.docs-link-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.7rem 1rem;
+  border-radius: 0.55rem;
+  border: 1px solid var(--primary-color);
+  background: color-mix(in srgb, var(--primary-color) 12%, transparent);
+  color: var(--primary-color) !important;
+  font-weight: 600;
+  text-decoration: none !important;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.docs-link-button:hover {
+  background: color-mix(in srgb, var(--primary-color) 18%, transparent);
+  border-color: var(--primary-dark-color);
+  color: var(--primary-dark-color) !important;
+}
+
 #nav-path ul {
   display: flex;
   flex-wrap: wrap;

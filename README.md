@@ -3,7 +3,9 @@
 Authoritative multiplayer networking layer for a Bomberman student project, with dedicated server flow,
 explicit packet protocol, client prediction and correction, and built-in diagnostics.
 
-> Placeholder: add one hero screenshot or short gameplay GIF here.
+| Gameplay | Connect Scene |
+|:--|:--|
+| ![Four-player multiplayer gameplay with active powerups](docs/assets/images/readme-hero-4players-powers.png) | ![Online connect scene with server address entry and connection controls](docs/assets/images/readme-gallery-connect-scene-online.png) |
 
 ### Goals
 
@@ -50,8 +52,6 @@ The client sends gameplay intent, predicts local movement for responsiveness, an
 
 The server owns shared match state, processes accepted input on fixed ticks, and replicates snapshots, corrections, and reliable gameplay events back to connected clients.
 
-> Placeholder: add one architecture or message-flow SVG here.
-
 ### Guided Reading
 
 - [Architecture](docs/architecture.md)
@@ -60,8 +60,6 @@ The server owns shared match state, processes accepted input on fixed ticks, and
 - [Diagnostics](docs/diagnostics.md)
 - [Reference](docs/reference.md)
 - [Decisions And Development](docs/decisions-and-development.md)
-
-The deeper Doxygen topic pages for the authoritative server, client netcode, and multiplayer scene integration are linked from the networking documentation and the generated sidebar.
 
 ---
 ### Build And Run
@@ -101,23 +99,17 @@ cmake --build --preset windows-client-release
 ### Planned Improvements
 
 - add final screenshots and a short demonstration clip to the landing page
-- tighten the testing summary with representative latency and packet-loss results
 - continue cleaning remaining non-networking documentation noise
 
 ### Media
 
-- Placeholder: gameplay screenshot gallery
-- Placeholder: short demo video link
-- Placeholder: architecture overview visual
-- Placeholder: prediction / correction callout
+![Four-player match start gameplay](docs/assets/images/readme-gallery-4players-match-go.png)
 
-### Repository
+![Four-player lobby with mixed ready state](docs/assets/images/readme-gallery-4players-lobby-mixed-ready.png)
 
-The main networking work is concentrated in `Net/`, `Server/`, and `Scenes/MultiplayerLevelScene/`, with Doxygen topic pages used as a guided walkthrough of the architecture.
-
-- Placeholder: repository URL
-- Placeholder: personal website link
-- Placeholder: downloadable build or release link
+<!-- Placeholder: short demo video link -->
+<!-- Placeholder: architecture overview visual -->
+<!-- Placeholder: prediction / correction callout -->
 
 
 <div class="section_buttons">

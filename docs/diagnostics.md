@@ -131,9 +131,17 @@ It is used to:
 - inspect recent event history
 - compare a curated set of high-signal metrics side by side
 
-> Placeholder: screenshot of diagnostics viewer in single-report mode.
->
-> Placeholder: screenshot of diagnostics viewer in side-by-side comparison mode.
+<div class="docs-media docs-media--medium">
+  <img src="diagnostics-viewer-single-report-cropped.png" alt="Diagnostics viewer single-report view showing summary metrics and configuration for one retained report">
+</div>
+
+<div class="docs-media docs-media--medium">
+  <img src="diagnostics-viewer-comparison-table.png" alt="Diagnostics viewer comparison table contrasting two retained reports across selected metrics">
+</div>
+
+<div class="docs-action-row">
+  <a class="docs-link-button" href="diag_viewer.html" target="_blank" rel="noopener noreferrer">Open Diagnostics Viewer</a>
+</div>
 
 \remark
 The viewer is focused on the most useful retained signals rather than trying to visualise every raw field in the report.

@@ -23,7 +23,9 @@
       return;
     }
 
-    const images = document.querySelectorAll(".theme-image-swap img");
+    const images = document.querySelectorAll(
+      ".theme-image-swap img, .media-compare img, .docs-media img"
+    );
     if (!images.length) {
       return;
     }

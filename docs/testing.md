@@ -69,6 +69,7 @@ This section keeps the strongest retained findings in the main reading path, wit
 ### Lag Compensation And A/B Testing
 
 Prediction and smoothing are deliberately exposed as runtime toggles so they can be compared under the same conditions.
+The retained comparison captures shown below were recorded under approximately `200 ms` one-way delay, `15 ms` jitter, and `2%` packet loss.
 
 The clearest qualitative result comes from the prediction comparison:
 
@@ -76,9 +77,27 @@ The clearest qualitative result comes from the prediction comparison:
 - with prediction disabled, the same delayed setup feels visibly sluggish and becomes effectively unplayable at higher impairment levels
 - smoothing improves remote motion presentation, but remains subordinate to authoritative updates rather than replacing them
 
-> Placeholder: visual comparing prediction on vs off under added delay.
->
-> Placeholder: visual comparing remote smoothing on vs off.
+<table class="media-compare">
+  <tr>
+    <td><strong>Prediction Enabled</strong></td>
+    <td><strong>Prediction Disabled</strong></td>
+  </tr>
+  <tr>
+    <td><img src="testing-pred-optimized.gif" alt="Owning player movement with prediction enabled under added delay"></td>
+    <td><img src="testing-nopred-optimized.gif" alt="Owning player movement with prediction disabled under added delay"></td>
+  </tr>
+</table>
+
+<table class="media-compare">
+  <tr>
+    <td><strong>Remote Smoothing Enabled</strong></td>
+    <td><strong>Remote Smoothing Disabled</strong></td>
+  </tr>
+  <tr>
+    <td><img src="testing-smooth-optimized.gif" alt="Remote player movement with smoothing enabled"></td>
+    <td><img src="testing-nosmooth-optimized.gif" alt="Remote player movement with smoothing disabled"></td>
+  </tr>
+</table>
 
 ### Input Lead Buffer
 
@@ -105,9 +124,9 @@ That makes `lead=1` the current best-known setting for the tested impairment pro
 This outcome appears to be illogical and deserves a follow-up sanity check to confirm the result and rule out any test setup or measurement issues.
 A higher lead should not cause more simulation gaps or correction mismatches than a lower lead.
 
-> Placeholder: visual comparing `input lead = 0, 1, 3`.
->
-> Placeholder: diagnostics viewer screenshot for the input-lead comparison.
+<div class="docs-media docs-media--medium">
+  <img src="testing-input-lead-diag-comparison.png" alt="Diagnostics viewer comparison table for retained input-lead runs, contrasting lead 0 and lead 1 results">
+</div>
 
 ### Snapshot Send Rate
 
@@ -131,8 +150,6 @@ The strongest retained A/B comparison showed:
 
 For the harsher tested profile, `snapshot interval = 2` is the current best tradeoff between bandwidth reduction and acceptable continuity.
 
-> Placeholder: visual comparing snapshot interval `1` vs `2` vs `3`.
-
 ### Capacity And Topology Coverage
 
 The retained evidence covers a range of configurations, including:
@@ -150,7 +167,9 @@ The strongest retained LAN run showed:
 - server diagnostics with `simulation_gaps = 0`
 - Windows client average RTT around `8 ms`
 
-> Placeholder: diagnostics viewer or log evidence for the LAN / internet test runs.
+<div class="docs-media docs-media--medium">
+  <img src="testing-real-setup-workspace.png" alt="Real multi-machine LAN and internet test setup used during retained multiplayer runs">
+</div>
 
 ## Limits And Confidence
 
