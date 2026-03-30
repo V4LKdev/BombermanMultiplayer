@@ -129,6 +129,40 @@ html:not(.dark-mode) .theme-image-swap .theme-image-dark {
   width: min(460px, 100%);
 }
 
+#nav-path ul {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+#nav-path li.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-left: auto;
+  padding-right: var(--spacing-large);
+  list-style: none;
+}
+
+#nav-path li.footer .footer-left,
+#nav-path li.footer .footer-right {
+  display: inline-flex;
+  align-items: center;
+}
+
+#nav-path li.footer .footer-left {
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+#nav-path li.footer .footer-right {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
 .image-modal {
   position: fixed;
   inset: 0;

@@ -131,9 +131,9 @@ It is used to:
 - inspect recent event history
 - compare a curated set of high-signal metrics side by side
 
-Add a viewer screenshot here in the final pass:
-- single-report mode
-- side-by-side comparison mode
+> Placeholder: screenshot of diagnostics viewer in single-report mode.
+>
+> Placeholder: screenshot of diagnostics viewer in side-by-side comparison mode.
 
 \remark
 The viewer is focused on the most useful retained signals rather than trying to visualise every raw field in the report.

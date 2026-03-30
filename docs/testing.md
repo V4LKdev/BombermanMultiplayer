@@ -76,9 +76,9 @@ The clearest qualitative result comes from the prediction comparison:
 - with prediction disabled, the same delayed setup feels visibly sluggish and becomes effectively unplayable at higher impairment levels
 - smoothing improves remote motion presentation, but remains subordinate to authoritative updates rather than replacing them
 
-Recommended visuals:
-- prediction on vs off under added delay
-- remote smoothing on vs off
+> Placeholder: visual comparing prediction on vs off under added delay.
+>
+> Placeholder: visual comparing remote smoothing on vs off.
 
 ### Input Lead Buffer
 
@@ -105,9 +105,9 @@ That makes `lead=1` the current best-known setting for the tested impairment pro
 This outcome appears to be illogical and deserves a follow-up sanity check to confirm the result and rule out any test setup or measurement issues.
 A higher lead should not cause more simulation gaps or correction mismatches than a lower lead.
 
-Recommended visuals:
-- `input lead = 0, 1, 3`
-- diagnostics viewer screenshot for the input-lead comparison
+> Placeholder: visual comparing `input lead = 0, 1, 3`.
+>
+> Placeholder: diagnostics viewer screenshot for the input-lead comparison.
 
 ### Snapshot Send Rate
 
@@ -131,8 +131,7 @@ The strongest retained A/B comparison showed:
 
 For the harsher tested profile, `snapshot interval = 2` is the current best tradeoff between bandwidth reduction and acceptable continuity.
 
-Recommended visual:
-- snapshot interval `1` vs `2` vs `3`
+> Placeholder: visual comparing snapshot interval `1` vs `2` vs `3`.
 
 ### Capacity And Topology Coverage
 
@@ -151,8 +150,7 @@ The strongest retained LAN run showed:
 - server diagnostics with `simulation_gaps = 0`
 - Windows client average RTT around `8 ms`
 
-Recommended visual:
-- diagnostics viewer or log evidence for the LAN / internet test runs
+> Placeholder: diagnostics viewer or log evidence for the LAN / internet test runs.
 
 ## Limits And Confidence
 

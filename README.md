@@ -3,6 +3,8 @@
 Authoritative multiplayer networking layer for a Bomberman student project, with dedicated server flow,
 explicit packet protocol, client prediction and correction, and built-in diagnostics.
 
+> Placeholder: add one hero screenshot or short gameplay GIF here.
+
 ### Goals
 
 This project extends a provided singleplayer Bomberman base in SDL2 with a client-server multiplayer architecture built on ENet.
@@ -47,6 +49,8 @@ This includes:
 The client sends gameplay intent, predicts local movement for responsiveness, and consumes authoritative updates from the server.  
 
 The server owns shared match state, processes accepted input on fixed ticks, and replicates snapshots, corrections, and reliable gameplay events back to connected clients.
+
+> Placeholder: add one architecture or message-flow SVG here.
 
 ### Guided Reading
 
@@ -102,18 +106,18 @@ cmake --build --preset windows-client-release
 
 ### Media
 
-- gameplay screenshot gallery
-- short demo video link
-- architecture overview visual
-- prediction / correction callout
+- Placeholder: gameplay screenshot gallery
+- Placeholder: short demo video link
+- Placeholder: architecture overview visual
+- Placeholder: prediction / correction callout
 
 ### Repository
 
 The main networking work is concentrated in `Net/`, `Server/`, and `Scenes/MultiplayerLevelScene/`, with Doxygen topic pages used as a guided walkthrough of the architecture.
 
-- repository URL
-- personal website link
-- downloadable build or release link
+- Placeholder: repository URL
+- Placeholder: personal website link
+- Placeholder: downloadable build or release link
 
 
 <div class="section_buttons">
