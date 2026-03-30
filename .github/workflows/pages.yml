@@ -32,6 +32,7 @@ jobs:
 
       - name: Build Doxygen site
         run: |
+          mkdir -p build/docs-doxygen
           doxygen Doxyfile
 
       - name: Upload Pages artifact
