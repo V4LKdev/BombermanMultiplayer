@@ -3,8 +3,6 @@
 Authoritative multiplayer networking layer for a Bomberman student project, with dedicated server flow,
 explicit packet protocol, client prediction and correction, and built-in diagnostics.
 
-> Placeholder: add one hero screenshot or short gameplay GIF here.
-
 ### Goals
 
 This project extends a provided singleplayer Bomberman base in SDL2 with a client-server multiplayer architecture built on ENet.
@@ -50,16 +48,14 @@ The client sends gameplay intent, predicts local movement for responsiveness, an
 
 The server owns shared match state, processes accepted input on fixed ticks, and replicates snapshots, corrections, and reliable gameplay events back to connected clients.
 
-> Placeholder: add one architecture or message-flow SVG here.
-
 ### Guided Reading
 
 - [Architecture](docs/architecture.md)
 - [Networking](docs/networking.md)
 - [Testing](docs/testing.md)
+- [Diagnostics](docs/diagnostics.md)
 - [Reference](docs/reference.md)
-- [Decisions And Limits](docs/project-notes.md)
-- [Devlog](docs/devlog-summary.md)
+- [Decisions And Development](docs/decisions-and-development.md)
 
 The deeper Doxygen topic pages for the authoritative server, client netcode, and multiplayer scene integration are linked from the networking documentation and the generated sidebar.
 
@@ -106,18 +102,18 @@ cmake --build --preset windows-client-release
 
 ### Media
 
-- Placeholder: gameplay screenshot gallery
-- Placeholder: short demo video link
-- Placeholder: architecture overview SVG
-- Placeholder: prediction / correction diagram callout
+- gameplay screenshot gallery
+- short demo video link
+- architecture overview visual
+- prediction / correction callout
 
 ### Repository
 
 The main networking work is concentrated in `Net/`, `Server/`, and `Scenes/MultiplayerLevelScene/`, with Doxygen topic pages used as a guided walkthrough of the architecture.
 
-- Placeholder: repository URL
-- Placeholder: personal website link
-- Placeholder: downloadable build or release link
+- repository URL
+- personal website link
+- downloadable build or release link
 
 
 <div class="section_buttons">

@@ -1,9 +1,0 @@
-[2026-03-27 21:11:58.368] [game] [debug] Client multiplayer config: prediction=on, remoteSmoothing=on
-[2026-03-27 21:11:58.412] [game] [debug] Renderer pacing: manual-cap
-[2026-03-27 21:12:35.976] [net.conn] [debug] Async connect initiated to 127.0.0.1:46014
-[2026-03-27 21:12:35.984] [net.conn] [debug] ENet connect event received, sending Hello
-[2026-03-27 21:12:35.991] [net.conn] [info] Welcome: playerId=0, tickRate=60 - session connected, waiting for lobby or next round start
-[2026-03-27 21:13:18.310] [net.conn] [info] Leaving lobby and disconnecting: LocalLeaveLobby
-[2026-03-27 21:13:18.310] [net.conn] [info] Queued graceful disconnect
-[2026-03-27 21:13:18.310] [net.conn] [info] Graceful disconnect completed
-[2026-03-27 21:13:18.312] [net.diag] [info] Client diagnostics JSON report written to logs/diag_client_p1_211318.json

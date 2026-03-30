@@ -13,6 +13,7 @@ INPUT                  = README.md \
                          Scenes \
                          Server \
                          Sim \
+                         Tools \
                          Util \
                          Game.h \
                          Game.cpp \
@@ -26,17 +27,17 @@ INPUT                  = README.md \
                          docs/server.md \
                          docs/networking.md \
                          docs/testing.md \
+                         docs/diagnostics.md \
                          docs/reference.md \
-                         docs/project-notes.md \
-                         docs/devlog-summary.md
-FILE_PATTERNS          = *.h *.cpp *.md
+                         docs/decisions-and-development.md
+FILE_PATTERNS          = *.h *.cpp *.md *.sh *.js *.html
+EXTENSION_MAPPING      = sh=Python \
+                         js=Java
 RECURSIVE              = YES
 EXCLUDE                = build \
-                         third_party \
-                         _temp_docs_archive
+                         third_party
 EXCLUDE_PATTERNS       = */build/* \
-                         */third_party/* \
-                         */_temp_docs_archive/*
+                         */third_party/*
 
 EXTRACT_ALL            = NO
 EXTRACT_PRIVATE        = NO
@@ -53,6 +54,7 @@ DISABLE_INDEX          = NO
 FULL_SIDEBAR           = NO
 TREEVIEW_WIDTH         = 335
 HTML_HEADER            = docs/theme/header.html
+HTML_FOOTER            = docs/theme/footer.html
 PAGE_OUTLINE_PANEL     = NO
 
 MARKDOWN_SUPPORT       = YES
@@ -101,4 +103,14 @@ HTML_EXTRA_FILES       = docs/theme/doxygen-awesome-darkmode-toggle.js \
                          docs/assets/diagrams/server-state-player-layers-light.svg \
                          docs/assets/diagrams/server-state-player-layers-dark.svg \
                          docs/assets/diagrams/server-flow-state-light.svg \
-                         docs/assets/diagrams/server-flow-state-dark.svg
+                         docs/assets/diagrams/server-flow-state-dark.svg \
+                         docs/assets/diagrams/architecture-system-overview-light.svg \
+                         docs/assets/diagrams/architecture-system-overview-dark.svg \
+                         docs/assets/diagrams/architecture-runtime-flow-light.svg \
+                         docs/assets/diagrams/architecture-runtime-flow-dark.svg \
+                         docs/assets/diagrams/architecture-base-vs-added-light.svg \
+                         docs/assets/diagrams/architecture-base-vs-added-dark.svg \
+                         docs/assets/diagrams/decisions-development-loop-light.svg \
+                         docs/assets/diagrams/decisions-development-loop-dark.svg \
+                         docs/assets/diagrams/decisions-phase-timeline-light.svg \
+                         docs/assets/diagrams/decisions-phase-timeline-dark.svg

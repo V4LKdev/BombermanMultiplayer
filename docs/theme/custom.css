@@ -120,6 +120,15 @@ html:not(.dark-mode) .theme-image-swap .theme-image-dark {
   width: min(640px, 100%);
 }
 
+.theme-image-swap--small {
+  display: flex;
+  justify-content: center;
+}
+
+.theme-image-swap--small img {
+  width: min(460px, 100%);
+}
+
 .image-modal {
   position: fixed;
   inset: 0;
