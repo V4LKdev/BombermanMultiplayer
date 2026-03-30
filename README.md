@@ -3,6 +3,8 @@
 Authoritative multiplayer networking layer for a Bomberman student project, with dedicated server flow,
 explicit packet protocol, client prediction and correction, and built-in diagnostics.
 
+Live documentation site: [v4lkdev.github.io/BombermanMultiplayer](https://v4lkdev.github.io/BombermanMultiplayer/)
+
 | Gameplay | Connect Scene |
 |:--|:--|
 | ![Four-player multiplayer gameplay with active powerups](docs/assets/images/readme-hero-4players-powers.png) | ![Online connect scene with server address entry and connection controls](docs/assets/images/readme-gallery-connect-scene-online.png) |
