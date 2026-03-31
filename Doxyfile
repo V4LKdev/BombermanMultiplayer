@@ -6,6 +6,7 @@ OUTPUT_LANGUAGE        = English
 USE_MDFILE_AS_MAINPAGE = README.md
 
 INPUT                  = README.md \
+                         docs/topic-groups.h \
                          Core \
                          Entities \
                          Managers \
@@ -22,9 +23,6 @@ INPUT                  = README.md \
                          server_main.cpp \
                          CMakeLists.txt \
                          docs/architecture.md \
-                         docs/net-client.md \
-                         docs/multiplayer-level-scene.md \
-                         docs/server.md \
                          docs/networking.md \
                          docs/testing.md \
                          docs/diagnostics.md \
@@ -122,6 +120,5 @@ HTML_EXTRA_FILES       = docs/theme/doxygen-awesome-darkmode-toggle.js \
                          docs/assets/images/testing-nosmooth-optimized.gif \
                          docs/assets/images/testing-input-lead-diag-comparison.png \
                          docs/assets/images/testing-real-setup-workspace.png \
-                         docs/assets/images/diagnostics-viewer-single-report.png \
                          docs/assets/images/diagnostics-viewer-single-report-cropped.png \
                          docs/assets/images/diagnostics-viewer-comparison-table.png
